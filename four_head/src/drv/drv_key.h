@@ -11,7 +11,7 @@
  * 组合键: 相邻功率键同时按下(如TK12+TK13→Power_1)
  */
 #ifndef DRV_KEY_H
-#define DRV_KEY_H
+//#define DRV_KEY_H
 
 #include <stdint.h>
 

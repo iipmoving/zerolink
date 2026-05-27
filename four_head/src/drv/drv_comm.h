@@ -13,7 +13,7 @@
  *   5. ISR中调用 Drv_Comm_UART_ISR() + Drv_Comm_DMA_ISR()
  */
 #ifndef DRV_COMM_H
-#define DRV_COMM_H
+//#define DRV_COMM_H
 
 #include <stdint.h>
 

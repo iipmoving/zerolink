@@ -13,7 +13,7 @@
  *   主循环1ms → Drv_Buzzer_Timer_1ms() (时序推进, 1ms级)
  */
 #ifndef DRV_BUZZER_H
-#define DRV_BUZZER_H
+//#define DRV_BUZZER_H
 
 #include <stdint.h>
 

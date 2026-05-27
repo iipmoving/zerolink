@@ -11,7 +11,7 @@
  *   帧间隔 >= 3.5 char times (~0.6ms @57600)
  */
 #ifndef PROTO_MODBUS_H
-#define PROTO_MODBUS_H
+//#define PROTO_MODBUS_H
 
 #include <stdint.h>
 

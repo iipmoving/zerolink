@@ -21,7 +21,7 @@
  *   1200W, 1300W, 1500W, 2000W
  */
 #ifndef APP_POWER_H
-#define APP_POWER_H
+//#define APP_POWER_H
 
 #include <stdint.h>
 

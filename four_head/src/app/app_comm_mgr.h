@@ -15,7 +15,7 @@
  *   其他模块通过 __weak 回调直接拿到 RegData_t 指针，不持有通讯状态
  */
 #ifndef APP_COMM_MGR_H
-#define APP_COMM_MGR_H
+//#define APP_COMM_MGR_H
 
 #include <stdint.h>
 

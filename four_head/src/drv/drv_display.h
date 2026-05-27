@@ -13,7 +13,7 @@
  * 刷新: 每10ms调用Update, 内部自计数100ms刷新+500ms闪烁
  */
 #ifndef DRV_DISPLAY_H
-#define DRV_DISPLAY_H
+//#define DRV_DISPLAY_H
 
 #include <stdint.h>
 

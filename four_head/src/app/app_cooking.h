@@ -16,7 +16,7 @@
  *   发布: MSG_POWER_CTRL, MSG_DISPLAY_REFRESH
  */
 #ifndef APP_COOKING_H
-#define APP_COOKING_H
+//#define APP_COOKING_H
 
 #include <stdint.h>
 

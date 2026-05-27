@@ -20,7 +20,7 @@
  * 故障状态通过 MSG_SYSTEM_ERROR 广播
  */
 #ifndef APP_PROTECT_H
-#define APP_PROTECT_H
+//#define APP_PROTECT_H
 
 #include <stdint.h>
 

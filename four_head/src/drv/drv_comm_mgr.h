@@ -9,7 +9,7 @@
  * 层级: DRV
  */
 #ifndef DRV_COMM_MGR_H
-#define DRV_COMM_MGR_H
+//#define DRV_COMM_MGR_H
 
 #include <stdint.h>
 
