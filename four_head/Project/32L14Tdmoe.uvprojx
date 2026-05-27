@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>SC32L14xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\src\vendor\FWLib\SC32F1XXX_Lib\inc;..\src\vendor\CMSIS;..\src\vendor\MCU_Drivers;..\src\app;..\src;..\src\hal;..\src\core;..\src\drv;..\src\proto;..\src\cfg</IncludePath>
+              <IncludePath>..\src\vendor\FWLib\SC32F1XXX_Lib\inc;..\src\vendor\CMSIS;..\src\vendor\MCU_Drivers;..\src\app;..\src;..\src\hal;..\src\drv;..\src\proto;..\src\cfg</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
