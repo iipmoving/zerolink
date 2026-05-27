@@ -1,0 +1,22 @@
+# 大文件/二进制目录
+参考程序/
+芯片资料/
+
+# 编译产物
+*.o
+*.obj
+*.lib
+*.d
+*.crf
+*.hex
+*.axf
+
+# 临时文件
+*.tmp
+*.bak
+*~
+
+# IDE 特定
+*.uvguix.*
+*.scvd
+JLinkLog.txt

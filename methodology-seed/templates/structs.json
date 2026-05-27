@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "serial": 0,
+  "structs": {
+    "_example_StructKey": {
+      "description": "<结构体用途说明>",
+      "owner": "<拥有该结构体的模块名>",
+      "suffix": "OUT",
+      "fields": [
+        {"name": "field_a", "type": "uint8_t", "count": 4, "note": "<字段说明>"},
+        {"name": "field_b", "type": "uint16_t", "note": "<字段说明>"}
+      ],
+      "consumers": {
+        "<消费模块名>": {
+          "fields": ["field_a"],
+          "struct_name": "<可选，自定义结构体名>"
+        }
+      },
+      "deprecated": {
+        "<废弃字段名>": {
+          "replaced_by": "<替代字段>",
+          "deadline": "YYYY-MM-DD",
+          "note": "<废弃原因>"
+        }
+      }
+    }
+  }
+}
