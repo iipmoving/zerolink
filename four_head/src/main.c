@@ -15,8 +15,7 @@
 #include "hal/hal_gpio.h"
 #include "hal/hal_buzzer.h"
 #include <stddef.h>
-#include "test/test_module_a.h"
-#include "test/test_module_b.h"
+
 #include "drv/drv_key.h"
 #include "drv/drv_display.h"
 #include "drv/drv_buzzer.h"

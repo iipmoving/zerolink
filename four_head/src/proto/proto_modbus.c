@@ -233,3 +233,25 @@ int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,
 
     return PROTO_MODBUS_OK;
 }
+
+/* ========== 协议抽象接口: __weak 强符号, 供 app_comm_mgr 直调 ========== */
+uint16_t Proto_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
+                         uint16_t reg_count, uint8_t *tx_buf)
+{
+    return Proto_Modbus_BuildRead(slave_addr, reg_addr, reg_count, tx_buf);
+}
+
+int8_t Proto_Parse(const uint8_t *rx_buf, uint16_t rx_len,
+                   uint8_t *out_slave, uint8_t *out_func,
+                   uint16_t *out_data, uint16_t *out_count)
+{
+    return Proto_Modbus_Parse(rx_buf, rx_len,
+                              out_slave, out_func,
+                              out_data, out_count);
+}
+
+uint16_t Proto_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
+                                uint16_t data, uint8_t *tx_buf)
+{
+    return Proto_Modbus_BuildWriteSingle(slave_addr, reg_addr, data, tx_buf);
+}

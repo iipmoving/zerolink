@@ -176,13 +176,35 @@
  * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
  * │ 16   │ app_power:                           │ app_comm_mgr:                        │ PowerOutput_t    │
  * │      │   __weak AppCommMgr_OnPowerCmd()     │   void AppCommMgr_OnPowerCmd()       │ ↔CommPowerCmd_t   │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 17   │ app_comm_mgr:                        │ proto_modbus:                        │ (raw buf)        │
+ * │      │   __weak Proto_BuildRead()           │   uint16_t Proto_BuildRead()         │ uint8_t[64]      │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 18   │ app_comm_mgr:                        │ proto_modbus:                        │ (raw buf)        │
+ * │      │   __weak Proto_Parse()               │   int8_t Proto_Parse()               │ uint8_t[256]     │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 19   │ app_comm_mgr:                        │ proto_modbus:                        │ (raw buf)        │
+ * │      │   __weak Proto_BuildWriteSingle()    │   uint16_t Proto_BuildWriteSingle()  │ uint8_t[64]      │
  * └──────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┘
  *
  * 模块前缀缩写:
  *   comm=app_comm_mgr, cook=app_cooking, power=app_power
  *   prot=app_protect, hmi=app_hmi, dcomm=drv_comm_mgr
  *   ddisp=drv_display, dkey=drv_key, dbuzz=drv_buzzer
- *   main=main.c
+ *   proto=proto_modbus, main=main.c
+ *
+ * ====================================================================
+ * 特殊: PROTO 协议抽象通道 (#17-19, 返回值函数)
+ * ====================================================================
+ *
+ * Proto_BuildRead / Proto_Parse / Proto_BuildWriteSingle 三条通道
+ * 不同于标准 void Receiver_OnEvent(uint16_t, void*) 模式:
+ *   - 这些是带返回值的协议抽象函数 (uint16_t / int8_t)
+ *   - APP 层定义 __weak 空壳 (返回 0/-1 = 无协议支持)
+ *   - PROTO 层提供强符号实现 (委托 Proto_Modbus_* 内部函数)
+ *   - 换协议只需换 proto/ 模块, APP 层代码不受影响
+ *   - 参数使用具体类型 (非 void*), 因为协议帧格式是跨层约定的
+ *
  *
  * ====================================================================
  * AI 管理规则 (v2.0 — __weak 时代)

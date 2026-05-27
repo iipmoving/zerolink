@@ -1,16 +1,18 @@
 /**
  * app_comm_mgr.h —— 4炉头 MODBUS 轮询调度器接口
  *
- * 依赖: msg_scheduler.h + proto_modbus.h + hal_comm.h
- * 层级: APP —— 应用层通信管理
+ * 依赖: <stdint.h> (无其他模块依赖 — proto 通过 __weak 对接)
+ * 层级: APP —— 应用层通信管理 + 通讯数据集中缓存
  *
- * 调度:
- *   每10ms槽位调用 Run()，内部100ms节拍触发一轮轮询
- *   4炉头按 5→10→15→20 循环，每炉头间隔100ms
+ * 职责:
+ *   1. MODBUS 轮询调度 (100ms/炉头, 4头循环)
+ *   2. 通讯数据集中缓存 (s_heads[].regs) — 寄存器数据的唯一真相源
+ *   3. 协议抽象 — 通过 __weak Proto_BuildRead/Parse 对接 proto/ 层
  *
- * 寄存器缓存:
- *   每炉头保存 0x1000-0x1015 共22个寄存器
- *   数据更新时发送 MSG_REG_DATA_READY
+ * 数据广播:
+ *   收到有效响应后 → AppPower_OnRegData / AppCooking_OnRegData /
+ *                    AppProtect_OnRegData 三条 __weak 广播
+ *   其他模块通过 __weak 回调直接拿到 RegData_t 指针，不持有通讯状态
  */
 #ifndef APP_COMM_MGR_H
 #define APP_COMM_MGR_H

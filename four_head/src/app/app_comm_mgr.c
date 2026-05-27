@@ -1,18 +1,40 @@
 /**
- * app_comm_mgr.c —— 4炉头 MODBUS 轮询调度器实现
+ * app_comm_mgr.c —— 4炉头通信轮询调度器 + 通讯数据集中缓存
  *
- * 依赖: app_comm_mgr.h + msg_scheduler.h + proto_modbus.h
- * 层级: APP —— 应用层通信管理（通过消息与 DRV 通讯）
+ * 依赖: app_comm_mgr.h (独立声明), <string.h>, <stddef.h>
+ * 层级: APP —— 应用层通信管理
  *
- * 通讯路径:
- *   APP 发: Msg_Post(MSG_COMM_SEND_REQ) → DRV → Drv_Comm_Send → HAL
- *   APP 收: DRV → Msg_Post(MSG_COMM_DATA_UPDATE) → APP handle_response
- *   同步:   DRV → Msg_Post(MSG_COMM_TX_DONE)     → APP 状态机推进
+ * 通讯路径 (协议抽象 = 不直接 include proto/):
+ *   APP 发: __weak Proto_BuildRead/BuildWriteSingle → PROTO 强符号实现
+ *   APP 收: PROTO 解包后 → __weak AppCommMgr_OnDataUpdate → 解析缓存
+ *   数据广播: 寄存器缓存写入后 → __weak AppPower/Cooking/Protect_OnRegData
+ *
+ * 设计原则:
+ *   1. PROTO 与 DRV 同层隔离 — APP 不直接 include proto/
+ *   2. 通讯数据集中缓存 (s_heads[].regs) — 其他模块不存通讯状态
+ *   3. 协议可替换 — 换协议只需换 proto 模块的强符号实现
  */
 #include "app_comm_mgr.h"
-#include "proto/proto_modbus.h"
 #include <string.h>
 #include <stddef.h>
+
+/* ========== 协议层抽象 ========== */
+#define PROTO_PARSE_OK         0      /* 解析成功 (与 PROTO_PARSE_OK 对齐) */
+#define PROTO_FUNC_READ        0x03u  /* 读寄存器 (协议知识, 仅本模块)       */
+
+/* __weak 协议函数空壳 — 由 proto/ 模块提供强符号实现 */
+__weak uint16_t Proto_BuildRead(uint8_t slave, uint16_t reg,
+                                uint16_t count, uint8_t *buf)
+{ (void)slave; (void)reg; (void)count; (void)buf; return 0u; }
+
+__weak int8_t Proto_Parse(const uint8_t *rx, uint16_t len,
+                          uint8_t *slave, uint8_t *func,
+                          uint16_t *data, uint16_t *count)
+{ (void)rx; (void)len; (void)slave; (void)func; (void)data; (void)count; return -1; }
+
+__weak uint16_t Proto_BuildWriteSingle(uint8_t slave, uint16_t reg,
+                                       uint16_t val, uint8_t *buf)
+{ (void)slave; (void)reg; (void)val; (void)buf; return 0u; }
 
 /* __weak 回调: 多接收方广播, 链接器自动接线, interface_map.h 文档化 */
 __weak void AppPower_OnRegData(uint16_t param, void *data_ptr)
@@ -77,7 +99,7 @@ static void send_read_req(uint8_t head_idx)
     static CommSendReq_t s_tx_req;
 
     ctx = &s_heads[head_idx];
-    frame_len = Proto_Modbus_BuildRead(ctx->slave_addr,
+    frame_len = Proto_BuildRead(ctx->slave_addr,
                                        COMM_REG_STATUS,
                                        COMM_REG_COUNT,
                                        s_tx_req.data);
@@ -100,9 +122,9 @@ static void handle_response(const uint8_t *rx_data, uint16_t frame_len)
 
     if (frame_len == 0u) return;
 
-    result = Proto_Modbus_Parse(rx_data, frame_len,
+    result = Proto_Parse(rx_data, frame_len,
                                 &slave, &func, data, &count);
-    if (result != PROTO_MODBUS_OK) return;
+    if (result != PROTO_PARSE_OK) return;
 
     /* 查找对应炉头 */
     for (head_idx = 0u; head_idx < COMM_HEAD_COUNT; head_idx++) {
@@ -112,7 +134,7 @@ static void handle_response(const uint8_t *rx_data, uint16_t frame_len)
 
     ctx = &s_heads[head_idx];
 
-    if (func == MODBUS_FUNC_READ && count > 0u) {
+    if (func == PROTO_FUNC_READ && count > 0u) {
         uint16_t i;
         for (i = 0u; i < count && i < COMM_REG_COUNT; i++) {
             ctx->regs[i] = data[i];
@@ -185,14 +207,14 @@ void AppCommMgr_OnPowerCmd(uint16_t param, void *data_ptr)
     }
 
     /* Frame 1: 功率设定 */
-    frame_len = Proto_Modbus_BuildWriteSingle(slave_addr,
+    frame_len = Proto_BuildWriteSingle(slave_addr,
                     COMM_POWER_REG_BASE + COMM_POWER_REG_POWERSET,
                     power_val, s_tx_req.data);
     s_tx_req.len = frame_len;
     DrvCommMgr_OnSendReq((uint16_t)cmd->head_idx, &s_tx_req);
 
     /* Frame 2: 开关控制 */
-    frame_len = Proto_Modbus_BuildWriteSingle(slave_addr,
+    frame_len = Proto_BuildWriteSingle(slave_addr,
                     COMM_POWER_REG_BASE + COMM_POWER_REG_SWITCH,
                     (power_val > 0u) ? 0x10u : 0x01u, s_tx_req.data);
     s_tx_req.len = frame_len;

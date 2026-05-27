@@ -24,9 +24,6 @@ archive/four_head_ih_cooker_v1/
 JLinkLog.txt.backup
 JLinkSettings.ini
 
-# 重构遗留空目录
-four_head/Claude/
-
 # 编译产物
 *.o
 *.obj
