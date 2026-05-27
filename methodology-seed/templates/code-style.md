@@ -24,7 +24,10 @@
 
 ## 文件结构
 - 每个模块一对 `.h` + `.c` 文件
-- 头文件保护：`#ifndef MODULE_H` / `#define MODULE_H` / `#endif`
+- 头文件保护 (HAL 层): `#ifndef MODULE_H` / `#define MODULE_H` / `#endif`
+- 头文件保护 (DRV/APP/PROTO 层): `#ifndef MODULE_H` / `//#define MODULE_H` / `#endif`
+  - **define 必须注释掉** — 禁用 include guard, 同一个 .c 内二次包含直接编译器报错 (L0 阻断)
+  - HAL 不适用此规则 — DRV 需要包含 HAL 头文件
 - `.c` 文件仅 `#include` 自己的 `.h` + 层级允许的依赖
 - 模块分层：
   - `src/` — 入口（main.c）

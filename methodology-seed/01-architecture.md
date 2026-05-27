@@ -132,6 +132,47 @@ APP↔APP: 只通过 __weak 回调通信，禁止直接 include 或调用
 
 无运行时基础设施依赖。任何 .c 文件可单独编译并链接测试框架。
 
+### 铁律七：头文件私有化 — 模块 .h 只允许自身 .c 引用 [L0: 编译器]
+
+**DRV/APP/PROTO 层的每个 .h 文件，include guard 的 `#define` 必须注释掉。**
+
+```c
+#ifndef MODULE_NAME_H
+//#define MODULE_NAME_H   // ← 故意注释，禁用 include guard
+...
+#endif /* MODULE_NAME_H */
+```
+
+**效果**: 同一编译单元（一个 .c 文件）内，该头文件只能被包含一次。第二次 `#include` → `#ifndef` 仍为真 → 结构体/枚举/常量重定义 → **编译器直接报错**。
+
+**为什么这是 L0**: 不依赖工具脚本，不依赖文档约定，不依赖人工审查。编译器直接阻断——AI 或开发者想伸手过界，编译就过不去。
+
+**哪些层适用**:
+| 层 | 头文件私有化 | 原因 |
+|----|------------|------|
+| APP | 是 | 只允许自身 .c + main.c 引用 |
+| DRV | 是 | 只允许自身 .c + main.c 引用 |
+| PROTO | 是 | 只允许自身 .c 引用（通过 __weak 抽象对接） |
+| HAL | **否** | DRV 层需要引用 HAL 头文件 |
+
+**为什么有效**:
+- 函数声明可以重复（编译器允许），但 `typedef`/`struct`/`enum`/`#define` 常量不行
+- 注释掉 `#define` 后 include guard 失效，每次 `#include` 都会重新展开全部内容
+- 自身 .c 和 main.c 各包含一次——它们在不同 TU 中，互不影响
+- 但如果某个头文件（如 `cfg/x.h`）也包含了你的模块头文件 → 同一个 .c 内出现两次 → 爆炸
+
+**与 check_deps.py 的互补**:
+| 层级 | 机制 | 阻断什么 |
+|------|------|---------|
+| **L0** | 注释 define（编译器） | 同一 TU 内重复包含 → 编译报错 |
+| **L1** | check_deps.py（pre-commit） | 跨层 include（如 APP include DRV）→ 提交阻断 |
+
+两者配合：L1 阻止直接跨层引用，L0 阻止任何形式的二次包含（包括未来新模块不小心引入的传递包含）。
+
+**注意事项**:
+- 如果模块 .h 和 cfg 数据 .h 之间存在循环引用（如 `app_hmi.h` ↔ `cfg/hmi_data.h`），必须先拆解循环才能应用此规则
+- 拆解方法：移除 .h 中的 `#include "cfg/xxx.h"`，改为在 .c 中按顺序包含两个头文件
+
 ---
 
 ## 四、命名约定
@@ -182,9 +223,10 @@ DRV 层:  Drv* 或领域名 (如 DisplayFrame_t)
 1. 确定模块所属层级
 2. 创建 module.h + module.c
 3. .h 只声明公共接口和本模块类型
-4. .c 顶部声明依赖的 __weak 空壳 + 提供本模块强符号
-5. 禁止 include 不在本层白名单内的文件
-6. `check_deps.py` → armcc 编译 → 两步通过才提交
+4. .h 的 include guard: `#ifndef MODULE_H` / `//#define MODULE_H` (APP/DRV/PROTO 层强制注释)
+5. .c 顶部声明依赖的 __weak 空壳 + 提供本模块强符号
+6. 禁止 include 不在本层白名单内的文件
+7. `check_deps.py` → armcc 编译 → 两步通过才提交
 
 ### 新增跨模块通道
 1. 确定发送方和接收方

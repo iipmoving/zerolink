@@ -1,5 +1,8 @@
 # 项目共享信息
 
+> **新 AI / 新工程师**: 先读 `RESTART.md` — 30 秒速览 → 约束系统 → 接口表 → 工作流 → 快速参考卡。
+> 本文件为补充细节。RESTART.md 是唯一重启入口。
+
 ## 🎯 最高优先级：方法论是唯一产出
 
 **本项目（四头电磁炉）的真正目的不是做出一个能用的电磁炉。**
@@ -26,11 +29,24 @@
 APP 层: 不得 #include 任何 drv/ 或 hal/ 头文件
 DRV 层: 不得 #include 任何 app/ 头文件
 HAL 层: 零依赖，不知上层存在
-APP↔APP: 只通过 Msg_Post 通信，禁止直接 include 或调用
+APP↔APP: 只通过 __weak 回调通信，禁止直接 include 或调用
 仅 DRV → HAL 合法
-≤1ms 操作 → 回调传参
->1ms 操作 → 消息传参 (Msg_Post → MsgScheduler)
 ```
+
+**两层阻断机制**:
+| 层级 | 机制 | 阻断什么 |
+|------|------|---------|
+| **L0 编译器** | 头文件 `//#define GUARD_H` (include guard 故意失效) | 同一 .c 内二次包含 → 重定义报错 |
+| **L1 pre-commit** | `tools/check_deps.py` | 跨层 include 语句 → 提交阻断 |
+
+**DRV/APP/PROTO 层的每个 .h 必须注释掉 `#define`**:
+```c
+#ifndef MODULE_NAME_H
+//#define MODULE_NAME_H   // ← 注释掉, 禁用 include guard
+...
+#endif
+```
+HAL 层不适用 — DRV 需要引用 HAL 头文件。
 
 **每次编码前**: 确认你编辑的文件在哪个层 → 查依赖规则 → 违规即停止。
 **每次编码后**: 运行 `python tools/check_deps.py ../src` → 不通过即修复。

@@ -38,6 +38,7 @@
 读完方法论后，阅读模板文件了解具体格式：
 - `templates/CLAUDE.md` — 项目指令模板
 - `templates/interface_map.h` — __weak 配对表模板
+- `templates/RESTART.md` — 项目重启入口模板（交付时生成）
 
 ---
 
@@ -107,7 +108,7 @@
 python tools/check_deps.py         # 层依赖审计 → 必须 0 violations
 python tools/check_weak_pairs.py   # __weak 配对一致性 → 必须 0 violations
 python tools/check_structs.py      # 结构体一致性 → 必须 PASS
-armcc -c ... → 0 error, 0 warning  # 独立编译
+armcc -c ... → 0 error, 0 warning  # 独立编译 (含 L0 头文件私有化验证)
 node test_wasm_basic.js             # 双引擎对比 → 必须 100% PASS (如有 HMI 变更)
 ```
 
@@ -116,8 +117,9 @@ node test_wasm_basic.js             # 双引擎对比 → 必须 100% PASS (如�
 ## 核心铁律（刻在 DNA 里）
 
 1. **解耦第一** — 层间隔离绝对不可妥协。违反即停止。
-2. **JSON 覆盖逻辑** — JSON 是唯一权威数据源。JS 先行，C 跟随。
-3. **统一出入口** — 回调不散落。输入输出集中管理。
-4. **独立声明 — 生成器管一致性** — 跨模块类型每模块独立声明，由 `generate_structs.py` 从 `structs.json` 生成，`check_structs.py` 验证。
-5. **__weak 直调** — 模块间通信只走 __weak 回调，零中间层。
-6. **方法论文档** — 每次发现问题先更新方法论，再修代码。
+2. **头文件私有化** — DRV/APP/PROTO 的 .h 必须注释 `#define` include guard，编译器 L0 阻断外部引用。
+3. **JSON 覆盖逻辑** — JSON 是唯一权威数据源。JS 先行，C 跟随。
+4. **统一出入口** — 回调不散落。输入输出集中管理。
+5. **独立声明 — 生成器管一致性** — 跨模块类型每模块独立声明，由 `generate_structs.py` 从 `structs.json` 生成，`check_structs.py` 验证。
+6. **__weak 直调** — 模块间通信只走 __weak 回调，零中间层。
+7. **方法论文档** — 每次发现问题先更新方法论，再修代码。
