@@ -1,0 +1,10 @@
+{
+  "panel_name": "四炉头电磁炉",
+  "canvas_size": {
+    "width": 970,
+    "height": 600
+  },
+  "use_json_logic": true,
+  "json_config": "configs/emc_controller_v2.0_standard.json",
+  "controls": []
+}

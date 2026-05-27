@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>HMI JSON逻辑测试 - 四头电磁炉</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d0d0d; color:#ccc; font:14px monospace; display:flex; height:100vh; }
+#left { flex:0 0 auto; padding:10px; }
+#right { flex:1; padding:10px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+canvas { border:1px solid #333; cursor:pointer; }
+h3 { color:#0af; margin:8px 0 4px; }
+input, button, select { background:#1a1a1a; color:#ccc; border:1px solid #444; padding:4px 8px; font:13px monospace; }
+button { cursor:pointer; }
+button:hover { background:#2a2a2a; }
+button.run { background:#050; border-color:#0a0; }
+button.run:hover { background:#070; }
+#cmd-input { width:220px; }
+#log { background:#111; border:1px solid #333; flex:1; min-height:200px; padding:8px; overflow-y:auto; font-size:12px; white-space:pre-wrap; }
+#log .warn { color:#fa0; }
+#log .err { color:#f44; }
+#log .info { color:#0af; }
+#log .ok { color:#0f0; }
+#state-table td { padding:2px 8px; border-bottom:1px solid #222; }
+#state-table td:first-child { color:#888; }
+.quick-btns { display:flex; flex-wrap:wrap; gap:4px; }
+.quick-btns button { font-size:11px; }
+.json-bar { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.json-bar input { flex:1; min-width:140px; }
+</style>
+</head>
+<body>
+<div id="left">
+    <canvas id="panel-canvas" width="970" height="600"></canvas>
+</div>
+<div id="right">
+    <h3>JSON 文件</h3>
+    <div class="json-bar">
+        <span style="color:#888">UI:</span>
+        <input id="ui-json-path" value="fourSave.json" title="界面布局JSON">
+        <span style="color:#888">Logic:</span>
+        <input id="logic-json-path" value="logic/four_head_v4.json" title="逻辑规则JSON">
+        <button onclick="reloadWithJSON()" style="background:#050;border-color:#0a0;">重新加载</button>
+    </div>
+    <small style="color:#666">
+        URL参数: ?ui=界面.json&amp;logic=逻辑.json<br>
+        修改JSON后刷新页面即可看到效果
+    </small>
+
+    <h3>HMI测试命令</h3>
+    <div style="display:flex;gap:4px;">
+        <input id="cmd-input" placeholder="例: key POWER long" onkeydown="if(event.key==='Enter')sendCmd()">
+        <button onclick="sendCmd()">发送</button>
+        <button onclick="clearLog()">清屏</button>
+    </div>
+    <small style="color:#666">
+        命令: key &lt;key_code&gt; &lt;press|tap|long|release&gt;<br>
+        快捷: key &lt;name&gt; &lt;press|tap|long&gt; (如 key POWER long)<br>
+        查询: state | display | led | help
+    </small>
+
+    <h3>快捷测试</h3>
+    <div class="quick-btns">
+        <button onclick="sendCmdText('key POWER long')" title="长按开关1.5s">开机</button>
+        <button onclick="sendCmdText('key POWER long')" title="再按关机">关机</button>
+        <button onclick="sendCmdText('key HEAD_1 tap')">选头1</button>
+        <button onclick="sendCmdText('key HEAD_2 tap')">选头2</button>
+        <button onclick="sendCmdText('key HEAD_3 tap')">选头3</button>
+        <button onclick="sendCmdText('key HEAD_4 tap')">选头4</button>
+        <button onclick="sendCmdText('key 5 tap')">档位5</button>
+        <button onclick="sendCmdText('key 0 tap')">档位0(停)</button>
+        <button onclick="sendCmdText('key 9 long')">Boost</button>
+        <button onclick="sendCmdText('key TIMER tap')">定时</button>
+        <button onclick="sendCmdText('key PAUSE tap')">暂停</button>
+        <button onclick="sendCmdText('key CHILD_LOCK long')">童锁</button>
+        <button onclick="sendCmdText('state')">查状态</button>
+        <button onclick="sendCmdText('display')">查显示</button>
+        <button onclick="sendCmdText('led')">查LED</button>
+    </div>
+
+    <h3>一、全局状态</h3>
+    <table id="state-table">
+        <tr><td>全局模式</td><td id="st-mode">-</td></tr>
+        <tr><td>热点炉头</td><td id="st-hot">-</td></tr>
+        <tr><td>选择序列</td><td id="st-stack">-</td></tr>
+        <tr><td>童锁</td><td id="st-lock">-</td></tr>
+        <tr><td>暂停</td><td id="st-pause">-</td></tr>
+    </table>
+    <h3>二、炉头独立工作模式</h3>
+    <div id="head-states"></div>
+
+    <h3>日志</h3>
+    <div id="log"></div>
+</div>
+
+<script src="js/hmi_config.js"></script>
+<script src="js/message_bus.js"></script>
+<script src="js/key_handler.js"></script>
+<script src="js/json_logic_engine.js"></script>
+<script src="js/slot_element.js"></script>
+<script src="js/led_element.js"></script>
+<script src="js/blink_rule.js"></script>
+<script src="js/mode_rule.js"></script>
+<script src="js/renderer.js"></script>
+<script>
+/* ========== 蜂鸣器(Web Audio API) ========== */
+var audioCtx = null;
+
+function buzz(valid) {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = valid ? 4000 : 1000;
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.3);
+    } catch(e) {
+        /* 静默忽略audio不支持 */
+    }
+}
+
+/* ========== 初始化 ========== */
+var timerInterval = null;
+var tickIntervals = [];
+
+function log(msg, cls) {
+    var div = document.getElementById('log');
+    cls = cls || '';
+    div.innerHTML += '<span class="' + cls + '">' + msg + '</span>\n';
+    div.scrollTop = div.scrollHeight;
+}
+
+async function loadJSON(path) {
+    var resp = await fetch(path);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+}
+
+function stopTimers() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    for (var t = 0; t < tickIntervals.length; t++) clearInterval(tickIntervals[t]);
+    tickIntervals = [];
+}
+
+async function init() {
+    try {
+        log('=== HMI JSON逻辑测试程序启动 ===', 'ok');
+
+        /* 读取URL参数 */
+        var params = new URLSearchParams(window.location.search);
+        var uiPath = params.get('ui') || 'fourSave.json';
+        var logicPath = params.get('logic') || 'logic/four_head_v4.json';
+
+        document.getElementById('ui-json-path').value = uiPath;
+        document.getElementById('logic-json-path').value = logicPath;
+        log('界面: ' + uiPath + ' | 逻辑: ' + logicPath, 'info');
+
+        await loadAndStart(uiPath, logicPath);
+
+    } catch (e) {
+        log('[FATAL] 初始化失败: ' + e.message, 'err');
+        console.error(e);
+    }
+}
+
+async function loadAndStart(uiPath, logicPath) {
+    stopTimers();
+
+    /* 1. 初始化消息总线 */
+    MessageBus.init();
+    log('[OK] 消息总线就绪', 'ok');
+
+    /* 2. 加载界面JSON */
+    var uiConfig = await loadJSON(uiPath);
+    log('[OK] 界面配置: ' + (uiConfig.panel_name || 'OK'), 'ok');
+
+    /* 3. 加载逻辑JSON → 初始化引擎 */
+    var logicRules = await loadJSON(logicPath);
+    JsonLogicEngine.init(logicRules);
+    log('[OK] 逻辑引擎: ' + logicRules.meta.name + ' v' + logicRules.meta.version, 'ok');
+
+    /* 4. 初始化渲染器 */
+    var canvas = document.getElementById('panel-canvas');
+    Renderer.init(canvas, uiConfig, function() {
+        log('[OK] Canvas渲染器就绪 (' + canvas.width + 'x' + canvas.height + ')', 'ok');
+    });
+
+    /* 5. 初始化按键处理器 */
+    KeyHandler.loadControls(uiConfig.controls);
+
+    /* 6. 绑定Canvas事件 */
+    canvas.addEventListener('mousedown', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var y = e.clientY - rect.top;
+        KeyHandler.onMouseDown(x, y);
+    });
+    canvas.addEventListener('mouseup', function(e) {
+        KeyHandler.onMouseUp();
+    });
+    canvas.addEventListener('mouseleave', function(e) {
+        KeyHandler.onMouseUp();
+    });
+    log('[OK] Canvas事件绑定完成', 'ok');
+
+    /* 7. 启动100ms/1s定时器 */
+    timerInterval = setInterval(function() {
+        MessageBus.run1ms();
+        Renderer.redraw();
+    }, 50);
+
+    /* 8. 启动100ms和1s节拍 */
+    var tick100 = 0;
+    var t1 = setInterval(function() {
+        MessageBus.post(MsgId.MSG_TIMER_100MS, 0, null);
+        tick100++;
+        if (tick100 % 20 === 0) {
+            MessageBus.post(MsgId.MSG_TIMER_1S, 0, null);
+        }
+    }, 100);
+    tickIntervals.push(t1);
+
+    /* 9. 定期刷新状态面板 */
+    var t2 = setInterval(updateStatePanel, 200);
+    tickIntervals.push(t2);
+
+    /* 10. 蜂鸣器反馈 */
+    MessageBus.register(MsgId.MSG_BUZZER_CTRL, function(id, param, data) {
+        buzz(param === 0);
+    });
+
+    log('[OK] 初始化完成,等待测试命令...', 'ok');
+    log('  提示: 输入 key POWER long 开机', 'info');
+}
+
+/* 手动重新加载 */
+async function reloadWithJSON() {
+    clearLog();
+    var uiPath = document.getElementById('ui-json-path').value.trim() || 'fourSave.json';
+    var logicPath = document.getElementById('logic-json-path').value.trim() || 'logic/four_head_v4.json';
+    log('> RELOAD ui=' + uiPath + ' logic=' + logicPath, 'info');
+    try {
+        await loadAndStart(uiPath, logicPath);
+    } catch(e) {
+        log('[ERROR] 重新加载失败: ' + e.message, 'err');
+    }
+}
+
+/* ========== 测试命令 ========== */
+function sendCmd() {
+    var input = document.getElementById('cmd-input');
+    var cmd = input.value.trim();
+    if (!cmd) return;
+    input.value = '';
+    sendCmdText(cmd);
+}
+
+function sendCmdText(cmd) {
+    log('> ' + cmd, 'info');
+
+    var parts = cmd.split(/\s+/);
+    var op = parts[0].toLowerCase();
+
+    if (op === 'key' && parts.length >= 3) {
+        var arg = parts[1].toUpperCase();
+        var evt = parts[2].toLowerCase();
+
+        var keyCode = parseInt(arg);
+        if (isNaN(keyCode)) {
+            var name = 'KEY_' + arg;
+            keyCode = JsonLogicEngine.keyNameToCode(name);
+            if (keyCode < 0) {
+                log('未知按键: ' + arg, 'err');
+                return;
+            }
+        }
+        KeyHandler.injectKey(keyCode, evt);
+
+    } else if (op === 'state') {
+        var s = JsonLogicEngine.getState();
+        log(JSON.stringify(s, null, 2));
+
+    } else if (op === 'display') {
+        var d = JsonLogicEngine.getDisplay();
+        log('seg_chars: [' + d.seg_chars.join('|') + ']');
+        log('seg_mode: ' + d.seg_mode + '  blink: [' + d.seg_blink.join(',') + ']');
+        log('LEDs: power=' + d.leds.power + ' lock=' + d.leds.child_lock +
+            ' timer=' + d.leds.timer + ' pause=' + d.leds.pause_btn);
+
+    } else if (op === 'led') {
+        var l = JsonLogicEngine.getDisplay().leds;
+        log('LED状态:');
+        log('  电源=' + (l.power?'ON':'OFF') + ' 童锁=' + (l.child_lock?'ON':'OFF') +
+            ' 定时=' + (l.timer?'ON':'OFF') + ' 暂停=' + (l.pause_btn?'ON':'OFF'));
+        log('  炉头选择=' + JSON.stringify(l.head_select));
+        log('  档位灯=' + JSON.stringify(l.power_level));
+
+    } else if (op === 'rules') {
+        var r = JsonLogicEngine.getRules();
+        if (!r) { log('规则未加载', 'err'); return; }
+        log('规则集: ' + r.meta.name + ' v' + r.meta.version);
+        log('超时配置: ' + JSON.stringify(r.timeouts));
+        log('全局路由: ' + Object.keys(r.global_routes).join(', '));
+        log('Zone路由: ' + Object.keys(r.zone_routes).join(', '));
+        log('进程路由: ' + Object.keys(r.process_routes).join(', '));
+        log('工作态全局路由: ' + JSON.stringify(Object.keys(r.global_routes.working.routes)));
+        log('selecting路由: ' + JSON.stringify(Object.keys(r.zone_routes.selecting.routes)));
+
+    } else if (op === 'help') {
+        log('命令列表:');
+        log('  key <key_code> <press|tap|long|release>');
+        log('  key <NAME> <press|tap|long>');
+        log('    按键名: POWER, TIMER, PAUSE, CHILD_LOCK');
+        log('            HEAD_1~HEAD_4, ZONE, PLUS, MINUS');
+        log('            0~9 (档位)');
+        log('  state  - 查看状态');
+        log('  display - 查看显示');
+        log('  led    - 查看LED');
+        log('  rules  - 查看JSON规则');
+        log('  reset  - 重置引擎');
+        log('  help   - 本帮助');
+
+    } else if (op === 'reset') {
+        JsonLogicEngine.reset();
+        log('已重置', 'ok');
+
+    } else {
+        log('未知命令: ' + op + ' (输入 help 查看帮助)', 'err');
+    }
+}
+
+function clearLog() {
+    document.getElementById('log').innerHTML = '';
+}
+
+/* ========== 状态面板 ========== */
+function updateStatePanel() {
+    var s = JsonLogicEngine.getState();
+    document.getElementById('st-mode').textContent = s.global_mode;
+    document.getElementById('st-hot').textContent = s.hot_head >= 0 ? '炉头' + (s.hot_head + 1) : '(待机)';
+    document.getElementById('st-stack').textContent = s.select_stack.length > 0
+        ? s.select_stack.map(function(i) { return 'Z' + (i+1); }).join('←')
+        : '(空)';
+    document.getElementById('st-lock').textContent = s.child_lock ? '锁定' : '解锁';
+    document.getElementById('st-pause').textContent = s.paused ? '暂停中' : '正常';
+
+    var html = '';
+    for (var i = 0; i < 4; i++) {
+        var h = s.heads[i];
+        var sel = (i === s.hot_head) ? ' ★热点' : '';
+        var flags = [];
+        if (h.boost_active) flags.push('BOOST');
+        if (h.timer_setting) flags.push('定时设置');
+        if (h.timer_active) flags.push('定时中(' + h.timer_value + '分)');
+        html += '<tr><td>炉头' + (i+1) + sel + '</td><td>' + h.node +
+                '</td><td>档位=' + h.power_level + '</td><td>' +
+                (flags.length > 0 ? flags.join(' + ') : '—') + '</td></tr>';
+    }
+    document.getElementById('head-states').innerHTML = '<table style="font-size:12px">' +
+        '<tr style="color:#888"><td>炉头</td><td>状态</td><td>档位</td><td>进程</td></tr>' + html + '</table>';
+}
+
+/* 页面加载 */
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

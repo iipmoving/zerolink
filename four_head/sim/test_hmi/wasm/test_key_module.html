@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>key_module 独立测试</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; margin: 0; }
+h1 { color: #e94560; border-bottom: 2px solid #e94560; padding-bottom: 8px; }
+.test { margin: 6px 0; padding: 6px 12px; border-radius: 4px; }
+.PASS { background: #1a3a1a; color: #4eff4e; }
+.FAIL { background: #3a1a1a; color: #ff4e4e; }
+#summary { margin-top: 16px; font-size: 18px; font-weight: bold; }
+table { border-collapse: collapse; margin: 12px 0; }
+th, td { border: 1px solid #555; padding: 4px 10px; text-align: center; }
+th { background: #333; }
+#status { color: #ffaa00; }
+</style>
+</head>
+<body>
+<h1>key_module 独立测试</h1>
+<p>测试按键映射函数: Key_HeadKeyToIndex, Key_HeadIndexToKey, Key_DigitKeyToLevel, Key_IsHeadKey</p>
+<p id="status">加载 WASM...</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script src="app_logic.js"></script>
+<script src="wasm_adapter.js"></script>
+<script>
+(function() {
+var pass = 0, fail = 0;
+var out = document.getElementById('results');
+
+function t(name, actual, expected) {
+    var ok = (actual === expected);
+    var cls = ok ? 'PASS' : 'FAIL';
+    if (ok) pass++; else fail++;
+    out.innerHTML += '<div class="test ' + cls + '">[' + cls + '] ' + name
+        + ' — got=' + actual + ' expected=' + expected + '</div>';
+}
+
+AppLogicModule().then(function(mod) {
+    document.getElementById('status').textContent = 'WASM 已加载, 运行测试...';
+    var api = createWasmEngine(mod);
+    api.init();
+
+    // Head key → index mapping
+    t('HEAD_1(15)→0',   api._mod._Key_HeadKeyToIndex(15), 0);
+    t('HEAD_2(14)→1',   api._mod._Key_HeadKeyToIndex(14), 1);
+    t('HEAD_3(13)→2',   api._mod._Key_HeadKeyToIndex(13), 2);
+    t('HEAD_4(12)→3',   api._mod._Key_HeadKeyToIndex(12), 3);
+    t('POWER(4)→-1',    api._mod._Key_HeadKeyToIndex(4), -1);
+    t('TIMER(5)→-1',    api._mod._Key_HeadKeyToIndex(5), -1);
+
+    // Index → head key
+    t('idx0→15',  api._mod._Key_HeadIndexToKey(0), 15);
+    t('idx1→14',  api._mod._Key_HeadIndexToKey(1), 14);
+    t('idx2→13',  api._mod._Key_HeadIndexToKey(2), 13);
+    t('idx3→12',  api._mod._Key_HeadIndexToKey(3), 12);
+    t('idx9→0 (KEY_NONE)', api._mod._Key_HeadIndexToKey(9), 0);
+
+    // Digit key → level
+    t('KEY_POWER_0(22)→0',  api._mod._Key_DigitKeyToLevel(22), 0);
+    t('KEY_POWER_5(27)→5',  api._mod._Key_DigitKeyToLevel(27), 5);
+    t('KEY_POWER_9(31)→9',  api._mod._Key_DigitKeyToLevel(31), 9);
+    t('KEY_POWER_4(4)→-1',  api._mod._Key_DigitKeyToLevel(4), -1);
+
+    // Is head key
+    t('isHead(15)=1', api._mod._Key_IsHeadKey(15), 1);
+    t('isHead(14)=1', api._mod._Key_IsHeadKey(14), 1);
+    t('isHead(13)=1', api._mod._Key_IsHeadKey(13), 1);
+    t('isHead(12)=1', api._mod._Key_IsHeadKey(12), 1);
+    t('isHead(4)=0',  api._mod._Key_IsHeadKey(4), 0);
+    t('isHead(5)=0',  api._mod._Key_IsHeadKey(5), 0);
+
+    // Key_Inject → state change (integration check)
+    t('boot mode=0', api._mod._engine_get_global_mode(), 0);
+    api.postKey('POWER', 'long');  // POWERED_OFF → WORKING
+    t('power on→working', api._mod._engine_get_global_mode(), 2);
+    api.postKey('HEAD_1', 'tap');  // select head 1
+    var st = api.getState();
+    t('HEAD_1 tap→selecting', st.heads[0].node, 'selecting');
+
+    document.getElementById('summary').textContent =
+        '总计: ' + (pass+fail) + ' | PASS=' + pass + ' FAIL=' + fail
+        + (fail === 0 ? ' ✓ ALL PASS' : ' ✗ FAILURES');
+    document.getElementById('summary').style.color = fail ? '#ff4e4e' : '#4eff4e';
+});
+})();
+</script>
+</body>
+</html>

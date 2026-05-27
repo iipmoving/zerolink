@@ -1,0 +1,49 @@
+# Build outputs
+*.o
+*.obj
+*.lst
+*.hex
+*.bin
+*.axf
+*.elf
+*.out
+*.map
+
+# Keil project artifacts
+*.uvguix.*
+*.scvd
+*.crf
+*.d
+*.o
+*.iex
+*.htm
+*.dep
+*.plg
+*.tra
+*.Administrator
+JLinkLog.txt
+JLinkSettings.ini
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CSV data logs
+*.csv
+
+# Backup files
+*.bak
+*.orig

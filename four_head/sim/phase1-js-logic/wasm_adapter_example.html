@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WASM适配器使用示例</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .log { background: #263238; color: #aed581; padding: 15px; border-radius: 4px; 
+               font-family: monospace; white-space: pre-wrap; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 WASM适配器使用示例</h1>
+        
+        <div>
+            <button onclick="testPowerOn()">测试1: 上电自检</button>
+            <button onclick="testPowerKey()">测试2: 开机按键</button>
+            <button onclick="testFunctionSelect()">测试3: 功能选择</button>
+            <button onclick="testContinuousRun()">测试4: 连续运行</button>
+        </div>
+        
+        <div id="output" class="log">点击按钮开始测试...</div>
+    </div>
+
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    
+    <script>
+        let adapter = null;
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            output.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+        
+        async function initAdapter() {
+            if (!adapter) {
+                adapter = new EmsWasmAdapter();
+                await adapter.init();
+                log('✅ WASM适配器初始化完成');
+            }
+        }
+        
+        // 测试1: 上电自检流程
+        async function testPowerOn() {
+            await initAdapter();
+            log('\n========== 测试1: 上电自检 ==========');
+            
+            // 捕获初始状态
+            const snap1 = adapter.captureSnapshot('初始状态');
+            log(`状态: ${snap1.state_name}, 显示: ${snap1.seg_display}`);
+            
+            // 等待1.5秒（150个周期）
+            await adapter.sleep(1500);
+            adapter.runCycles(150);
+            
+            const snap2 = adapter.captureSnapshot('1.5秒后');
+            log(`状态: ${snap2.state_name}, 显示: ${snap2.seg_display}`);
+            
+            // 再等待1.5秒
+            await adapter.sleep(1500);
+            adapter.runCycles(150);
+            
+            const snap3 = adapter.captureSnapshot('3.0秒后');
+            log(`状态: ${snap3.state_name}, 显示: ${snap3.seg_display}`);
+            
+            // 打印报告
+            adapter.printReport('上电自检', [snap1, snap2, snap3]);
+            
+            log('✅ 上电自检测试完成');
+        }
+        
+        // 测试2: 开机按键
+        async function testPowerKey() {
+            await initAdapter();
+            log('\n========== 测试2: 开机按键 ==========');
+            
+            // 先等待进入关机状态
+            log('等待进入关机状态...');
+            await adapter.waitForState(adapter.STATES.S_SHUTDOWN, 500);
+            
+            const snap1 = adapter.captureSnapshot('关机状态');
+            log(`状态: ${snap1.state_name}, 显示: ${snap1.seg_display}`);
+            
+            // 按POWER键
+            log('按下POWER键...');
+            await adapter.clickKey(adapter.KEY_CODES.KEY_POWER, 50);
+            
+            const snap2 = adapter.captureSnapshot('按下POWER');
+            log(`状态: ${snap2.state_name}, 显示: ${snap2.seg_display}`);
+            
+            // 验证是否进入待机状态
+            if (adapter.checkState(adapter.STATES.S_STANDBY)) {
+                log('✅ 成功进入待机状态');
+            } else {
+                log('❌ 未能进入待机状态');
+            }
+            
+            adapter.printReport('开机测试', [snap1, snap2]);
+        }
+        
+        // 测试3: 功能选择
+        async function testFunctionSelect() {
+            await initAdapter();
+            log('\n========== 测试3: 功能选择 ==========');
+            
+            // 确保在待机状态
+            await adapter.waitForState(adapter.STATES.S_STANDBY, 500);
+            
+            const snapshots = [];
+            snapshots.push(adapter.captureSnapshot('待机状态'));
+            
+            // 按M1
+            log('按下M1...');
+            await adapter.clickKey(adapter.KEY_CODES.KEY_M1, 50);
+            snapshots.push(adapter.captureSnapshot('按下M1'));
+            log(`显示: ${snapshots[1].seg_display} (期望: 200)`);
+            
+            // 按M2
+            log('按下M2...');
+            await adapter.clickKey(adapter.KEY_CODES.KEY_M2, 50);
+            snapshots.push(adapter.captureSnapshot('按下M2'));
+            log(`显示: ${snapshots[2].seg_display} (期望: 250)`);
+            
+            // 按M3
+            log('按下M3...');
+            await adapter.clickKey(adapter.KEY_CODES.KEY_M3, 50);
+            snapshots.push(adapter.captureSnapshot('按下M3'));
+            log(`显示: ${snapshots[3].seg_display} (期望: 300)`);
+            
+            // 验证段码
+            const m3SegCodes = [0x4F, 0x3F, 0x3F, 0x00];
+            if (adapter.checkSegCodes(m3SegCodes)) {
+                log('✅ M3段码验证通过');
+            } else {
+                log('❌ M3段码验证失败');
+            }
+            
+            adapter.printReport('功能选择', snapshots);
+        }
+        
+        // 测试4: 连续运行
+        async function testContinuousRun() {
+            await initAdapter();
+            log('\n========== 测试4: 连续运行 ==========');
+            
+            let cycleCount = 0;
+            
+            // 启动定时周期运行
+            adapter.startCycle(() => {
+                cycleCount++;
+                if (cycleCount % 100 === 0) {
+                    log(`已运行 ${cycleCount} 个周期`);
+                }
+            });
+            
+            log('定时周期已启动，每10ms运行一次');
+            log('5秒后自动停止...');
+            
+            // 5秒后停止
+            setTimeout(() => {
+                adapter.stopCycle();
+                log(`⏹ 已停止，总共运行 ${cycleCount} 个周期`);
+                
+                const finalSnap = adapter.captureSnapshot('最终状态');
+                log(`最终状态: ${finalSnap.state_name}, 显示: ${finalSnap.seg_display}`);
+            }, 5000);
+        }
+        
+        // 页面加载提示
+        window.onload = () => {
+            log('页面加载完成，点击按钮开始测试');
+        };
+    </script>
+</body>
+</html>

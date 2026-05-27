@@ -1,0 +1,642 @@
+{
+  "meta": {
+    "name": "四头电磁炉控制器 - V2.0 标准版",
+    "version": "2.0",
+    "description": "标准版本：包含上电序列 + 主线流程 + 定时/Boost/暂停/童锁独立进程",
+    "head_count": 4,
+    "author": "EMC团队",
+    "date": "2026-02-03"
+  },
+
+  "power_on_sequence": {
+    "description": "上电初始化序列（独立进程）",
+    "steps": [
+      {
+        "step": 1,
+        "description": "全显3秒（生产测试）",
+        "actions": [
+          {"action": "display.all_segments.show", "args": ["8888"]},
+          {"action": "display.all_leds.on"},
+          {"action": "delay", "args": [3000]}
+        ]
+      },
+      {
+        "step": 2,
+        "description": "版本显示3秒",
+        "actions": [
+          {"action": "display.seg_1.show", "args": ["V1.0"]},
+          {"action": "display.seg_2.show", "args": ["P1.0"]},
+          {"action": "delay", "args": [3000]}
+        ]
+      },
+      {
+        "step": 3,
+        "description": "进入待机态",
+        "actions": [
+          {"action": "state.mode", "set": "standby"}
+        ]
+      }
+    ],
+    "on_complete": {
+      "next": "node_standby",
+      "message": "上电完成，进入待机模式"
+    }
+  },
+
+  "independent_processes": {
+    "timer_process": {
+      "description": "定时功能（独立进程）",
+      "type": "countdown_timer",
+      "properties": {
+        "min_value": 1,
+        "max_value": 99,
+        "default_value": 15,
+        "step": 1
+      },
+      "functions": {
+        "start": {
+          "params": ["minutes"],
+          "actions": [
+            {"action": "timer.set_value", "args": ["{minutes}"]},
+            {"action": "timer.start"},
+            {"action": "display.decimal.on"},
+            {"action": "segment.set_mode", "args": ["alternating"]}
+          ]
+        },
+        "pause": {
+          "actions": [
+            {"action": "timer.pause"}
+          ]
+        },
+        "resume": {
+          "actions": [
+            {"action": "timer.resume"}
+          ]
+        },
+        "stop": {
+          "actions": [
+            {"action": "timer.stop"},
+            {"action": "timer.reset"},
+            {"action": "display.decimal.off"},
+            {"action": "segment.set_mode", "args": ["power"]}
+          ]
+        },
+        "cancel": {
+          "actions": [
+            {"action": "timer.stop"},
+            {"action": "timer.reset"},
+            {"action": "display.decimal.off"},
+            {"action": "segment.set_mode", "args": ["power"]}
+          ]
+        },
+        "on_timeout": {
+          "actions": [
+            {"action": "head.stop"},
+            {"action": "state.mode", "set": "standby"},
+            {"action": "buzzer.beep", "args": [1]}
+          ]
+        }
+      }
+    },
+
+    "boost_process": {
+      "description": "Boost功能（独立进程）",
+      "properties": {
+        "max_time": 300000
+      },
+      "functions": {
+        "enter": {
+          "actions": [
+            {"action": "state.original_power", "save": "state.power_level"},
+            {"action": "state.power_level", "set": "boost"},
+            {"action": "segment.set_mode", "args": ["ascii"]},
+            {"action": "segment.show_ascii", "args": ["P"]},
+            {"action": "state.boost_active", "set": true},
+            {"action": "boost_timer.start", "args": [300000]}
+          ]
+        },
+        "exit": {
+          "actions": [
+            {"action": "state.power_level", "restore": "state.original_power"},
+            {"action": "segment.set_mode", "args": ["power"]},
+            {"action": "state.boost_active", "set": false},
+            {"action": "boost_timer.stop"}
+          ]
+        },
+        "on_timeout": {
+          "actions": [
+            {"action": "boost_process.exit"}
+          ]
+        }
+      }
+    },
+
+    "pause_process": {
+      "description": "暂停功能（独立进程，全局）",
+      "functions": {
+        "toggle": {
+          "actions": [
+            {
+              "if": "state.paused",
+              "then": [
+                {"action": "head.resume"},
+                {"action": "timer.resume"},
+                {"action": "boost_timer.resume"},
+                {"action": "state.paused", "set": false},
+                {"action": "led.pause.off"}
+              ],
+              "else": [
+                {"action": "head.pause"},
+                {"action": "timer.pause"},
+                {"action": "boost_timer.pause"},
+                {"action": "segment.set_mode", "args": ["ascii"]},
+                {"action": "segment.show_ascii", "args": ["PA"]},
+                {"action": "state.paused", "set": true},
+                {"action": "led.pause.on"}
+              ]
+            }
+          ]
+        }
+      }
+    },
+
+    "child_lock_process": {
+      "description": "童锁功能（独立进程，全局）",
+      "functions": {
+        "toggle": {
+          "actions": [
+            {
+              "if": "state.child_lock",
+              "then": [
+                {"action": "led.child_lock.off"},
+                {"action": "state.child_lock", "set": false},
+                {"action": "state.lock_all_keys", "set": false}
+              ],
+              "else": [
+                {"action": "led.child_lock.on"},
+                {"action": "state.child_lock", "set": true},
+                {"action": "state.lock_all_keys", "set": true}
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+
+  "head_template": {
+    "description": "单个炉头的完整逻辑（4个炉头共享此模板）",
+    
+    "state": {
+      "power_level": 0,
+      "original_power": 0,
+      "selected": false,
+      "working": false,
+      "paused": false,
+      "boost_active": false,
+      "timer_value": 0,
+      "timer_running": false,
+      "current_node": "node_idle"
+    },
+
+    "functions": {
+      "select": {
+        "description": "选中炉头",
+        "actions": [
+          {"action": "state.selected", "set": true},
+          {"action": "led.head_select.on"},
+          {"action": "segment.set_blink", "args": [true]}
+        ]
+      },
+      
+      "deselect": {
+        "description": "取消选中",
+        "actions": [
+          {"action": "state.selected", "set": false},
+          {"action": "led.head_select.off"},
+          {"action": "segment.set_blink", "args": [false]}
+        ]
+      },
+      
+      "set_power": {
+        "description": "设置功率档位",
+        "params": ["level"],
+        "actions": [
+          {"action": "state.power_level", "set": "{level}"},
+          {"action": "segment.set_mode", "args": ["power"]},
+          {"action": "segment.set_blink", "args": [false]},
+          {"action": "state.working", "set": true}
+        ]
+      },
+      
+      "stop": {
+        "description": "停止加热",
+        "actions": [
+          {"action": "state.power_level", "set": 0},
+          {"action": "state.working", "set": false},
+          {"action": "segment.set_mode", "args": ["dash"]},
+          {"action": "led.power.off"}
+        ]
+      },
+
+      "enter_boost": {
+        "description": "进入Boost模式",
+        "actions": [
+          {"action": "boost_process.enter"}
+        ]
+      },
+
+      "exit_boost": {
+        "description": "退出Boost模式",
+        "actions": [
+          {"action": "boost_process.exit"}
+        ]
+      },
+
+      "set_timer": {
+        "description": "设置定时",
+        "actions": [
+          {"action": "segment.set_mode", "args": ["timer"]},
+          {"action": "display.decimal.on"}
+        ]
+      },
+
+      "adjust_timer": {
+        "description": "调整定时时间",
+        "params": ["direction"],
+        "actions": [
+          {
+            "if": "{direction} == 'up'",
+            "then": [
+              {"action": "timer.increment", "args": [1]}
+            ],
+            "else": [
+              {"action": "timer.decrement", "args": [1]}
+            ]
+          }
+        ]
+      },
+
+      "confirm_timer": {
+        "description": "确认定时设置",
+        "actions": [
+          {"action": "timer_process.start", "args": ["timer.value"]},
+          {"action": "segment.set_mode", "args": ["alternating"]}
+        ]
+      }
+    },
+
+    "main_flow": {
+      "entry": "node_idle",
+      "nodes": {
+        "node_idle": {
+          "description": "空闲态（未选中）",
+          "events": [
+            {
+              "trigger": "key_head_select",
+              "condition": "short_press",
+              "call": "functions.select",
+              "next": "node_selected"
+            }
+          ]
+        },
+        
+        "node_selected": {
+          "description": "选中闪烁态（等待设置档位）",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["dash"]},
+            {"action": "segment.set_blink", "args": [true]},
+            {"action": "led.head_select.on"}
+          ],
+          "events": [
+            {
+              "trigger": ["key_0", "key_1", "key_2", "key_3", "key_4", "key_5", "key_6", "key_7", "key_8"],
+              "condition": "short_press",
+              "call": "functions.set_power",
+              "args": ["trigger_key_level"],
+              "next": "node_working"
+            },
+            {
+              "trigger": "key_9",
+              "condition": "short_press",
+              "call": "functions.set_power",
+              "args": [9],
+              "next": "node_working"
+            },
+            {
+              "trigger": "key_9",
+              "condition": "long_press",
+              "call": "functions.enter_boost",
+              "next": "node_boost"
+            },
+            {
+              "trigger": "key_timer",
+              "condition": "short_press",
+              "call": "functions.set_timer",
+              "next": "node_timer_setting"
+            },
+            {
+              "trigger": null,
+              "condition": "timeout(5000) && state.power_level == 0",
+              "call": "functions.deselect",
+              "next": "node_idle"
+            },
+            {
+              "trigger": null,
+              "condition": "timeout(5000) && state.power_level > 0",
+              "call": "functions.set_power",
+              "args": ["state.power_level"],
+              "next": "node_working"
+            }
+          ]
+        },
+        
+        "node_timer_setting": {
+          "description": "定时设置态",
+          "enter_actions": [
+            {"action": "timer.set_value", "args": [15]},
+            {"action": "segment.set_mode", "args": ["timer"]},
+            {"action": "display.decimal.on"}
+          ],
+          "events": [
+            {
+              "trigger": "key_plus",
+              "condition": "short_press",
+              "call": "functions.adjust_timer",
+              "args": ["up"],
+              "next": "node_timer_setting"
+            },
+            {
+              "trigger": "key_minus",
+              "condition": "short_press",
+              "call": "functions.adjust_timer",
+              "args": ["down"],
+              "next": "node_timer_setting"
+            },
+            {
+              "trigger": "key_timer",
+              "condition": "short_press",
+              "call": "functions.confirm_timer",
+              "next": "node_working_with_timer"
+            },
+            {
+              "trigger": "key_timer",
+              "condition": "long_press",
+              "call": "timer_process.cancel",
+              "next": "node_selected"
+            },
+            {
+              "trigger": null,
+              "condition": "timeout(5000)",
+              "call": "functions.confirm_timer",
+              "next": "node_working_with_timer"
+            }
+          ]
+        },
+        
+        "node_working": {
+          "description": "工作态（正常加热）",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["power"]},
+            {"action": "segment.set_blink", "args": [false]},
+            {"action": "led.power.on"}
+          ],
+          "events": [
+            {
+              "trigger": ["key_0", "key_1", "key_2", "key_3", "key_4", "key_5", "key_6", "key_7", "key_8", "key_9"],
+              "condition": "short_press",
+              "call": "functions.set_power",
+              "args": ["trigger_key_level"],
+              "next": "node_working"
+            },
+            {
+              "trigger": "key_9",
+              "condition": "long_press",
+              "call": "functions.enter_boost",
+              "next": "node_boost"
+            },
+            {
+              "trigger": "key_pause",
+              "condition": "short_press",
+              "call": "pause_process.toggle",
+              "next": "node_paused"
+            },
+            {
+              "trigger": "key_timer",
+              "condition": "short_press",
+              "call": "functions.set_timer",
+              "next": "node_timer_setting"
+            }
+          ]
+        },
+        
+        "node_working_with_timer": {
+          "description": "工作态+定时",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["alternating"]},
+            {"action": "display.decimal.on"}
+          ],
+          "events": [
+            {
+              "trigger": "key_pause",
+              "condition": "short_press",
+              "call": "pause_process.toggle",
+              "next": "node_paused"
+            },
+            {
+              "trigger": null,
+              "condition": "timer.timeout",
+              "call": "timer_process.on_timeout",
+              "next": "node_standby"
+            },
+            {
+              "trigger": null,
+              "condition": "boost_timer.timeout",
+              "call": "boost_process.on_timeout",
+              "next": "node_working_with_timer"
+            }
+          ]
+        },
+        
+        "node_boost": {
+          "description": "Boost模式（最大功率）",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["ascii"]},
+            {"action": "segment.show_ascii", "args": ["P"]}
+          ],
+          "events": [
+            {
+              "trigger": ["key_0", "key_1", "key_2", "key_3", "key_4", "key_5", "key_6", "key_7", "key_8"],
+              "condition": "short_press",
+              "call": "functions.set_power",
+              "args": ["trigger_key_level"],
+              "next": "node_working"
+            },
+            {
+              "trigger": "key_9",
+              "condition": "short_press",
+              "call": "functions.set_power",
+              "args": [9],
+              "next": "node_working"
+            },
+            {
+              "trigger": "key_timer",
+              "condition": "short_press",
+              "call": "functions.set_timer",
+              "next": "node_boost_with_timer"
+            },
+            {
+              "trigger": null,
+              "condition": "boost_timer.timeout",
+              "call": "functions.exit_boost",
+              "next": "node_working"
+            }
+          ]
+        },
+        
+        "node_boost_with_timer": {
+          "description": "Boost模式+定时",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["alternating_boost"]},
+            {"action": "display.decimal.on"}
+          ],
+          "events": [
+            {
+              "trigger": null,
+              "condition": "timer.timeout",
+              "call": "timer_process.on_timeout",
+              "next": "node_standby"
+            },
+            {
+              "trigger": null,
+              "condition": "boost_timer.timeout",
+              "call": "boost_process.on_timeout",
+              "next": "node_working_with_timer"
+            }
+          ]
+        },
+        
+        "node_paused": {
+          "description": "暂停态",
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["ascii"]},
+            {"action": "segment.show_ascii", "args": ["PA"]}
+          ],
+          "events": [
+            {
+              "trigger": "key_pause",
+              "condition": "short_press",
+              "call": "pause_process.toggle",
+              "next": "node_working"
+            }
+          ]
+        }
+      }
+    }
+  },
+
+  "global_state_machine": {
+    "description": "全局状态机（管理热点炉头切换 + 童锁）",
+    "state": {
+      "mode": "standby",
+      "hot_head_id": null,
+      "child_lock": false,
+      "power_on_completed": false
+    },
+    
+    "functions": {
+      "power_on": {
+        "description": "开机",
+        "actions": [
+          {"action": "state.mode", "set": "power_on"},
+          {"action": "head.all.set_power", "args": [0]}
+        ]
+      },
+      
+      "power_off": {
+        "description": "关机",
+        "actions": [
+          {"action": "head.all.stop"},
+          {"action": "state.mode", "set": "standby"}
+        ]
+      },
+      
+      "switch_hot_head": {
+        "description": "切换热点炉头",
+        "params": ["head_id"],
+        "actions": [
+          {"action": "hot_head.switch", "args": ["{head_id}"]}
+        ]
+      }
+    },
+    
+    "main_flow": {
+      "entry": "node_standby",
+      "nodes": {
+        "node_standby": {
+          "description": "待机态",
+          "enter_actions": [
+            {"action": "display.seg_all.show", "args": ["--"]},
+            {"action": "display.seg_all.blink", "args": [true]},
+            {"action": "led.power.blink"}
+          ],
+          "events": [
+            {
+              "trigger": "key_power",
+              "condition": "long_press",
+              "call": "global.functions.power_on",
+              "next": "node_power_on"
+            },
+            {
+              "trigger": "key_child_lock",
+              "condition": "long_press",
+              "call": "child_lock_process.toggle"
+            }
+          ]
+        },
+        
+        "node_power_on": {
+          "description": "开机态（所有炉头=0档）",
+          "enter_actions": [
+            {"action": "state.mode", "set": "power_on"},
+            {"action": "display.seg_all.show", "args": ["0"]},
+            {"action": "led.power.on"}
+          ],
+          "events": [
+            {
+              "trigger": ["key_head_1", "key_head_2", "key_head_3", "key_head_4"],
+              "condition": "short_press",
+              "call": "global.functions.switch_hot_head",
+              "args": ["trigger_key_head_id"],
+              "next": "node_head_selected"
+            },
+            {
+              "trigger": "key_power",
+              "condition": "long_press",
+              "call": "global.functions.power_off",
+              "next": "node_standby"
+            }
+          ]
+        },
+        
+        "node_head_selected": {
+          "description": "炉头已选中（委托给炉头状态机处理）",
+          "delegate_to": "hot_head",
+          "events": [
+            {
+              "trigger": "key_power",
+              "condition": "long_press",
+              "call": "global.functions.power_off",
+              "next": "node_standby"
+            },
+            {
+              "trigger": "key_child_lock",
+              "condition": "long_press",
+              "call": "child_lock_process.toggle"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

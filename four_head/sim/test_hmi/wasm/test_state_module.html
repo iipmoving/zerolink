@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>state_module 独立测试</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+h1 { color: #e94560; border-bottom: 2px solid #e94560; padding-bottom: 8px; }
+.test { margin: 6px 0; padding: 6px 12px; border-radius: 4px; }
+.PASS { background: #1a3a1a; color: #4eff4e; }
+.FAIL { background: #3a1a1a; color: #ff4e4e; }
+#summary { margin-top: 16px; font-size: 18px; font-weight: bold; }
+#status { color: #ffaa00; }
+.state-box { background: #111; padding: 10px; margin: 8px 0; border-radius: 4px; }
+.state-box b { color: #0af; }
+</style>
+</head>
+<body>
+<h1>state_module 独立测试</h1>
+<p>测试状态机核心: 上电序列, 选择/确认, 栈管理, 关机, 强制操作</p>
+<p id="status">加载 WASM...</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script src="app_logic.js"></script>
+<script src="wasm_adapter.js"></script>
+<script>
+(function() {
+var pass = 0, fail = 0;
+var out = document.getElementById('results');
+
+function t(name, actual, expected) {
+    var ok = (actual === expected);
+    if (ok) pass++; else fail++;
+    out.innerHTML += '<div class="test ' + (ok?'PASS':'FAIL') + '">['
+        + (ok?'PASS':'FAIL') + '] ' + name + '</div>';
+    if (!ok) {
+        out.innerHTML += '<div class="state-box">got=<b>' + JSON.stringify(actual)
+            + '</b> expected=<b>' + JSON.stringify(expected) + '</b></div>';
+    }
+}
+
+AppLogicModule().then(function(mod) {
+    document.getElementById('status').textContent = 'WASM 已加载, 运行测试...';
+    var api = createWasmEngine(mod);
+    api.init();
+
+    // Test 1: Initial state
+    var s1 = api.getState();
+    t('init→powered_off', s1.global_mode, 'powered_off');
+    t('init→child_lock=0', s1.child_lock, false);
+    t('init→paused=0', s1.paused, false);
+    t('init→hot_head=-1', s1.hot_head, -1);
+    t('init→stack_depth=0', s1.select_stack.length, 0);
+    for (var i = 0; i < 4; i++) {
+        t('init→head'+ (i+1) + '=idle', s1.heads[i].node, 'idle');
+        t('init→head'+ (i+1) + '=power=0', s1.heads[i].power_level, 0);
+    }
+
+    // Test 2: Power on
+    api.postKey('POWER', 'long');
+    var s2 = api.getState();
+    t('POWER long→working', s2.global_mode, 'working');
+
+    // Test 3: Select → confirm cycle
+    api.postKey('HEAD_1', 'tap');
+    var s3 = api.getState();
+    t('HEAD_1 tap→selecting', s3.heads[0].node, 'selecting');
+    t('HEAD_1 tap→hot_head=0', s3.hot_head, 0);
+    t('HEAD_1 tap→stack=[0]', JSON.stringify(s3.select_stack), '[0]');
+
+    api.postKey('5', 'tap');
+    var s3b = api.getState();
+    t('digit 5→power=5', s3b.heads[0].power_level, 5);
+
+    api.forceSelectTimeout(0);
+    var s4 = api.getState();
+    t('select timeout→cooking', s4.heads[0].node, 'cooking');
+    t('select timeout→stack=[0]', JSON.stringify(s4.select_stack), '[0]');
+
+    // Test 4: Multi-head stack
+    api.postKey('HEAD_2', 'tap');
+    api.postKey('9', 'tap');
+    api.forceSelectTimeout(1);
+    var s5 = api.getState();
+    t('HEAD_2 confirm→cooking', s5.heads[1].node, 'cooking');
+    t('HEAD_2 power=9', s5.heads[1].power_level, 9);
+    t('HEAD_2→hot_head=1', s5.hot_head, 1);
+    t('stack=[0,1]', JSON.stringify(s5.select_stack), '[0,1]');
+
+    // Test 5: Power off
+    api.postKey('POWER', 'long');
+    var s6 = api.getState();
+    t('POWER long→powered_off', s6.global_mode, 'powered_off');
+
+    // Test 6: Force operations on fresh session
+    api.postKey('POWER', 'long');
+    api.postKey('HEAD_1', 'tap');
+    api.postKey('9', 'long');  // Boost
+    var s7 = api.getState();
+    t('Boost active', s7.heads[0].boost_active, true);
+
+    api.forceBoostTimeout(0);
+    var s8 = api.getState();
+    t('forceBoostTimeout→boost=0', s8.heads[0].boost_active, false);
+
+    // Test 7: Child lock
+    api.postKey('CHILD_LOCK', 'long');
+    t('child_lock=1', api.getState().child_lock, true);
+    api.postKey('CHILD_LOCK', 'long');
+    t('child_lock=0', api.getState().child_lock, false);
+
+    document.getElementById('summary').textContent =
+        '总计: ' + (pass+fail) + ' | PASS=' + pass + ' FAIL=' + fail
+        + (fail === 0 ? ' ✓ ALL PASS' : ' ✗ FAILURES');
+    document.getElementById('summary').style.color = fail ? '#ff4e4e' : '#4eff4e';
+});
+})();
+</script>
+</body>
+</html>

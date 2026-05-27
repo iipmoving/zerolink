@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index+WASM集成测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .canvas-area {
+            flex: 1;
+        }
+        .log-area {
+            width: 400px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: white;
+            display: block;
+        }
+        .log-panel {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .pass { background: #d4edda; color: #155724; }
+        .fail { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #0052a3; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Index + WASM 集成测试</h1>
+    
+    <div id="status"></div>
+    
+    <div style="margin: 10px 0;">
+        <button onclick="startDemo()">▶️ 启动演示模式（WASM）</button>
+        <button onclick="stopDemo()">⏹️ 停止演示</button>
+    </div>
+    
+    <div class="container">
+        <div class="canvas-area">
+            <canvas id="main-canvas" width="1000" height="400"></canvas>
+        </div>
+        
+        <div class="log-area">
+            <h3>日志输出</h3>
+            <div class="log-panel" id="log-panel">
+                <div>等待启动...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载所有必要的脚本 -->
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/logic_layer_adapter.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/control_binder.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/config_converter.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/seg_display.js"></script>
+    <script src="js/key_handler.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/logic_layer.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/demo.js"></script>
+
+    <script>
+        // 初始化Canvas
+        AppState.canvas = document.getElementById('main-canvas');
+        AppState.ctx = AppState.canvas.getContext('2d');
+        
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.textContent = `[${time}] ${msg}`;
+            
+            if (type === 'success') div.style.color = '#00ff00';
+            else if (type === 'error') div.style.color = '#ff6666';
+            else if (type === 'warning') div.style.color = '#ffcc00';
+            else div.style.color = '#00ff00';
+            
+            document.getElementById('log-panel').appendChild(div);
+            document.getElementById('log-panel').scrollTop = document.getElementById('log-panel').scrollHeight;
+        }
+        
+        function setStatus(msg, type) {
+            document.getElementById('status').innerHTML = `<div class="status ${type}">${msg}</div>`;
+        }
+        
+        async function startDemo() {
+            log('=' .repeat(60));
+            log('启动演示模式（WASM）...');
+            
+            try {
+                // 加载配置
+                log('步骤1: 加载配置文件...');
+                await loadConfig('default');
+                log(`✅ 配置加载成功，共${AppState.controls.length}个控件`);
+                
+                // 显示控件列表
+                log('控件列表:');
+                AppState.controls.forEach((ctrl, i) => {
+                    log(`  ${i+1}. ${ctrl.type} - ${ctrl.name} (${ctrl.x}, ${ctrl.y})`);
+                });
+                
+                // 启动WASM演示
+                log('\n步骤2: 启动WASM演示...');
+                await startDemoWithWasm();
+                
+                setStatus('✅ 演示模式启动成功！请观察Canvas上的控件和LED状态', 'pass');
+                
+            } catch (error) {
+                setStatus(`❌ 启动失败: ${error.message}`, 'fail');
+                log(`❌ 错误: ${error.message}`);
+                console.error(error);
+            }
+        }
+        
+        function stopDemo() {
+            log('停止演示模式...');
+            stopDemo();
+            setStatus('演示模式已停止', 'info');
+        }
+        
+        // 自动加载配置
+        window.onload = async () => {
+            log('页面加载完成，准备就绪');
+            log('请点击"启动演示模式"按钮开始测试');
+        };
+    </script>
+</body>
+</html>

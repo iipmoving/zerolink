@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMC Firmware Demo - 标准固件使用示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .demo-area {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .panel h3 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            color: #3498db;
+        }
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .button {
+            padding: 15px 10px;
+            background: #2a2a2a;
+            color: #ccc;
+            border: 2px solid #555;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .button:hover {
+            background: #3a3a3a;
+            border-color: #777;
+        }
+        .button:active {
+            transform: scale(0.95);
+        }
+        .led {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #333;
+            border: 2px solid #555;
+            transition: background 0.2s;
+        }
+        .led.on {
+            background: #44ff44;
+            box-shadow: 0 0 10px #44ff44;
+        }
+        .display {
+            background: #111;
+            color: #44ff44;
+            font-family: monospace;
+            font-size: 36px;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 10px 0;
+            min-height: 60px;
+        }
+        .log-panel {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .status.running {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EMC Firmware Demo</h1>
+            <p>标准固件框架使用示例</p>
+        </div>
+
+        <div class="demo-area">
+            <!-- 控制面板 -->
+            <div class="panel">
+                <h3>控制面板</h3>
+                <div class="status stopped" id="status">演示已停止</div>
+                
+                <button class="btn btn-primary" onclick="startDemo()">开始演示</button>
+                <button class="btn btn-secondary" onclick="stopDemo()">停止演示</button>
+                
+                <div class="control-grid">
+                    <div class="button" onclick="pressKey(13)">开始/暂停</div>
+                    <div class="button" onclick="pressKey(11)">加水</div>
+                    <div class="button" onclick="pressKey(12)">加时间</div>
+                    <div class="button" onclick="pressKey(1)">M1</div>
+                    <div class="button" onclick="pressKey(2)">M2</div>
+                    <div class="button" onclick="pressKey(3)">M3</div>
+                    <div class="button" onclick="pressKey(4)">M4</div>
+                    <div class="button" onclick="pressKey(5)">M5</div>
+                    <div class="button" onclick="pressKey(6)">M6</div>
+                    <div class="button" onclick="pressKey(7)">M7</div>
+                    <div class="button" onclick="pressKey(8)">M8</div>
+                    <div class="button" onclick="pressKey(0)">电源</div>
+                </div>
+            </div>
+
+            <!-- 显示面板 -->
+            <div class="panel">
+                <h3>数码管显示</h3>
+                <div class="display" id="display">----</div>
+                
+                <h3>LED状态</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-power"></div>
+                        <span>电源</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-m1"></div>
+                        <span>M1</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-m2"></div>
+                        <span>M2</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-m3"></div>
+                        <span>M3</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-add-water"></div>
+                        <span>加水</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <div class="led" id="led-add-time"></div>
+                        <span>加时间</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 状态信息 -->
+            <div class="panel">
+                <h3>状态信息</h3>
+                <div>当前状态: <span id="state">未知</span></div>
+                <div>状态码: <span id="state-code">-</span></div>
+                
+                <h3>系统日志</h3>
+                <div class="log-panel" id="log-panel">
+                    <div>系统就绪</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入WASM模块 -->
+    <script src="wasm/emc_test.js"></script>
+    
+    <!-- 引入固件模块 -->
+    <script type="module">
+        import { EmcFramework } from './firmware/core/EmcFramework.js';
+
+        // 创建框架实例
+        const emc = new EmcFramework({
+            logicType: 'wasm',  // 'js' 或 'wasm'
+            autoStart: false
+        });
+
+        // 日志函数
+        function addLog(message) {
+            const logPanel = document.getElementById('log-panel');
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        // 更新显示
+        function updateDisplay(displayStr) {
+            document.getElementById('display').textContent = displayStr;
+        }
+
+        // 更新LED状态
+        function updateLeds(ledState) {
+            document.getElementById('led-power').className = 'led' + (ledState.power ? ' on' : '');
+            
+            const funcLeds = ledState.func_leds || 0;
+            document.getElementById('led-m1').className = 'led' + (((funcLeds >> 0) & 1) ? ' on' : '');
+            document.getElementById('led-m2').className = 'led' + (((funcLeds >> 1) & 1) ? ' on' : '');
+            document.getElementById('led-m3').className = 'led' + (((funcLeds >> 2) & 1) ? ' on' : '');
+            
+            document.getElementById('led-add-water').className = 'led' + (ledState.add_water ? ' on' : '');
+            document.getElementById('led-add-time').className = 'led' + (ledState.add_time ? ' on' : '');
+        }
+
+        // 更新状态显示
+        function updateState(state) {
+            document.getElementById('state').textContent = state.stateName;
+            document.getElementById('state-code').textContent = state.state;
+        }
+
+        // 启动演示
+        async function startDemo() {
+            try {
+                addLog('初始化框架...');
+                await emc.init();
+                addLog('框架初始化完成');
+
+                addLog('启动演示模式...');
+                emc.startDemo();
+                document.getElementById('status').className = 'status running';
+                document.getElementById('status').textContent = '演示运行中';
+                addLog('演示模式已启动');
+
+                // 监听显示更新
+                emc.on('segmentDisplayChange', (data) => {
+                    updateDisplay(data.display);
+                });
+
+                // 监听LED更新
+                emc.on('ledStateChange', (data) => {
+                    // 获取完整LED状态
+                    const logicState = emc.getLogicState();
+                    if (logicState && logicState.led) {
+                        updateLeds(logicState.led);
+                    }
+                });
+
+                // 定期更新状态
+                setInterval(() => {
+                    const state = emc.getLogicState();
+                    if (state) {
+                        updateState(state);
+                    }
+                }, 100);
+
+            } catch (error) {
+                addLog(`错误: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        // 停止演示
+        function stopDemo() {
+            emc.stopDemo();
+            document.getElementById('status').className = 'status stopped';
+            document.getElementById('status').textContent = '演示已停止';
+            addLog('演示模式已停止');
+        }
+
+        // 发送按键
+        function pressKey(keyCode) {
+            try {
+                emc.pressKey(keyCode, 2); // EVENT_SHORT
+                addLog(`按键发送: keyCode=${keyCode}`);
+            } catch (error) {
+                addLog(`按键发送失败: ${error.message}`);
+            }
+        }
+
+        // 暴露全局函数
+        window.startDemo = startDemo;
+        window.stopDemo = stopDemo;
+        window.pressKey = pressKey;
+
+        addLog('固件框架已加载，点击"开始演示"启动');
+    </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript错误测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .log-container {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #ccc;
+            padding-left: 10px;
+        }
+        .error {
+            border-left-color: red;
+            color: red;
+        }
+        .success {
+            border-left-color: green;
+            color: green;
+        }
+        .info {
+            border-left-color: blue;
+            color: blue;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>JavaScript错误测试</h1>
+    <p>这个页面用于检测demo.js和其他JS文件是否有语法错误。</p>
+    
+    <div>
+        <button onclick="testLoadDemo()">测试加载 demo.js</button>
+        <button onclick="testLoadEmcLogic()">测试加载 emc_logic_js.js</button>
+        <button onclick="testLoadEmsWasmAdapter()">测试加载 ems_wasm_adapter.js</button>
+        <button onclick="clearLogs()">清除日志</button>
+    </div>
+    
+    <div class="log-container" id="logs">
+        <div class="log-entry info">等待测试...</div>
+    </div>
+
+    <script>
+        function addLog(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '<div class="log-entry info">日志已清除</div>';
+        }
+
+        async function testLoadDemo() {
+            try {
+                addLog('开始加载 demo.js...', 'info');
+                
+                // 先加载依赖
+                await loadScript('js/state.js');
+                await loadScript('js/utils.js');
+                await loadScript('js/config.js');
+                await loadScript('js/controls.js');
+                await loadScript('js/canvas.js');
+                await loadScript('js/editor.js');
+                await loadScript('js/emc_logic_js.js');
+                await loadScript('js/key_handler.js');
+                await loadScript('js/logic_layer.js');
+                await loadScript('js/logic_layer_adapter.js');
+                await loadScript('js/ems_wasm_adapter.js');
+                await loadScript('js/control_binder.js');
+                await loadScript('js/app.js');
+                
+                // 最后加载 demo.js
+                await loadScript('js/demo.js');
+                
+                addLog('✅ demo.js 加载成功！', 'success');
+                addLog('AppState 对象: ' + (typeof AppState !== 'undefined' ? '存在' : '不存在'), 'info');
+                addLog('startDemo 函数: ' + (typeof startDemo === 'function' ? '存在' : '不存在'), 'info');
+                
+            } catch (error) {
+                addLog(`❌ 加载失败: ${error.message}`, 'error');
+                addLog(`错误堆栈: ${error.stack}`, 'error');
+            }
+        }
+
+        async function testLoadEmcLogic() {
+            try {
+                addLog('开始加载 emc_logic_js.js...', 'info');
+                await loadScript('js/emc_logic_js.js');
+                addLog('✅ emc_logic_js.js 加载成功！', 'success');
+                addLog('EmcLogic 类: ' + (typeof EmcLogic === 'function' ? '存在' : '不存在'), 'info');
+            } catch (error) {
+                addLog(`❌ 加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testLoadEmsWasmAdapter() {
+            try {
+                addLog('开始加载 ems_wasm_adapter.js...', 'info');
+                await loadScript('js/logic_layer_adapter.js');
+                await loadScript('js/ems_wasm_adapter.js');
+                addLog('✅ ems_wasm_adapter.js 加载成功！', 'success');
+                addLog('EmsWasmAdapter 类: ' + (typeof EmsWasmAdapter === 'function' ? '存在' : '不存在'), 'info');
+            } catch (error) {
+                addLog(`❌ 加载失败: ${error.message}`, 'error');
+            }
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error(`无法加载脚本: ${src}`));
+                document.head.appendChild(script);
+            });
+        }
+
+        // 自动捕获全局错误
+        window.onerror = function(message, source, lineno, colno, error) {
+            addLog(`全局错误: ${message}`, 'error');
+            addLog(`位置: ${source}:${lineno}:${colno}`, 'error');
+            if (error && error.stack) {
+                addLog(`堆栈: ${error.stack}`, 'error');
+            }
+            return false;
+        };
+
+        // 捕获未处理的Promise拒绝
+        window.onunhandledrejection = function(event) {
+            addLog(`未处理的Promise拒绝: ${event.reason}`, 'error');
+        };
+    </script>
+</body>
+</html>

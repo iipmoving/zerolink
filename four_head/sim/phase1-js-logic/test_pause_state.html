@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAUSE状态测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-panel {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .log {
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .status {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 PAUSE状态测试</h1>
+    
+    <div class="test-panel">
+        <h2>当前状态</h2>
+        <div id="currentState" class="status">等待...</div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>手动测试</h2>
+        <p>请手动执行以下操作：</p>
+        <ol>
+            <li>进入COOKING状态</li>
+            <li>短按START_PAUSE（应该进入PAUSE）</li>
+            <li>再短按START_PAUSE（应该回到COOKING）</li>
+            <li>长按START_PAUSE 2秒（应该回到STANDBY）</li>
+        </ol>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+    
+    <div class="test-panel">
+        <h2>日志</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        const STATE_NAMES = {
+            0: 'S_POWER_ON',
+            1: 'S_VERSION',
+            2: 'S_SHUTDOWN',
+            3: 'S_DEMO',
+            4: 'S_STANDBY',
+            5: 'S_FUNC_SELECT',
+            6: 'S_COOKING',
+            7: 'S_PAUSE',
+            8: 'S_FAULT'
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStateDisplay() {
+            if (AppState.dllState && AppState.dllState.state !== null) {
+                const stateCode = AppState.dllState.state;
+                const stateName = STATE_NAMES[stateCode] || `UNKNOWN(${stateCode})`;
+                document.getElementById('currentState').textContent = `${stateName} (${stateCode})`;
+            }
+        }
+
+        // 监听状态变化
+        window.addEventListener('load', () => {
+            log('页面加载完成', 'info');
+            
+            // 定期检查状态
+            setInterval(() => {
+                updateStateDisplay();
+            }, 200);
+            
+            // 拦截WASM的pressKey调用，添加日志
+            if (window.EmsWasmAdapter) {
+                const originalPressKey = EmsWasmAdapter.prototype.pressKey;
+                EmsWasmAdapter.prototype.pressKey = function(keyCode, event) {
+                    const eventName = ['NULL', 'PRESS', 'SHORT', 'LONG', 'REPEAT', 'RELEASE'][event] || `UNKNOWN(${event})`;
+                    log(`📤 发送按键: keyCode=${keyCode}, event=${eventName}`, 'debug');
+                    return originalPressKey.call(this, keyCode, event);
+                };
+            }
+        });
+    </script>
+</body>
+</html>

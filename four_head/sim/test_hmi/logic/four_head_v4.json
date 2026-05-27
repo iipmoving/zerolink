@@ -1,0 +1,257 @@
+{
+  "meta": {
+    "name": "四头电磁炉 HMI逻辑",
+    "version": "4.0",
+    "head_count": 4,
+    "description": "修改此JSON即修改HMI行为。引擎只做解释，不包含业务规则。"
+  },
+
+  "timeouts": {
+    "select_confirm_ms": 15000,
+    "timer_confirm_ms": 15000,
+    "boost_max_ms": 3000,
+    "idle_to_standby_ms": 15000,
+    "idle_to_off_ms": 30000,
+    "off_to_sleep_ms": 30000,
+    "default_timer_min": 15,
+    "power_on_all_on_ms": 3000,
+    "version_show_ms": 3000,
+    "power_key_long_ms": 1500
+  },
+
+  "power_on_sequence": [
+    { "step": 0, "delay_ms_key": "power_on_all_on_ms", "seg_mode": "ascii", "seg_chars": "88888888", "leds": "all_on" },
+    { "step": 1, "delay_ms_key": "version_show_ms",   "seg_mode": "ascii", "seg_chars": "V2.3P2.5", "leds": "all_off" },
+    { "step": 2, "goto": "powered_off" }
+  ],
+
+  "global_routes": {
+    "_description": "全局模式下的按键路由。引擎先匹配全局路由，再匹配进程路由，最后匹配Zone路由。",
+
+    "powered_off": {
+      "enter_actions": ["clear_all_heads", "show_dash", "led_power_on", "led_timer_off", "led_pause_off", "led_child_lock_off", "reset_off_timer"],
+      "routes": {
+        "POWER long": "go_working"
+      },
+      "guards": [
+        { "name": "off_to_sleep", "ms_key": "off_to_sleep_ms", "check": "always", "action": "go_deep_sleep" }
+      ]
+    },
+
+    "deep_sleep": {
+      "enter_actions": ["clear_all_heads", "display_all_off", "led_all_off"],
+      "routes": {
+        "POWER long": "go_working"
+      }
+    },
+
+    "working": {
+      "enter_actions": ["clear_all_heads", "hothead_clear", "show_power_mode", "led_power_on", "led_timer_off", "led_pause_off", "led_child_lock_off", "reset_idle_timer"],
+      "routes": {
+        "POWER long":     "go_powered_off",
+        "PAUSE tap":      "toggle_pause",
+        "CHILD_LOCK long": "toggle_child_lock",
+        "HEAD_1 tap": "select_head 0",
+        "HEAD_2 tap": "select_head 1",
+        "HEAD_3 tap": "select_head 2",
+        "HEAD_4 tap": "select_head 3"
+      },
+      "guards": [
+        { "name": "all_idle_to_standby", "ms_key": "idle_to_standby_ms", "check": "all_idle", "action": "clear_hothead" },
+        { "name": "all_idle_to_off",     "ms_key": "idle_to_off_ms",     "check": "all_idle", "action": "go_powered_off" }
+      ]
+    },
+
+    "paused": {
+      "enter_actions": ["show_pa", "led_pause_on", "led_timer_off"],
+      "exit_actions":  ["show_power_mode", "led_pause_off", "reset_idle_timer"],
+      "routes": {
+        "POWER long": "go_powered_off",
+        "PAUSE tap":  "toggle_pause"
+      }
+    },
+
+    "child_lock": {
+      "_description": "童锁不是全局模式，是WORKING下的按键过滤器。此处定义拦截规则。",
+      "block_all_except": ["POWER"]
+    }
+  },
+
+  "zone_routes": {
+    "_description": "Zone状态下的按键路由。HEAD_SELF=按当前hotHead对应的炉头键, HEAD_OTHER=按其他炉头键。引擎运行时动态解析。",
+
+    "idle": {
+      "routes": {
+        "HEAD_1 tap": "select_head 0",
+        "HEAD_2 tap": "select_head 1",
+        "HEAD_3 tap": "select_head 2",
+        "HEAD_4 tap": "select_head 3"
+      }
+    },
+
+    "selecting": {
+      "routes": {
+        "HEAD_SELF tap":  "confirm_select_immediate",
+        "HEAD_OTHER tap": "select_head %head",
+        "0 tap":  "set_power 0",
+        "1 tap":  "set_power 1",
+        "2 tap":  "set_power 2",
+        "3 tap":  "set_power 3",
+        "4 tap":  "set_power 4",
+        "5 tap":  "set_power 5",
+        "6 tap":  "set_power 6",
+        "7 tap":  "set_power 7",
+        "8 tap":  "set_power 8",
+        "9 tap":  "set_power 9",
+        "9 long": "enter_boost",
+        "TIMER tap": "enter_timer_setting"
+      },
+      "timeout": { "ms_key": "select_confirm_ms", "action": "confirm_select" }
+    },
+
+    "cooking": {
+      "routes": {
+        "HEAD_1 tap": "select_head 0",
+        "HEAD_2 tap": "select_head 1",
+        "HEAD_3 tap": "select_head 2",
+        "HEAD_4 tap": "select_head 3",
+        "0 tap":  "set_power 0",
+        "1 tap":  "set_power 1",
+        "2 tap":  "set_power 2",
+        "3 tap":  "set_power 3",
+        "4 tap":  "set_power 4",
+        "5 tap":  "set_power 5",
+        "6 tap":  "set_power 6",
+        "7 tap":  "set_power 7",
+        "8 tap":  "set_power 8",
+        "9 tap":  "set_power 9",
+        "9 long": "enter_boost",
+        "TIMER tap": "enter_timer_setting"
+      }
+    }
+  },
+
+  "process_routes": {
+    "_description": "正交进程的按键路由和超时。进程优先级高于Zone路由。",
+
+    "timer_setting": {
+      "routes": {
+        "TIMER tap":  "confirm_timer",
+        "TIMER long": "cancel_timer_setting",
+        "PLUS tap":   "timer_adjust 1",
+        "MINUS tap":  "timer_adjust -1"
+      },
+      "timeout": { "ms_key": "timer_confirm_ms", "action": "confirm_timer" }
+    },
+
+    "timer_active": {
+      "routes": {
+        "TIMER tap":  "enter_timer_setting",
+        "TIMER long": "cancel_timer_active"
+      }
+    },
+
+    "boost_active": {
+      "routes": {
+        "0 tap":  "exit_boost_set_power 0",
+        "1 tap":  "exit_boost_set_power 1",
+        "2 tap":  "exit_boost_set_power 2",
+        "3 tap":  "exit_boost_set_power 3",
+        "4 tap":  "exit_boost_set_power 4",
+        "5 tap":  "exit_boost_set_power 5",
+        "6 tap":  "exit_boost_set_power 6",
+        "7 tap":  "exit_boost_set_power 7",
+        "8 tap":  "exit_boost_set_power 8",
+        "9 tap":  "exit_boost_set_power 9",
+        "TIMER tap": "enter_timer_setting"
+      },
+      "timeout": { "ms_key": "boost_max_ms", "action": "exit_boost" }
+    }
+  },
+
+  "display": {
+    "_description": "显示决策规则。渲染器读取此配置决定如何绘制。",
+
+    "priority_chain": ["timer_setting", "boost_active", "power_level"],
+
+    "char_mapping": {
+      "timer_setting": { "source": "timer_value", "format": "2digit" },
+      "boost_active":   { "char": "P", "align": "left" },
+      "power_level":    { "source": "power_level", "format": "1digit" }
+    },
+
+    "blink_rule": {
+      "condition": "node == selecting",
+      "phase_ms": 500
+    },
+
+    "alternate_rule": {
+      "condition": "timer_active == true",
+      "phases": [
+        { "source": "power_level", "duration_ms": 5000 },
+        { "source": "timer_value", "duration_ms": 5000 }
+      ]
+    },
+
+    "led_rules": {
+      "power_led":    { "global_mode": { "powered_off": "blink_500ms", "deep_sleep": "off", "default": "on" } },
+      "child_lock_led": { "flag": "child_lock" },
+      "timer_led":    { "condition": "any_timer_active" },
+      "pause_led":    { "flag": "paused" },
+      "head_select_led": { "condition": "node == selecting" },
+      "power_level_led":  { "source": "hothead.power_level", "boost_override": "9" }
+    }
+  },
+
+  "elements": {
+    "_description": "控件元素属性声明。引擎读取此段创建元素实例，不存在则用默认值。",
+    "segment_slot": {
+      "digit_count": 2,
+      "value_map": {
+        "0": "00", "1": "1 ", "2": "2 ", "3": "3 ", "4": "4 ",
+        "5": "5 ", "6": "6 ", "7": "7 ", "8": "8 ", "9": "9 "
+      },
+      "boost_char": "P ",
+      "zero_char": "00"
+    },
+    "led": {
+      "level": { "count": 10, "mode": "single", "boost_override": "9" },
+      "power": { "states": { "powered_off": "blink", "working": "on", "deep_sleep": "off" }, "ledField": "power" },
+      "timer": { "condition": "any_timer_active", "ledField": "timer" },
+      "pause": { "flag": "paused", "ledField": "pause_btn" },
+      "child_lock": { "flag": "child_lock", "ledField": "child_lock" },
+      "head_select": { "condition": "head_selecting", "ledField": "head_select", "array": true }
+    },
+    "blink": {
+      "phase_ms": 300,
+      "condition": "node == selecting",
+      "exclude_when": ["boost_active"],
+      "pause_override": false
+    },
+    "mode": {
+      "default": "power",
+      "rules": [
+        { "when": "powered_off",       "value": "dash" },
+        { "when": "deep_sleep",        "value": "off" },
+        { "when": "paused",            "value": "ascii" },
+        { "when": "any_timer_setting", "value": "timer_setting" }
+      ]
+    },
+    "timer": {
+      "adjust_min": 1,
+      "adjust_max": 99,
+      "adjust_step": 1
+    },
+    "boost": {
+      "power_level": 9
+    },
+    "display_patterns": {
+      "dash": "--------",
+      "pa": "PAPAPAPA",
+      "off": "        "
+    },
+    "stack": {
+      "max_depth": 4
+    }
+  }
+}

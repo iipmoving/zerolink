@@ -1,0 +1,180 @@
+{
+  "meta": {
+    "name": "四头电磁炉控制器 - V3.0 简化版",
+    "version": "3.0",
+    "description": "简化版本：极简配置，突出声明式配置与元素状态标识化理念",
+    "head_count": 4,
+    "author": "EMC团队",
+    "date": "2026-02-03"
+  },
+
+  "power_on_sequence": {
+    "steps": [
+      {"step": 1, "actions": [{"display": "all_segments", "show": "8888"}, {"delay": 3000}]},
+      {"step": 2, "actions": [{"display": "seg_1", "show": "V1.0"}, {"display": "seg_2", "show": "P1.0"}, {"delay": 3000}]},
+      {"step": 3, "actions": [{"state": "mode", "set": "standby"}]}
+    ],
+    "on_complete": "node_standby"
+  },
+
+  "independent_processes": {
+    "timer_process": {
+      "functions": {
+        "start": [{"action": "timer.start", "args": ["{minutes}"]}],
+        "stop": [{"action": "timer.stop"}],
+        "on_timeout": [{"action": "head.stop"}, {"action": "state.mode", "set": "standby"}]
+      }
+    },
+    "boost_process": {
+      "functions": {
+        "enter": [{"action": "state.original_power", "save": "state.power_level"}, {"action": "segment.set_mode", "args": ["ascii"]}],
+        "exit": [{"action": "state.power_level", "restore": "state.original_power"}, {"action": "segment.set_mode", "args": ["power"]}],
+        "on_timeout": [{"action": "boost_process.exit"}]
+      }
+    },
+    "pause_process": {
+      "functions": {
+        "toggle": [{"action": "state.paused", "set": "toggle"}, {"action": "segment.set_mode", "args": ["state.paused ? 'ascii' : 'power'"]}]
+      }
+    },
+    "child_lock_process": {
+      "functions": {
+        "toggle": [{"action": "state.child_lock", "set": "toggle"}]
+      }
+    }
+  },
+
+  "head_template": {
+    "state": {
+      "power_level": 0,
+      "original_power": 0,
+      "selected": false,
+      "working": false,
+      "paused": false,
+      "boost_active": false,
+      "current_node": "node_idle"
+    },
+
+    "functions": {
+      "select": [
+        {"action": "state.selected", "set": true},
+        {"action": "led.head_select.on"},
+        {"action": "segment.set_blink", "args": [true]}
+      ],
+      
+      "deselect": [
+        {"action": "state.selected", "set": false},
+        {"action": "led.head_select.off"},
+        {"action": "segment.set_blink", "args": [false]}
+      ],
+      
+      "set_power": [
+        {"params": ["level"]},
+        {"action": "state.power_level", "set": "{level}"},
+        {"action": "segment.set_mode", "args": ["power"]},
+        {"action": "segment.set_blink", "args": [false]},
+        {"action": "state.working", "set": true}
+      ],
+      
+      "stop": [
+        {"action": "state.power_level", "set": 0},
+        {"action": "state.working", "set": false},
+        {"action": "segment.set_mode", "args": ["dash"]}
+      ]
+    },
+
+    "main_flow": {
+      "entry": "node_idle",
+      "nodes": {
+        "node_idle": {
+          "events": [
+            {"trigger": "key_head_select", "condition": "short_press", "call": "functions.select", "next": "node_selected"}
+          ]
+        },
+        
+        "node_selected": {
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["dash"]},
+            {"action": "segment.set_blink", "args": [true]}
+          ],
+          "events": [
+            {"trigger": "key_digit", "condition": "short_press", "call": "functions.set_power", "args": ["trigger_key_level"], "next": "node_working"},
+            {"trigger": "key_9", "condition": "long_press", "call": "boost_process.enter", "next": "node_boost"},
+            {"trigger": null, "condition": "timeout(5000) && state.power_level == 0", "call": "functions.deselect", "next": "node_idle"},
+            {"trigger": null, "condition": "timeout(5000) && state.power_level > 0", "call": "functions.set_power", "args": ["state.power_level"], "next": "node_working"}
+          ]
+        },
+        
+        "node_working": {
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["power"]},
+            {"action": "segment.set_blink", "args": [false]}
+          ],
+          "events": [
+            {"trigger": "key_digit", "condition": "short_press", "call": "functions.set_power", "args": ["trigger_key_level"], "next": "node_working"},
+            {"trigger": "key_pause", "condition": "short_press", "call": "pause_process.toggle", "next": "node_paused"}
+          ]
+        },
+        
+        "node_boost": {
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["ascii"]}
+          ],
+          "events": [
+            {"trigger": "key_digit", "condition": "short_press", "call": "functions.set_power", "args": ["trigger_key_level"], "next": "node_working"},
+            {"trigger": null, "condition": "boost_timer.timeout", "call": "boost_process.exit", "next": "node_working"}
+          ]
+        },
+        
+        "node_paused": {
+          "enter_actions": [
+            {"action": "segment.set_mode", "args": ["ascii"]}
+          ],
+          "events": [
+            {"trigger": "key_pause", "condition": "short_press", "call": "pause_process.toggle", "next": "node_working"}
+          ]
+        }
+      }
+    }
+  },
+
+  "global_state_machine": {
+    "state": {
+      "mode": "standby",
+      "hot_head_id": null,
+      "child_lock": false
+    },
+    
+    "functions": {
+      "power_on": [{"action": "state.mode", "set": "power_on"}],
+      "power_off": [{"action": "head.all.stop"}, {"action": "state.mode", "set": "standby"}],
+      "switch_hot_head": [{"params": ["head_id"]}, {"action": "hot_head.switch", "args": ["{head_id}"]}]
+    },
+    
+    "main_flow": {
+      "entry": "node_standby",
+      "nodes": {
+        "node_standby": {
+          "enter_actions": [
+            {"action": "display.seg_all.show", "args": ["--"]},
+            {"action": "display.seg_all.blink", "args": [true]}
+          ],
+          "events": [
+            {"trigger": "key_power", "condition": "long_press", "call": "global.functions.power_on", "next": "node_power_on"}
+          ]
+        },
+        
+        "node_power_on": {
+          "events": [
+            {"trigger": "key_head", "condition": "short_press", "call": "global.functions.switch_hot_head", "args": ["trigger_key_head_id"], "next": "node_head_selected"}
+          ]
+        },
+        
+        "node_head_selected": {
+          "delegate_to": "hot_head",
+          "events": []
+        }
+      }
+    }
+  }
+}

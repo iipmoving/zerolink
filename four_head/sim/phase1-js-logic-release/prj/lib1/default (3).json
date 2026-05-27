@@ -1,0 +1,769 @@
+{
+  "version": "1.0",
+  "panel_name": "default面板",
+  "canvas_size": {
+    "width": 970,
+    "height": 600
+  },
+  "controls": [
+    {
+      "id": "btn_1779164847754_ufs4msbf0",
+      "type": "button",
+      "name": "定时",
+      "x": 400,
+      "y": 80,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 1,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_xljoeelvk",
+      "type": "button",
+      "name": "短暂降低",
+      "x": 560,
+      "y": 80,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 2,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_im8x9c51x",
+      "type": "button",
+      "name": "童锁",
+      "x": 720,
+      "y": 80,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 3,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_7mhli498s",
+      "type": "button",
+      "name": "开关",
+      "x": 880,
+      "y": 80,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 4,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_4evnxavqs",
+      "type": "button",
+      "name": "POT1",
+      "x": 100,
+      "y": 150,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 5,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_qevhnkfx0",
+      "type": "button",
+      "name": "POT2",
+      "x": 100,
+      "y": 200,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 6,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_52kzkxr0x",
+      "type": "button",
+      "name": "POT3",
+      "x": 100,
+      "y": 250,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 7,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_mocitl1v7",
+      "type": "button",
+      "name": "POT4",
+      "x": 100,
+      "y": 300,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 8,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_fvcomd179",
+      "type": "button",
+      "name": "无区",
+      "x": 100,
+      "y": 360,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 9,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_fco7dvf6f",
+      "type": "button",
+      "name": "减",
+      "x": 620,
+      "y": 250,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 10,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_uv54q6f74",
+      "type": "button",
+      "name": "加",
+      "x": 660,
+      "y": 250,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 11,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_306hl0kj2",
+      "type": "button",
+      "name": "档位0",
+      "x": 400,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 12,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_k8l2kn9v9",
+      "type": "button",
+      "name": "档位1",
+      "x": 445,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 13,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_8ws555uce",
+      "type": "button",
+      "name": "档位2",
+      "x": 490,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 14,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_xhwbjm4g0",
+      "type": "button",
+      "name": "档位3",
+      "x": 535,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 15,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_k7abrqkmi",
+      "type": "button",
+      "name": "档位4",
+      "x": 580,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 16,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_vh0eb0mt3",
+      "type": "button",
+      "name": "档位5",
+      "x": 625,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 17,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_vmnvr45ni",
+      "type": "button",
+      "name": "档位6",
+      "x": 670,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 18,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_ltpim2kij",
+      "type": "button",
+      "name": "档位7",
+      "x": 715,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 19,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_txxkgqrin",
+      "type": "button",
+      "name": "档位8",
+      "x": 760,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 20,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779164847754_abszqo1re",
+      "type": "button",
+      "name": "档位9-P",
+      "x": 805,
+      "y": 400,
+      "width": 40,
+      "height": 40,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 21,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "led_1779164847754_7khcuic4p",
+      "type": "led",
+      "name": "定时灯",
+      "x": 415,
+      "y": 55,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_63q489rn2",
+      "type": "led",
+      "name": "短暂降低灯",
+      "x": 575,
+      "y": 55,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_0fi7vfidt",
+      "type": "led",
+      "name": "童锁灯",
+      "x": 735,
+      "y": 55,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_20cjpiz83",
+      "type": "led",
+      "name": "开关灯",
+      "x": 895,
+      "y": 55,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_i3p3b7lxw",
+      "type": "led",
+      "name": "档位0灯",
+      "x": 415,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_vga07upzu",
+      "type": "led",
+      "name": "档位1灯",
+      "x": 460,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_fsj4vgwb0",
+      "type": "led",
+      "name": "档位2灯",
+      "x": 505,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_wd71byyan",
+      "type": "led",
+      "name": "档位3灯",
+      "x": 550,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_j39e5ixaa",
+      "type": "led",
+      "name": "档位4灯",
+      "x": 595,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_gpbhc5vn9",
+      "type": "led",
+      "name": "档位5灯",
+      "x": 640,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_rwd4xflmw",
+      "type": "led",
+      "name": "档位6灯",
+      "x": 685,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_fg6l5tl6o",
+      "type": "led",
+      "name": "档位7灯",
+      "x": 730,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_7cceib9fg",
+      "type": "led",
+      "name": "档位8灯",
+      "x": 775,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779164847754_2kf49328w",
+      "type": "led",
+      "name": "档位9-P灯",
+      "x": 820,
+      "y": 375,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "seg_1779164847754_4va15v4oe",
+      "type": "segment",
+      "name": "POT1显示上",
+      "x": 280,
+      "y": 150,
+      "width": 202,
+      "height": 55,
+      "style": {
+        "background_color": "#111111",
+        "border_color": "#555555",
+        "text_color": "#ff4444",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    },
+    {
+      "id": "seg_1779164847754_yqt049htl",
+      "type": "segment",
+      "name": "POT1显示下",
+      "x": 280,
+      "y": 250,
+      "width": 202,
+      "height": 55,
+      "style": {
+        "background_color": "#111111",
+        "border_color": "#555555",
+        "text_color": "#ff4444",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    },
+    {
+      "id": "seg_1779164847754_jnhffxy0f",
+      "type": "segment",
+      "name": "POT2显示上",
+      "x": 510,
+      "y": 150,
+      "width": 202,
+      "height": 55,
+      "style": {
+        "background_color": "#111111",
+        "border_color": "#555555",
+        "text_color": "#ff4444",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    },
+    {
+      "id": "seg_1779164847754_9a28yw7px",
+      "type": "segment",
+      "name": "POT2显示下",
+      "x": 510,
+      "y": 250,
+      "width": 202,
+      "height": 55,
+      "style": {
+        "background_color": "#111111",
+        "border_color": "#555555",
+        "text_color": "#ff4444",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    }
+  ],
+  "background": null
+}

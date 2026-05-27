@@ -1,6 +1,31 @@
-# 大文件/二进制目录
+# 公共资源 — 大文件/二进制 (不在版本管理)
+common/ref-programs/
+common/chip-docs/
+
+# 历史归档中残留的旧目录/文件 (已被 VSCode 锁定暂无法删除)
 参考程序/
 芯片资料/
+four_head_ih_cooker/
+four_head_ih_cooker1/
+
+# 根目录残留的旧文件 (已移至 common/docs/)
+/*.md
+/*.xls
+/*.xlsx
+!CLAUDE.md
+!README.md
+/.claude/
+
+# 历史归档 (只保留 zip，不保留解压目录)
+archive/four_head_ih_cooker_v0/
+archive/four_head_ih_cooker_v1/
+
+# JLink 本地调试文件
+JLinkLog.txt.backup
+JLinkSettings.ini
+
+# 重构遗留空目录
+four_head/Claude/
 
 # 编译产物
 *.o
@@ -10,6 +35,20 @@
 *.crf
 *.hex
 *.axf
+*.dep
+*.lnp
+*.sct
+*.lst
+*.txt
+*.iex
+*.map
+*.htm
+*.build_log.htm
+
+# 构建输出目录
+**/Output/
+**/List/
+**/obj/
 
 # 临时文件
 *.tmp
@@ -20,3 +59,9 @@
 *.uvguix.*
 *.scvd
 JLinkLog.txt
+
+# Claude 工作树 (临时目录)
+**/.claude/worktrees/
+
+# 本地配置 (不提交)
+**/.claude/settings.local.json

@@ -1,0 +1,17 @@
+TXA处理流程
+
+1、在100us中断void	APP_ZERO_Adc100usCallBack(void)中每1ms产生一次统计标志
+					if(Adc20msCount%10==0)
+					{
+						TxA_ADC_TimDmaBuff.flag.t100ms=1;
+					}
+					Adc20msCount++;	
+2、	在void	API_DMA_T1A_IRQHandlerCallBack(uint8_t	num)， DMA T1A完成150次后读取TXA DMA 读取到的值				
+将TxA_ADC_TimDmaBuff缓存到TxA_ADC_TimDma100msBuff进行后续计算
+			TxA_ADC_TimDmaBuff.flag.dmaStart=1;//在DMA回调中处理数据	
+			recover.SrcAddress=(uint32_t)&TxA_ADC_TimDmaBuff;		//保存完整的150us数据，前面几个数据可能无效
+			recover.DstAddress=(uint32_t)&TxA_ADC_TimDma100msBuff;
+			recover.DataLength=sizeof(TxA_ADC_TimDmaBuff)/sizeof(int);
+			API_DMA_RECOVER(ChDmaM2M, (API_DMA_RecoverDef*)(&recover));
+			
+			

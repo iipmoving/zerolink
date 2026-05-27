@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>display_module 独立测试</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+h1 { color: #e94560; border-bottom: 2px solid #e94560; padding-bottom: 8px; }
+.test { margin: 6px 0; padding: 6px 12px; border-radius: 4px; }
+.PASS { background: #1a3a1a; color: #4eff4e; }
+.FAIL { background: #3a1a1a; color: #ff4e4e; }
+#summary { margin-top: 16px; font-size: 18px; font-weight: bold; }
+#status { color: #ffaa00; }
+.state-box { background: #111; padding: 10px; margin: 8px 0; border-radius: 4px; }
+.state-box b { color: #0af; }
+</style>
+</head>
+<body>
+<h1>display_module 独立测试</h1>
+<p>测试显示派生: seg_chars, seg_blink, seg_mode, LEDs</p>
+<p id="status">加载 WASM...</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script src="app_logic.js"></script>
+<script src="wasm_adapter.js"></script>
+<script>
+(function() {
+var pass = 0, fail = 0;
+var out = document.getElementById('results');
+
+function t(name, actual, expected) {
+    var ok;
+    if (Array.isArray(expected)) ok = JSON.stringify(actual) === JSON.stringify(expected);
+    else ok = (actual === expected);
+    if (ok) pass++; else fail++;
+    out.innerHTML += '<div class="test ' + (ok?'PASS':'FAIL') + '">['
+        + (ok?'PASS':'FAIL') + '] ' + name + '</div>';
+    if (!ok) {
+        out.innerHTML += '<div class="state-box">got=<b>' + JSON.stringify(actual)
+            + '</b> expected=<b>' + JSON.stringify(expected) + '</b></div>';
+    }
+}
+
+AppLogicModule().then(function(mod) {
+    document.getElementById('status').textContent = 'WASM 已加载, 运行测试...';
+    var api = createWasmEngine(mod);
+    api.init();
+
+    // Test 1: powered_off display
+    var d1 = api.getDisplay();
+    t('POWERED_OFF seg_mode=dash', d1.seg_mode, 'dash');
+    t('POWERED_OFF all seg_chars are "-"', d1.seg_chars.join(''), '--------');
+
+    // Test 2: working → idle display (shows "0" for each head)
+    api.postKey('POWER', 'long');
+    var d2 = api.getDisplay();
+    t('WORKING seg_mode=power', d2.seg_mode, 'power');
+    t('WORKING Z1=0 ', d2.seg_chars[0], '0');
+    t('WORKING Z1=  ', d2.seg_chars[1], ' ');
+    t('WORKING LEDs power=1', d2.leds.power, true);
+
+    // Test 3: selecting → blink
+    api.postKey('HEAD_1', 'tap');
+    api.tick100ms();
+    var d3 = api.getDisplay();
+    t('selecting seg_blink[0]=1 (odd tick)', d3.seg_blink[0], true);
+
+    // tick to even phase → blink off
+    for (var i = 0; i < 5; i++) api.tick100ms();
+    var d3b = api.getDisplay();
+    t('selecting seg_blink[0]=0 (even tick)', d3b.seg_blink[0], false);
+
+    // Test 4: cooking → no blink, power LED
+    api.postKey('5', 'tap');
+    api.forceSelectTimeout(0);
+    var d4 = api.getDisplay();
+    t('cooking seg_blink[0]=0', d4.seg_blink[0], false);
+    t('cooking Z1=5', d4.seg_chars[0], '5');
+    t('cooking head_select[0]=1', d4.leds.head_select[0], true);
+    t('cooking power_level[5]=1', d4.leds.power_level[5], true);
+
+    // Test 5: Boost → shows "P"
+    api.postKey('HEAD_1', 'tap');
+    api.postKey('9', 'long');
+    var d5 = api.getDisplay();
+    t('Boost Z1=P', d5.seg_chars[0], 'P');
+    t('Boost power_level[5]=1 (original)', d5.leds.power_level[5], true);
+
+    // Test 6: Pause → "PA" display
+    api.postKey('PAUSE', 'tap');
+    var d6 = api.getDisplay();
+    t('PAUSE seg_mode=off', d6.seg_mode, 'off');
+    t('PAUSE seg_chars[0]=P', d6.seg_chars[0], 'P');
+    t('PAUSE seg_chars[1]=A', d6.seg_chars[1], 'A');
+    t('PAUSE led_pause=1', d6.leds.pause_btn, true);
+
+    // Test 7: child lock LED
+    api.postKey('PAUSE', 'tap');  // resume
+    api.postKey('CHILD_LOCK', 'long');
+    var d7 = api.getDisplay();
+    t('CHILD_LOCK led=1', d7.leds.child_lock, true);
+
+    document.getElementById('summary').textContent =
+        '总计: ' + (pass+fail) + ' | PASS=' + pass + ' FAIL=' + fail
+        + (fail === 0 ? ' ✓ ALL PASS' : ' ✗ FAILURES');
+    document.getElementById('summary').style.color = fail ? '#ff4e4e' : '#4eff4e';
+});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "testTime": "2026-05-18T16:00:21.998Z",
+  "logicType": "wasm",
+  "results": [
+    {
+      "phase": "A",
+      "step": "A1-初始上电",
+      "expected": "S_POWER_ON",
+      "actual": "S_STANDBY",
+      "result": "FAIL"
+    },
+    {
+      "phase": "A",
+      "step": "A2-版本号显示",
+      "expected": "S_VERSION",
+      "actual": "S_SHUTDOWN",
+      "result": "FAIL"
+    },
+    {
+      "phase": "A",
+      "step": "A3-关机状态",
+      "expected": "S_SHUTDOWN",
+      "actual": "S_SHUTDOWN",
+      "result": "PASS"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "passed": 1,
+    "failed": 2
+  }
+}

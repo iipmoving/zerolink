@@ -1,0 +1,306 @@
+{
+  "version": "1.0",
+  "panel_name": "default面板",
+  "canvas_size": {
+    "width": 968,
+    "height": 600
+  },
+  "controls": [
+    {
+      "id": "btn_1779157782705_lhzdqo64k",
+      "type": "button",
+      "name": "开始 / 暂停",
+      "x": 99,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": true,
+        "key_code": 13,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779157782705_mb744vjna",
+      "type": "button",
+      "name": "加水",
+      "x": 207,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 11,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779157782705_8t7iz8n9e",
+      "type": "button",
+      "name": "加时间",
+      "x": 319,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 12,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779157782705_1d0l9medc",
+      "type": "button",
+      "name": "M1",
+      "x": 659,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 1,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779157782705_g48ae7skb",
+      "type": "button",
+      "name": "M2",
+      "x": 768,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 2,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_1779157782705_zpznodkg3",
+      "type": "button",
+      "name": "M3",
+      "x": 878,
+      "y": 276,
+      "width": 40,
+      "height": 66,
+      "style": {
+        "background_color": "#2a2a2a",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 3,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "led_1779157782705_e58ueqba5",
+      "type": "led",
+      "name": "开始 / 暂停灯",
+      "x": 113,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_1779157782705_9mlxf2jck",
+      "type": "led",
+      "name": "加水灯",
+      "x": 221,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 11
+      }
+    },
+    {
+      "id": "led_1779157782705_adv3im2v9",
+      "type": "led",
+      "name": "加时间灯",
+      "x": 334,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 12
+      }
+    },
+    {
+      "id": "led_1779157782705_wow78cwhh",
+      "type": "led",
+      "name": "M1 灯",
+      "x": 674,
+      "y": 186,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 1
+      }
+    },
+    {
+      "id": "led_1779157782705_82r8hy5ou",
+      "type": "led",
+      "name": "M2 灯",
+      "x": 778,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 2
+      }
+    },
+    {
+      "id": "led_1779157782705_fpbkdc6n3",
+      "type": "led",
+      "name": "M3 灯",
+      "x": 892,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 3
+      }
+    },
+    {
+      "id": "led_1779157782705_rbyrlu534",
+      "type": "led",
+      "name": "mL 指示灯",
+      "x": 434,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 13
+      }
+    },
+    {
+      "id": "led_1779157782705_ujdioupx5",
+      "type": "led",
+      "name": "定时指示灯",
+      "x": 565,
+      "y": 190,
+      "width": 10,
+      "height": 10,
+      "style": {
+        "background_color": "#333333",
+        "border_color": "#555555",
+        "text_color": "#cccccc",
+        "on_color": "#00ff00",
+        "off_color": "#333333"
+      },
+      "config": {
+        "led_bit": 14
+      }
+    },
+    {
+      "id": "seg_1779157782705_mwflzeavs",
+      "type": "segment",
+      "name": "四位主显示",
+      "x": 401,
+      "y": 282,
+      "width": 202,
+      "height": 55,
+      "style": {
+        "background_color": "#111111",
+        "border_color": "#555555",
+        "text_color": "#44ff44",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    }
+  ],
+  "background": {
+    "path": "new.png",
+    "scale": 0.8,
+    "offsetX": 0,
+    "offsetY": 130.79999999999998
+  }
+}

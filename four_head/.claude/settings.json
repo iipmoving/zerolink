@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv \"四头电磁炉完整规格书 V1.0.md\" \"docs/specs/\")",
+      "Bash(mv \"4头电磁炉Modbus通信协议规格书.md\" \"docs/specs/\")",
+      "Bash(mv \"四头电磁炉架构方案.md\" \"docs/architecture/\")",
+      "Bash(mv \"嵌入式灯板控制系统架构说明.md\" \"docs/architecture/\")",
+      "Bash(mv \"项目结构程序示例.md\" \"docs/architecture/\")",
+      "Bash(mv \"Web仿真框架 - 逻辑层JSON规则驱动实施方案 V2.0.md\" \"docs/architecture/\")",
+      "Bash(mv \"audit-decoupled-architecture.md\" \"docs/reviews/\")",
+      "Bash(mv \"Claude/REVIEW_LAYER_DECOUPLE.md\" \"docs/reviews/\")",
+      "Bash(mv \"Claude/REVIEW_REPORT.md\" \"docs/reviews/\")",
+      "Bash(mv \"Claude/REVIEW_REPORT_V2.md\" \"docs/reviews/\")",
+      "Bash(mv \"AI嵌入式编程约束.md\" \"docs/ai-guidelines/\")",
+      "Bash(mv \"AI提示词.md\" \"docs/ai-guidelines/\")",
+      "Bash(mv \"AI编程规范-自检清单.md\" \"docs/ai-guidelines/\")",
+      "Bash(mv \"four_head_ih_cooker.zip\" \"archive/\")",
+      "Bash(mv \"four_head_ih_cooker1\" \"archive/\")"
+    ]
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "controls": [
+    {
+      "type": "按键",
+      "x": 99,
+      "y": 276,
+      "name": "开始 / 暂停",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "按键",
+      "x": 207,
+      "y": 276,
+      "name": "加水",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "按键",
+      "x": 319,
+      "y": 276,
+      "name": "加时间",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "按键",
+      "x": 659,
+      "y": 276,
+      "name": "M1",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "按键",
+      "x": 768,
+      "y": 276,
+      "name": "M2",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "按键",
+      "x": 878,
+      "y": 276,
+      "name": "M3",
+      "width": 40,
+      "height": 66,
+      "bg_color": "#2a2a2a",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 113,
+      "y": 190,
+      "name": "开始 / 暂停灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 221,
+      "y": 190,
+      "name": "加水灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 334,
+      "y": 190,
+      "name": "加时间灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 674,
+      "y": 186,
+      "name": "M1 灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 778,
+      "y": 190,
+      "name": "M2 灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 892,
+      "y": 190,
+      "name": "M3 灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 434,
+      "y": 190,
+      "name": "mL 指示灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "LED灯",
+      "x": 565,
+      "y": 190,
+      "name": "定时指示灯",
+      "width": 10,
+      "height": 10,
+      "bg_color": "#333333",
+      "border_color": "#555555",
+      "text_color": "#cccccc"
+    },
+    {
+      "type": "数码管",
+      "x": 401,
+      "y": 282,
+      "name": "四位主显示",
+      "width": 202,
+      "height": 55,
+      "bg_color": "#111111",
+      "border_color": "#555555",
+      "text_color": "#44ff44"
+    }
+  ],
+  "background_image": "Image (2).png",
+  "background_image_path": "D:\\EMC_Projects\\emc_migration\\tongyi_workspace\\参考图\\Image (2).png"
+}

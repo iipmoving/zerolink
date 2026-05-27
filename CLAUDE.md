@@ -1,120 +1,119 @@
-# CLAUDE.md — 四头电磁炉低耦合控制程序
+# CLAUDE.md — 低耦合程序架构 · 项目集群总控
 
-## 基础约定
+> **定位**: 本仓库是一个**多项目集群**。本文件负责集群级的导航、协调和公共约束。
+> 各子项目有自己的 `CLAUDE.md`，描述具体的项目目标、技术栈和开发规则。
 
-- **规划文件 (.md) 存放于项目根目录** `D:\OBSIDIAN\MOVING IH\低耦合程序架构\`，与 CLAUDE.md 同级，文件名用英文 slug 格式（如 `sparkling-whistling-porcupine.md`）。
-- **方法论/记忆文件 (.md) 必须双写**: 自动记忆目录 (`C:\Users\moving\.claude\projects\...`) + 项目目录 (`four_head/memory/`)。两份内容一致。这是为了新 AI 会话可独立从项目目录读取全部方法论，不依赖外部记忆系统。
-- **里程碑节点必须 Git 提交**: 架构变更、方法论更新、重大功能完成等里程碑节点必须做一次 git commit。AI 应在里程碑完成后主动提议或执行提交。
+---
 
-## 核心架构原则
+## 一、角色定位
 
-**业务模块之间零交叉include，消息调度器是唯一桥梁。**
-- HAL层不include任何业务头文件
-- DRV层只include msg_scheduler.h + HAL接口
-- ISR只设时基标志，不在中断中做业务处理
+我们是 **AI 零耦合嵌入式开发方法论的共同缔造者**，不只是项目执行者。
 
-## 硬件配置（必须与参考程序一致）
+核心原则：**违规应该被阻断，而不是被提醒。**
 
-> 参考程序路径: `参考程序/ai专用工程2026.4.27(06B显示板)/`
-> 任何涉及芯片引脚、端口、外设的配置，必须以参考程序为准。
+| 阻断层级 | 机制 | 说明 |
+|----------|------|------|
+| L0 物理阻断 | 编译器报错 | 绝对无法通过编译 |
+| L1 提交阻断 | pre-commit tool 非零退出 | 能编译但不能提交 |
+| L2 生成一致性 | 工具从单一数据源生成 | 正确结果由工具产生 |
+| L3 文档约定 | 命名规范、注释格式 | 最后手段，需定期审视能否升级 |
 
-### 调试串口: UART3
-- 引脚: 44/45（B组）, `UART_PinRemapConfig(UART3, UART_PinRemap_A)`
-- 总线: APB2（`RCC_APB2Periph_UART3`），时钟 48MHz
-- 波特率: 57600（不是115200）
-- 中断号: `UART1_3_5_7816_IRQn`（共享中断）
-- 阻塞式TX，仅调试打印用
+**设计自检**: "如果将来一个不认识我们的 AI，不读任何文档，直接改代码——他会撞上什么？"
 
-### MODBUS通讯串口: UART0 (hal_comm)
-- 引脚: 48/47（默认映射，不需要 PinRemap）
-- 波特率: 57600
-- 时钟: APB0 = HIRC 48MHz
-- 中断号: `UART0_2_4_IRQn` + `DMA1_IRQn`
-- RX: DMA0 单次模式, 256字节缓冲, 轮询帧间隔(2次×10ms=20ms)判定帧结束
-- TX: DMA1 单次发送, TC中断通知完成
-- **SPI1_TWI1 不能做UART** —— 它只支持 SPI/TWI 模式
-- 实现: `hal/hal_comm.c`
+---
 
-### 时基定时器: TIM0
-- 时钟: APB0 = 48MHz（HCLK Div1）
-- 预分频: `TIM_PRESCALER_1`
-- 周期: 125us（Preload=5999, 48MHz/6000=8kHz）
-- ISR 每 125us: 调用 `HAL_Key_Poll()` 驱动触摸状态机
-- 每 8 次 ISR (1ms): 置 1ms 标志 + tick++
-
-### 蜂鸣器: TIM1 + PE1
-- `P_BUZZ(value)`: GPIOE Pin_1
-- `P_BUZZ_Power(value)`: GPIOE Pin_4
-- TIM1 产生 PWM 频率，TIM1 ISR 中调用 `Buzz_AND_MY_Buzz_Driver()`
-
-### 显示: 8 SEG + 11 COM（IO直推数码管）
-| SEG | 引脚 | 端口 | COM | 引脚 | 端口 |
-|-----|------|------|-----|------|------|
-| A | PC8 | GPIOC | 1 | PE11 | GPIOE |
-| B | PB14 | GPIOB | 2 | PE12 | GPIOE |
-| C | PE9 | GPIOE | 3 | PA10 | GPIOA |
-| D | PC4 | GPIOC | 4 | PE10 | GPIOE |
-| E | PD13 | GPIOD | 5 | PA6 | GPIOA |
-| F | PB15 | GPIOB | 6 | PA1 | GPIOA |
-| G | PE8 | GPIOE | 7 | PA0 | GPIOA |
-| H | PC1 | GPIOC | 8 | PA7 | GPIOA |
-|   |      |       | 9 | PC0 | GPIOC |
-|   |      |       | 10 | PA5 | GPIOA |
-|   |      |       | 11 | PA4 | GPIOA |
-
-### 触摸按键: 21通道（参考 `S_TouchKeyCFG.h`）
-- 触摸通道: 7-24, 28-30
-- 按键映射: 参考 `参考程序/User_Main/APP_Driver/Key_Driver.c` 的 switch 表
-- 组合键（相邻功率焊盘同时触摸→中间值）已在 drv_key.c 实现
-- 调试IO: PB6、PB11
-
-### 系统时钟
-- HIRC 48MHz → SYSCLK → HCLK(Div1) → APB0/APB1/APB2(Div1)
-- 外部晶振: 不使用（HXT=DISABLE, LXT=DISABLE）
-- 复位电压: LVR 2.9V
-- JTAG: 关闭（IO模式）
-
-## 调度模式（10槽1ms轮转）
+## 二、项目集群清单
 
 ```
-每1ms: HAL_Timer_1msElapsed() →
-  起始段: MsgScheduler_Run1ms()  消费1条消息
-  执行段: ExecSlot_Run()         轮转1个槽
-  等待段: 通讯轮询（预留）
-
-10槽 × 1ms = 10ms完整周期
-模块每10ms被调用1次，自计数计时（不依赖hal_timer）
+低耦合程序架构/                    # 项目集群根
+│
+├── methodology-seed/             # ★ 方法论种子 — 新项目从这里复制
+│
+├── four_head/                    # 项目1: 四头灯板零依赖系统 (SC32L14T)
+│   ├── src/                      #   C 源码 (app/drv/hal/proto/core/api/cfg/vendor)
+│   ├── Project/                  #   KEIL MDK 项目
+│   ├── sim/                      #   WASM/JS 仿真 (桌面模拟器 + 测试)
+│   ├── test/                     #   单元测试
+│   ├── docs/                     #   项目文档
+│   ├── tools/                    #   项目工具
+│   └── CLAUDE.md                 #   项目级指令
+│
+├── m4_ekf_observer/              # 项目2: 半桥 EKF 观测器 (RX32G410)
+│   ├── src/                      #   MCU 固件库
+│   ├── app/                      #   应用层 (EKF/锅检测/变增益PID)
+│   ├── tools/                    #   EKF 整定 + MODBUS 测试工具
+│   └── CLAUDE.md                 #   项目级指令 (待创建)
+│
+├── common/                       # 公共资源
+│   ├── ref-programs/             #   参考程序 (硬件配置权威来源)
+│   ├── chip-docs/                #   芯片资料 (数据手册/TRM/应用指南)
+│   └── docs/                     #   跨项目公共文档
+│
+└── archive/                      # 历史归档
+    ├── four_head_ih_cooker_v0/   #   最早原型 (KEIL v4)
+    └── four_head_ih_cooker_v1/   #   中间版本 (KEIL v5)
 ```
 
-## 已用库（来自参考程序 Function_Application）
+### 项目定位
 
-- `SMG_Disp_General_Lib_1.5.lib` — 段码转换+显示特效
-- `Transition_Func_Lib_C_1.3.lib` — NTC温度转换、PID、斜率计算（仅用纯数学函数，不用时间控制模块）
-- `SC_M0+_HighSensitive_lib_T1_V1.0.lib` — 触摸算法库
+| 项目 | MCU | 用途 | 状态 |
+|------|-----|------|------|
+| `four_head/` | SC32L14T (M0+) | 四头电磁炉灯板控制 — 零依赖解耦架构 | 活跃开发 |
+| `m4_ekf_observer/` | RX32G410 (M4) | 半桥/全桥加热控制 — EKF 观测器 + PID | 维护中 |
 
-## 编译环境
+### 仿真环境
 
-- MCU: 赛元 SC32L14T（Cortex-M0+ 48MHz, 256K Flash, 16K SRAM）
-- 编译器: Keil MDK, ARMCC V5.06
-- C标准: C89（无 `_Static_assert`，用 `CT_ASSERT` 宏替代）
-- `#pragma pack(4)` 用于 Msg_t 结构体
+| 位置 | 说明 |
+|------|------|
+| `four_head/sim/test_hmi/` | **灯板桌面模拟器** — Canvas 面板 + JSON 规则引擎 + 自动化测试 |
+| `four_head/sim/phase1-js-logic/` | 面板编辑器 — 拖拽布局 + JS/WASM 双逻辑层 |
+| `four_head/sim/phase2-wasm-c-source/` | C 状态机 → WASM 编译源码 |
 
-## 修改任何外设/引脚前必须
+---
 
-1. 先查参考程序对应文件，确认引脚/配置
-2. 如果参考程序是注释掉的（如加热/风扇IO），说明实物未接，保持注释
-3. 不要自己发明引脚号
+## 三、方法论：一切从这里开始
 
-## 模块时基调用
+**`methodology-seed/`** 是本集群的核心资产。它是一套可复制的约束系统——复制到任何新项目，就能建立同样的零依赖架构。
 
-1. 任务调度槽的模块是每10ms调用一次，内部延时无同步要求的可内部计数，不需要引入外部计时信息，减少耦合
-## 数码管COM扫描
+**入口**: `methodology-seed/ONBOARDING.md`
+**阅读顺序**: 01-architecture → 02-weak-callback → 03-dual-engine → 04-golden-output → 05-interface-management → 06-json-driven → 07-struct-generation
 
-1. 数码管COM每1ms扫描一个COM， 更新数据前要将此COM先关掉，COM无效，再更新数据，再切换到新的COM，才不会偷亮。
+---
 
-内部项目管理
+## 四、集群级规则
 
-1、低耦合程序架构/m4_ekf_observer  ：半桥/全桥加热控制程序
-2、低耦合程序架构/four_head/Project： 解耦灯板项目文件 
-3、低耦合程序架构/four_head/sim/test_hmi：JS+JSON人机交互逻辑验证程序
-4、m4_ekf_observer/tools/ekf_tuner/m4_modbus_tool.py  半桥/全桥加热控制程序modbus 测试程序
+### 4.1 方法论优先
+
+任何项目中发现新问题 → 先分析是否是方法论漏洞 → 更新 `methodology-seed/` → 再修代码。
+
+### 4.2 公共资源引用
+
+所有项目引用芯片资料、参考程序时，路径指向 `common/`：
+- 参考程序: `../common/ref-programs/`
+- 芯片资料: `../common/chip-docs/`
+
+### 4.3 Git 规范
+
+- 集群根 `.git/` 管理所有文件（公共资源 + 各项目 + 方法论种子）
+- 里程碑节点必须提交
+- 提交信息格式: `[milestone]` / `[project:four_head]` / `[methodology]` / `[common]`
+
+### 4.4 跨项目协调
+
+- 不同项目之间的代码不共享（MCU 不同、架构不同）
+- 方法论是唯一跨项目共享的东西
+- 公共工具放 `common/tools/`，项目特定工具放各项目的 `tools/`
+
+---
+
+## 五、新项目添加流程
+
+1. 复制 `methodology-seed/` 的核心文件到新项目
+2. 从 `methodology-seed/templates/` 复制并填写规格文件
+3. 创建项目级 `CLAUDE.md`
+4. 更新本文件的 §二 项目清单
+5. Git 提交
+
+---
+
+*最后更新: 2026-05-27 — 项目集群初始化*
