@@ -100,7 +100,6 @@ Presentation Controls ← SlotElement/LEDElement/BlinkRule/ModeRule
 - 架构方案：`docs/architecture/`
 - 产品规格书：`docs/specs/`
 - 代码审查报告：`docs/reviews/`
-- AI 编码指南：`docs/ai-guidelines/`
 - 参考资料：`docs/references/`
 
 ## 外部资料路径
