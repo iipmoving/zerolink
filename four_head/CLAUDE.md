@@ -106,7 +106,7 @@ Presentation Controls ← SlotElement/LEDElement/BlinkRule/ModeRule
   armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 \
     -I "../src/vendor/FWLib/SC32F1XXX_Lib/inc" -I "../src/vendor/CMSIS" \
     -I "../src/vendor/MCU_Drivers" \
-    -I "../src/app" -I "../src" -I "../src/hal" -I "../src/core" \
+    -I "../src/app" -I "../src" -I "../src/hal" \
     -I "../src/drv" -I "../src/proto" -I "../src/cfg" \
     <source.c> -o <output.o>
   ```
