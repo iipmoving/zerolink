@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON逻辑层测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-section h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        
+        .display-panel {
+            background: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 48px;
+            text-align: center;
+            padding: 30px;
+            border-radius: 8px;
+            margin: 20px 0;
+            letter-spacing: 10px;
+            min-height: 60px;
+        }
+        
+        .led-panel {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .led {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #333;
+            border: 2px solid #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        
+        .led.on {
+            background: #ff0000;
+            box-shadow: 0 0 10px #ff0000;
+        }
+        
+        .button-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .control-button {
+            padding: 15px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .control-button:hover {
+            background: #1976D2;
+            transform: translateY(-2px);
+        }
+        
+        .control-button:active {
+            transform: translateY(0);
+        }
+        
+        .log-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .log-info { color: #4CAF50; }
+        .log-warn { color: #FFC107; }
+        .log-error { color: #f44336; }
+        
+        .status-bar {
+            background: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        .btn-primary:hover {
+            background: #45a049;
+        }
+        
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .test-result.fail {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 JSON逻辑层自动化测试</h1>
+    
+    <div class="status-bar">
+        <span id="status-text">状态: 未初始化</span>
+        <span id="current-node">当前节点: -</span>
+    </div>
+    
+    <div class="test-section">
+        <h2>📊 控制面板</h2>
+        <button class="btn-primary" onclick="startTest()">开始测试</button>
+        <button class="btn-primary" onclick="resetTest()">重置测试</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>💡 数码管显示</h2>
+        <div class="display-panel" id="display">----</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔴 LED指示灯</h2>
+        <div class="led-panel" id="led-panel">
+            <div class="led" id="led-power">电源</div>
+            <div class="led" id="led-lock">童锁</div>
+            <div class="led" id="led-timer">定时</div>
+            <div class="led" id="led-boost">暂停</div>
+            <div class="led" id="led-head-1">炉头1</div>
+            <div class="led" id="led-head-2">炉头2</div>
+            <div class="led" id="led-head-3">炉头3</div>
+            <div class="led" id="led-head-4">炉头4</div>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🎮 按键控制</h2>
+        <div class="button-panel">
+            <button class="control-button" data-keycode="4" data-name="开关">开关 (长按)</button>
+            <button class="control-button" data-keycode="3" data-name="童锁">童锁</button>
+            <button class="control-button" data-keycode="1" data-name="定时">定时</button>
+            <button class="control-button" data-keycode="2" data-name="-">-</button>
+            <button class="control-button" data-keycode="0" data-name="+">+</button>
+            <button class="control-button" data-keycode="5" data-name="炉头1">炉头1</button>
+            <button class="control-button" data-keycode="6" data-name="炉头2">炉头2</button>
+            <button class="control-button" data-keycode="7" data-name="炉头3">炉头3</button>
+            <button class="control-button" data-keycode="8" data-name="炉头4">炉头4</button>
+            <button class="control-button" data-keycode="9" data-name="暂停">暂停</button>
+            <button class="control-button" data-keycode="10" data-name="Boost">Boost</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📝 测试日志</h2>
+        <div class="log-panel" id="log-panel"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>✅ 测试结果</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <script src="js/logic_layer_adapter.js?v=8"></script>
+    <script src="js/json_logic_adapter.js?v=8"></script>
+    
+    <script>
+        let logicLayer = null;
+        let testResults = [];
+        
+        // 日志记录
+        function log(message, type = 'info') {
+            const logPanel = document.getElementById('log-panel');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // 更新显示
+        function updateDisplay(displayData) {
+            const displayEl = document.getElementById('display');
+            if (displayData && displayData.display) {
+                displayEl.textContent = displayData.display;
+                log(`显示更新: ${displayData.display}`, 'info');
+            }
+        }
+        
+        // 更新LED
+        function updateLed(ledState) {
+            if (!ledState) return;
+            
+            console.log('[updateLed] LED状态:', ledState);
+            
+            // 解析power LED
+            const powerEl = document.getElementById('led-power');
+            if (powerEl && ledState.power !== undefined) {
+                if (ledState.power) {
+                    powerEl.classList.add('on');
+                    log('💡 电源LED亮起', 'info');
+                } else {
+                    powerEl.classList.remove('on');
+                }
+            }
+            
+            // 解析child_lock LED
+            const lockEl = document.getElementById('led-lock');
+            if (lockEl && ledState.child_lock !== undefined) {
+                if (ledState.child_lock) {
+                    lockEl.classList.add('on');
+                    log('🔒 童锁LED亮起', 'info');
+                } else {
+                    lockEl.classList.remove('on');
+                }
+            }
+            
+            // 解析timer LED
+            const timerEl = document.getElementById('led-timer');
+            if (timerEl && ledState.timer !== undefined) {
+                if (ledState.timer) {
+                    timerEl.classList.add('on');
+                } else {
+                    timerEl.classList.remove('on');
+                }
+            }
+            
+            // 解析pause LED
+            const boostEl = document.getElementById('led-boost');
+            if (boostEl && ledState.pause !== undefined) {
+                if (ledState.pause) {
+                    boostEl.classList.add('on');
+                } else {
+                    boostEl.classList.remove('on');
+                }
+            }
+            
+            // 解析炉头选择LED
+            if (ledState.head_select && Array.isArray(ledState.head_select)) {
+                for (let i = 0; i < 4; i++) {
+                    const headEl = document.getElementById(`led-head-${i + 1}`);
+                    if (headEl) {
+                        if (ledState.head_select[i]) {
+                            headEl.classList.add('on');
+                            log(`🔥 炉头${i + 1}LED亮起`, 'info');
+                        } else {
+                            headEl.classList.remove('on');
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 加载JSON配置
+        async function loadJsonConfig() {
+            try {
+                log('正在加载JSON配置...', 'info');
+                const response = await fetch('configs/emc_controller_v2.0_standard.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const config = await response.json();
+                log('✅ JSON配置加载成功', 'info');
+                return config;
+            } catch (error) {
+                log(`❌ 加载配置失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // 初始化逻辑层
+        async function initLogicLayer() {
+            try {
+                const jsonConfig = await loadJsonConfig();
+                
+                logicLayer = new JsonLogicAdapter(jsonConfig);
+                
+                // 注册回调
+                logicLayer.registerCallbacks(
+                    (segObj, ledArray) => {
+                        console.log('[Callback] 收到显示回调:', segObj, ledArray);
+                        
+                        // segObj格式: { seg: [4], dp_mask, colon_mask }
+                        if (segObj && segObj.seg) {
+                            const displayStr = _segToString(segObj.seg);
+                            console.log('[Callback] 显示字符串:', displayStr);
+                            updateDisplay({ display: displayStr });
+                        }
+                        
+                        // ledArray格式: [ledBits]
+                        if (ledArray && ledArray.length > 0) {
+                            console.log('[Callback] LED位域:', ledArray[0].toString(2).padStart(8, '0'));
+                            const ledState = _parseLedBits(ledArray[0]);
+                            console.log('[Callback] 解析后的LED状态:', ledState);
+                            updateLed(ledState);
+                        }
+                    },
+                    (buzzer) => {
+                        log(`蜂鸣器: ${buzzer ? '响' : '停'}`, 'info');
+                    }
+                );
+                
+                // 初始化
+                await logicLayer.init();
+                
+                document.getElementById('status-text').textContent = '状态: ✅ 已初始化';
+                log('✅ JSON逻辑层初始化完成', 'info');
+                
+                return true;
+            } catch (error) {
+                log(`❌ 初始化失败: ${error.message}`, 'error');
+                document.getElementById('status-text').textContent = '状态: ❌ 初始化失败';
+                return false;
+            }
+        }
+        
+        // 模拟按键
+        function pressKey(keyCode, isLongPress = false) {
+            if (!logicLayer) {
+                log('❌ 逻辑层未初始化', 'error');
+                return;
+            }
+            
+            const eventType = isLongPress ? 3 : 1; // PRESS=1, LONG_PRESS=3
+            const eventName = isLongPress ? 'LONG_PRESS' : 'PRESS';
+            
+            log(`🔘 按键: keyCode=${keyCode}, 事件=${eventName}`, 'info');
+            logicLayer.pressKey(keyCode, eventType);
+            
+            // 运行一个周期以更新显示
+            logicLayer.runCycle();
+        }
+        
+        // 开始测试
+        async function startTest() {
+            log('========== 开始自动化测试 ==========', 'info');
+            testResults = [];
+            
+            // 步骤1: 初始化
+            log('📋 步骤1: 初始化逻辑层', 'info');
+            const initSuccess = await initLogicLayer();
+            if (!initSuccess) {
+                addTestResult('初始化逻辑层', false, '初始化失败');
+                return;
+            }
+            addTestResult('初始化逻辑层', true, '成功');
+            
+            // 等待上电序列执行（6秒）
+            log('⏳ 等待上电序列执行（6秒）...', 'info');
+            await delay(6500);
+            
+            // 步骤2: 检查上电序列
+            log('📋 步骤2: 验证上电序列', 'info');
+            checkPowerOnSequence();
+            
+            // 步骤3: 测试按键
+            log('📋 步骤3: 测试按键功能', 'info');
+            await testKeyFunctions();
+            
+            // 显示测试结果
+            displayTestResults();
+            
+            log('========== 测试完成 ==========', 'info');
+        }
+        
+        // 检查上电序列
+        function checkPowerOnSequence() {
+            const displayEl = document.getElementById('display');
+            const currentText = displayEl.textContent;
+            
+            // 应该显示 "--"
+            if (currentText === '--') {
+                addTestResult('上电序列-待机态显示', true, `显示正确: ${currentText}`);
+                log('✅ 上电序列完成，显示待机态(--)', 'info');
+            } else {
+                addTestResult('上电序列-待机态显示', false, `期望"--", 实际"${currentText}"`);
+                log(`❌ 上电序列异常，当前显示: ${currentText}`, 'error');
+            }
+        }
+        
+        // 测试按键功能
+        async function testKeyFunctions() {
+            // 测试童锁按键
+            log('🔘 测试童锁按键...', 'info');
+            pressKey(3, false); // 短按童锁
+            await delay(500);
+            
+            const ledLock = document.getElementById('led-lock');
+            if (ledLock.classList.contains('on')) {
+                addTestResult('童锁按键', true, '童锁LED亮起');
+                log('✅ 童锁按键工作正常', 'info');
+            } else {
+                addTestResult('童锁按键', false, '童锁LED未亮起');
+                log('❌ 童锁按键无响应', 'error');
+            }
+            
+            // 测试开关按键（长按）
+            log('🔘 测试开关按键（长按）...', 'info');
+            pressKey(4, true); // 长按开关
+            await delay(500);
+            
+            const ledPower = document.getElementById('led-power');
+            if (ledPower.classList.contains('on')) {
+                addTestResult('开关按键（长按）', true, '电源LED亮起');
+                log('✅ 开关按键工作正常', 'info');
+            } else {
+                addTestResult('开关按键（长按）', false, '电源LED未亮起');
+                log('❌ 开关按键无响应', 'error');
+            }
+            
+            // 测试炉头1按键
+            log('🔘 测试炉头1按键...', 'info');
+            pressKey(5, false); // 短按炉头1
+            await delay(500);
+            
+            const ledHead1 = document.getElementById('led-head-1');
+            if (ledHead1 && ledHead1.classList.contains('on')) {
+                addTestResult('炉头1按键', true, '炉头1LED亮起');
+                log('✅ 炉头1按键工作正常', 'info');
+            } else {
+                addTestResult('炉头1按键', false, '炉头1LED未亮起');
+                log('❌ 炉头1按键无响应', 'error');
+            }
+        }
+        
+        // 添加测试结果
+        function addTestResult(testName, passed, message) {
+            testResults.push({ testName, passed, message });
+        }
+        
+        // 显示测试结果
+        function displayTestResults() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '';
+            
+            testResults.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-result ${result.passed ? '' : 'fail'}`;
+                div.innerHTML = `
+                    <strong>${result.passed ? '✅' : '❌'} ${result.testName}</strong><br>
+                    ${result.message}
+                `;
+                resultsDiv.appendChild(div);
+            });
+            
+            const totalTests = testResults.length;
+            const passedTests = testResults.filter(r => r.passed).length;
+            const summary = document.createElement('div');
+            summary.className = 'test-result';
+            summary.innerHTML = `
+                <strong>📊 测试总结</strong><br>
+                总计: ${totalTests} | 通过: ${passedTests} | 失败: ${totalTests - passedTests}
+            `;
+            resultsDiv.appendChild(summary);
+        }
+        
+        // 重置测试
+        function resetTest() {
+            log('🔄 重置测试环境...', 'info');
+            document.getElementById('display').textContent = '----';
+            document.querySelectorAll('.led').forEach(led => led.classList.remove('on'));
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('log-panel').innerHTML = '';
+            document.getElementById('status-text').textContent = '状态: 未初始化';
+            logicLayer = null;
+            testResults = [];
+            log('✅ 重置完成', 'info');
+        }
+        
+        // 延时工具函数
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // 将段码数组转换为字符串
+        function _segToString(segArray) {
+            const segMap = {
+                0x3F: '0', 0x06: '1', 0x5B: '2', 0x4F: '3',
+                0x66: '4', 0x6D: '5', 0x7D: '6', 0x07: '7',
+                0x7F: '8', 0x6F: '9',
+                0x77: 'A', 0x7C: 'B', 0x39: 'C', 0x5E: 'd',
+                0x79: 'E', 0x71: 'F', 0x3D: 'G', 0x76: 'H',
+                0x1E: 'J', 0x38: 'L', 0x37: 'N', 0x73: 'P',
+                0x3E: 'U',
+                0x58: 'c', 0x54: 'n', 0x5C: 'o', 0x50: 'r',
+                0x78: 't', 0x6E: 'y',
+                0x40: '-', 0x00: ' ', 0x08: '_'
+            };
+            
+            let result = '';
+            for (let i = 0; i < segArray.length; i++) {
+                const code = segArray[i];
+                result += segMap[code] || '?';
+            }
+            return result;
+        }
+        
+        // 解析LED位域
+        function _parseLedBits(ledBits) {
+            return {
+                power: (ledBits & 0x01) !== 0,
+                head_select: [
+                    (ledBits & 0x02) !== 0,
+                    (ledBits & 0x04) !== 0,
+                    (ledBits & 0x08) !== 0,
+                    (ledBits & 0x10) !== 0
+                ],
+                child_lock: (ledBits & 0x20) !== 0,  // bit5
+                timer: (ledBits & 0x40) !== 0,       // bit6
+                pause: (ledBits & 0x80) !== 0        // bit7
+            };
+        }
+        
+        // 绑定按键事件
+        document.querySelectorAll('.control-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const keyCode = parseInt(button.dataset.keycode);
+                const name = button.dataset.name;
+                log(`🖱️ 用户点击: ${name} (keyCode=${keyCode})`, 'info');
+                pressKey(keyCode, false);
+            });
+            
+            // 长按支持
+            let longPressTimer = null;
+            button.addEventListener('mousedown', () => {
+                longPressTimer = setTimeout(() => {
+                    const keyCode = parseInt(button.dataset.keycode);
+                    const name = button.dataset.name;
+                    log(`🖱️ 用户长按: ${name} (keyCode=${keyCode})`, 'info');
+                    pressKey(keyCode, true);
+                }, 800);
+            });
+            
+            button.addEventListener('mouseup', () => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            });
+            
+            button.addEventListener('mouseleave', () => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            });
+        });
+        
+        // 页面加载完成后自动初始化
+        window.addEventListener('load', () => {
+            log('🚀 页面加载完成，准备就绪', 'info');
+            log('💡 点击"开始测试"按钮运行自动化测试', 'info');
+        });
+    </script>
+</body>
+</html>

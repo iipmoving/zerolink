@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>简单连接测试</title>
+</head>
+<body>
+    <h1>测试后端连接</h1>
+    <div id="result">测试中...</div>
+    
+    <script>
+        async function test() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                console.log('开始测试...');
+                const response = await fetch('http://localhost:5000/api/status');
+                console.log('响应状态:', response.status);
+                
+                const data = await response.json();
+                console.log('响应数据:', data);
+                
+                resultDiv.innerHTML = `
+                    <h2>✅ 成功!</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('错误:', error);
+                resultDiv.innerHTML = `
+                    <h2>❌ 失败!</h2>
+                    <p>错误: ${error.message}</p>
+                    <p>请检查:</p>
+                    <ul>
+                        <li>后端服务器是否在运行? (http://localhost:5000)</li>
+                        <li>浏览器控制台是否有CORS错误?</li>
+                    </ul>
+                `;
+            }
+        }
+        
+        test();
+    </script>
+</body>
+</html>

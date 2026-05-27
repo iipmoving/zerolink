@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>HMI 自动测试 - 四头电磁炉</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d0d0d; color:#ccc; font:14px monospace; padding:20px; }
+h1 { color:#0af; margin-bottom:4px; }
+h2 { color:#0af; margin:16px 0 8px; border-bottom:1px solid #333; padding-bottom:4px; }
+#log { background:#111; border:1px solid #333; padding:12px; overflow-y:auto; max-height:70vh;
+       font-size:12px; white-space:pre-wrap; line-height:1.5; }
+#log .warn { color:#fa0; }
+#log .err { color:#f44; }
+#log .info { color:#0af; }
+#log .ok { color:#0f0; }
+#summary { margin-top:12px; font-size:16px; }
+#summary .pass { color:#0f0; }
+#summary .fail { color:#f44; }
+button { background:#1a5a1a; color:#ccc; border:1px solid #0a0; padding:8px 16px;
+         font:14px monospace; cursor:pointer; margin-top:8px; }
+button:hover { background:#2a7a2a; }
+</style>
+</head>
+<body>
+<h1>四头电磁炉 HMI 单向数据流自动测试</h1>
+<p style="color:#666">基于 docs/specs/hmi-data-flow-table.md (30条流向)</p>
+
+<div id="summary">
+    状态: <span id="status">等待启动...</span>
+    <span id="counts"></span>
+</div>
+
+<button id="btn-run" onclick="startTests()">▶ 运行全部测试 (快速模式)</button>
+<button id="btn-run-normal" onclick="startTestsNormal()" style="background:#1a1a3a;border-color:#33a;">
+    ▶ 运行全部测试 (正常速度,含等待)
+</button>
+
+<h2>测试日志</h2>
+<div id="log"></div>
+
+<script src="js/message_bus.js"></script>
+<script src="js/key_handler.js"></script>
+<script src="js/slot_element.js"></script>
+<script src="js/led_element.js"></script>
+<script src="js/blink_rule.js"></script>
+<script src="js/mode_rule.js"></script>
+<script src="js/json_logic_engine.js"></script>
+<script src="js/test_runner.js"></script>
+<script>
+var logDiv = document.getElementById('log');
+
+function log(msg, cls) {
+    logDiv.innerHTML += '<span class="' + (cls||'') + '">' + msg + '</span>\n';
+    logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+async function initEngine(fastMode) {
+    MessageBus.init();
+
+    /* 加载逻辑JSON → 真正测试JSON驱动 */
+    var logicRules;
+    try {
+        var resp = await fetch('logic/four_head_v4.json');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        logicRules = await resp.json();
+        log('[OK] JSON规则加载: ' + logicRules.meta.name + ' v' + logicRules.meta.version, 'ok');
+    } catch(e) {
+        log('[WARN] JSON规则加载失败: ' + e.message + ' → 使用硬编码回退', 'warn');
+        logicRules = { meta: { name: 'fallback', version: '0', head_count: 4 } };
+    }
+
+    JsonLogicEngine.setFastMode(fastMode);
+    JsonLogicEngine.init(logicRules);
+    log('[OK] 引擎初始化完成 (fastMode=' + fastMode + ')', 'ok');
+}
+
+function startTimers() {
+    /* 100ms/1s 节拍 */
+    var tick100 = 0;
+    setInterval(function() {
+        MessageBus.post(MsgId.MSG_TIMER_100MS, 0, null);
+        tick100++;
+        if (tick100 % 10 === 0) {
+            MessageBus.post(MsgId.MSG_TIMER_1S, 0, null);
+        }
+    }, 100);
+
+    /* 消息消费 */
+    setInterval(function() {
+        MessageBus.run1ms();
+    }, 50);
+}
+
+async function startTests() {
+    document.getElementById('btn-run').disabled = true;
+    document.getElementById('btn-run-normal').disabled = true;
+    document.getElementById('status').textContent = '初始化...';
+    logDiv.innerHTML = '';
+
+    initEngine(true);
+    startTimers();
+
+    /* 等待上电序列完成(fastMode下瞬时) */
+    await sleep(200);
+
+    TestRunner.setLogger(log);
+    TestRunner.setOnDone(function(report) {
+        document.getElementById('status').textContent = '完成';
+        document.getElementById('status').className = report.fail === 0 ? 'pass' : 'fail';
+        document.getElementById('counts').innerHTML =
+            '<span class="' + (report.fail===0?'pass':'fail') + '">' +
+            report.pass + '/' + report.total + ' 通过 (' +
+            (report.pass/report.total*100).toFixed(1) + '%)</span>';
+        document.getElementById('btn-run').disabled = false;
+        document.getElementById('btn-run-normal').disabled = false;
+    });
+
+    await TestRunner.runAll();
+}
+
+async function startTestsNormal() {
+    document.getElementById('btn-run').disabled = true;
+    document.getElementById('btn-run-normal').disabled = true;
+    document.getElementById('status').textContent = '初始化(正常速度)...';
+    logDiv.innerHTML = '';
+
+    initEngine(false);
+    startTimers();
+
+    /* 等待上电序列完成(正常6秒) */
+    log('等待上电序列完成(全显3s→版本3s→待机)...', 'info');
+    await sleep(6500);
+
+    TestRunner.setLogger(log);
+    TestRunner.setOnDone(function(report) {
+        document.getElementById('status').textContent = '完成';
+        document.getElementById('status').className = report.fail === 0 ? 'pass' : 'fail';
+        document.getElementById('counts').innerHTML =
+            '<span class="' + (report.fail===0?'pass':'fail') + '">' +
+            report.pass + '/' + report.total + ' 通过 (' +
+            (report.pass/report.total*100).toFixed(1) + '%)</span>';
+        document.getElementById('btn-run').disabled = false;
+        document.getElementById('btn-run-normal').disabled = false;
+    });
+
+    await TestRunner.runAll();
+}
+
+function sleep(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+</script>
+</body>
+</html>

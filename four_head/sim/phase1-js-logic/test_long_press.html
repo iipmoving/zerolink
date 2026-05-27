@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>长按START_PAUSE自动测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-panel {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .log {
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .status {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 长按START_PAUSE自动测试</h1>
+    
+    <div class="test-panel">
+        <h2>测试步骤</h2>
+        <ol>
+            <li>点击下方"开始测试"按钮</li>
+            <li>脚本会自动执行以下操作：
+                <ul>
+                    <li>进入COOKING状态（按M1选择功能，按START_PAUSE开始烹饪）</li>
+                    <li>长按START_PAUSE键2秒</li>
+                    <li>松开按键</li>
+                </ul>
+            </li>
+            <li>观察最终状态是否为STANDBY</li>
+        </ol>
+        
+        <button onclick="startTest()">▶️ 开始测试</button>
+        <button onclick="clearLog()">🗑️ 清空日志</button>
+    </div>
+    
+    <div class="test-panel">
+        <h2>当前状态</h2>
+        <div id="currentState" class="status">等待测试...</div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>测试日志</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        let testStep = 0;
+        let currentStateName = '';
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            logDiv.innerHTML += `<div>[${timestamp}] ${prefix} ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStateDisplay(state) {
+            const stateNames = {
+                0: 'S_POWER_ON',
+                1: 'S_VERSION',
+                2: 'S_SHUTDOWN',
+                3: 'S_DEMO',
+                4: 'S_STANDBY',
+                5: 'S_FUNC_SELECT',
+                6: 'S_COOKING',
+                7: 'S_PAUSE',
+                8: 'S_FAULT'
+            };
+            currentStateName = stateNames[state] || `UNKNOWN(${state})`;
+            document.getElementById('currentState').textContent = `当前状态: ${currentStateName} (${state})`;
+        }
+
+        function simulateKeyPress(keyCode, holdDuration = 2000) {
+            return new Promise((resolve) => {
+                const control = findControlByKeyCode(keyCode);
+                if (!control) {
+                    log(`未找到KeyCode=${keyCode}的控件`, 'error');
+                    resolve(false);
+                    return;
+                }
+
+                log(`模拟按下: ${control.name} (KeyCode=${keyCode})`);
+                
+                // 触发mousedown
+                const mouseDownEvent = new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: control.x + control.width / 2,
+                    clientY: control.y + control.height / 2
+                });
+                AppState.canvas.dispatchEvent(mouseDownEvent);
+
+                // 等待指定时间后松开
+                setTimeout(() => {
+                    log(`模拟松开: ${control.name} (按住${holdDuration}ms)`);
+                    
+                    const mouseUpEvent = new MouseEvent('mouseup', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: control.x + control.width / 2,
+                        clientY: control.y + control.height / 2
+                    });
+                    AppState.canvas.dispatchEvent(mouseUpEvent);
+                    
+                    resolve(true);
+                }, holdDuration);
+            });
+        }
+
+        function findControlByKeyCode(keyCode) {
+            if (!AppState.controls) return null;
+            return AppState.controls.find(c => c.config && c.config.key_code === keyCode);
+        }
+
+        async function startTest() {
+            log('========== 开始自动测试 ==========');
+            testStep = 0;
+
+            // 确保使用JS逻辑层进行测试
+            AppState.useWasm = false;
+            log('切换到JS逻辑层');
+
+            // 启动演示模式
+            if (!AppState.logicLayer) {
+                log('启动演示模式...', 'info');
+                startDemo('js');
+                await sleep(1000);
+            }
+
+            // 等待进入待机状态
+            await waitForState(4, 'S_STANDBY'); // S_STANDBY = 4
+            
+            log('✅ 已进入待机状态', 'success');
+            await sleep(500);
+
+            // 步骤1: 按M1选择功能
+            log('步骤1: 按M1选择功能');
+            await simulateKeyPress(1, 200); // KEY_M1 = 1, 短按200ms
+            await waitForState(5, 'S_FUNC_SELECT'); // S_FUNC_SELECT = 5
+            log('✅ 已进入功能选择状态', 'success');
+            await sleep(500);
+
+            // 步骤2: 按START_PAUSE开始烹饪
+            log('步骤2: 按START_PAUSE开始烹饪');
+            await simulateKeyPress(13, 200); // KEY_START_PAUSE = 13, 短按200ms
+            await waitForState(6, 'S_COOKING'); // S_COOKING = 6
+            log('✅ 已进入烹饪状态', 'success');
+            await sleep(500);
+
+            // 步骤3: 长按START_PAUSE取消烹饪
+            log('步骤3: 长按START_PAUSE 2秒（应该取消烹饪，回到STANDBY）');
+            await simulateKeyPress(13, 2000); // KEY_START_PAUSE = 13, 长按2000ms
+            
+            // 等待状态稳定
+            await sleep(1000);
+
+            // 检查结果
+            const finalState = AppState.logicLayer ? AppState.logicLayer.current_state : -1;
+            updateStateDisplay(finalState);
+
+            if (finalState === 4) { // S_STANDBY
+                log('✅ 测试通过！成功回到STANDBY状态', 'success');
+            } else if (finalState === 7) { // S_PAUSE
+                log('❌ 测试失败！进入了PAUSE状态而不是STANDBY', 'error');
+                log('问题分析：松开时可能发送了SHORT事件，或者LONG事件没有被正确处理');
+            } else {
+                log(`⚠️ 意外状态: ${currentStateName}`, 'error');
+            }
+
+            log('========== 测试完成 ==========');
+        }
+
+        function waitForState(expectedState, stateName, timeout = 5000) {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                
+                const checkState = () => {
+                    const currentState = AppState.logicLayer ? AppState.logicLayer.current_state : -1;
+                    updateStateDisplay(currentState);
+                    
+                    if (currentState === expectedState) {
+                        resolve();
+                    } else if (Date.now() - startTime > timeout) {
+                        log(`超时：等待${stateName}状态`, 'error');
+                        reject(new Error(`Timeout waiting for ${stateName}`));
+                    } else {
+                        setTimeout(checkState, 100);
+                    }
+                };
+                
+                checkState();
+            });
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 监听状态变化
+        window.addEventListener('load', () => {
+            log('页面加载完成，准备就绪');
+            
+            // 定期检查状态
+            setInterval(() => {
+                if (AppState.logicLayer) {
+                    updateStateDisplay(AppState.logicLayer.current_state);
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

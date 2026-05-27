@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMC Framework - 面板编辑器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 菜单栏 -->
+    <nav class="menu-bar">
+        <div class="menu-item" id="menu-file">
+            文件
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="new-config">新建配置</div>
+                <div class="dropdown-item" data-action="open-config">打开配置</div>
+                <div class="dropdown-item" data-action="load-imported">加载示例配置</div>
+                <div class="dropdown-item" data-action="save-config">保存配置</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="export-config">导出配置</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="menu-edit">
+            编辑
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="undo">撤销 (Ctrl+Z)</div>
+                <div class="dropdown-item" data-action="redo">重做 (Ctrl+Y)</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="delete-control">删除控件 (Del)</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="menu-view">
+            视图
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="toggle-grid">显示网格</div>
+                <div class="dropdown-item" data-action="toggle-guides">显示辅助线</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="load-background">加载底图</div>
+                <div class="dropdown-item" data-action="clear-background">清除底图</div>
+                <div class="dropdown-item" data-action="background-fit">底图适配窗口</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="menu-demo">
+            演示
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="start-demo">开始演示</div>
+                <div class="dropdown-item" data-action="stop-demo">停止演示</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="switch-to-js">🔧 使用JS逻辑层</div>
+                <div class="dropdown-item" data-action="switch-to-wasm">⚙️ 使用WASM逻辑层</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="hardware-test">硬件调试</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="menu-config">
+            配置
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="control-mapping">控件映射配置</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" data-action="export-mapping">导出映射配置</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="menu-help">
+            帮助
+            <div class="dropdown">
+                <div class="dropdown-item" data-action="shortcuts">快捷键</div>
+                <div class="dropdown-item" data-action="about">关于</div>
+            </div>
+        </div>
+        
+        <div class="mode-indicator" id="mode-indicator">编辑模式</div>
+        <div class="key-info" id="key-info">按键: -- | 状态: --</div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="main-container">
+        <!-- Canvas画布区 -->
+        <div class="canvas-container" id="canvas-container">
+            <canvas id="main-canvas" width="800" height="600"></canvas>
+        </div>
+
+        <!-- 右侧工具栏 -->
+        <div class="sidebar">
+            <!-- 控件列表（仅编辑模式显示） -->
+            <div class="sidebar-section" id="control-list-section">
+                <h3>控件列表</h3>
+                <div class="control-list" id="control-list">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 添加控件 -->
+            <div class="sidebar-section">
+                <h3>添加控件</h3>
+                <select id="add-control-select">
+                    <option value="">选择控件类型...</option>
+                    <option value="button">按键</option>
+                    <option value="led">LED灯</option>
+                    <option value="segment">数码管</option>
+                </select>
+                <button id="add-control-btn" class="btn-primary">添加</button>
+            </div>
+
+            <!-- 显示选项 -->
+            <div class="sidebar-section">
+                <h3>显示选项</h3>
+                <label>
+                    <input type="checkbox" id="show-grid-checkbox"> 显示网格
+                </label>
+                <label>
+                    <input type="checkbox" id="show-guides-checkbox" checked> 显示辅助线
+                </label>
+                <label style="margin-top: 8px; display: block;">
+                    <input type="checkbox" id="control-fill-checkbox"> 控件填充模式
+                </label>
+            </div>
+
+            <!-- 对齐工具（仅编辑模式显示） -->
+            <div class="sidebar-section" id="align-tools-section">
+                <h3>对齐工具</h3>
+                <div class="align-buttons">
+                    <button class="btn-small" data-align="left">左对齐</button>
+                    <button class="btn-small" data-align="right">右对齐</button>
+                    <button class="btn-small" data-align="top">上对齐</button>
+                    <button class="btn-small" data-align="bottom">下对齐</button>
+                    <button class="btn-small" data-align="center">居中</button>
+                </div>
+            </div>
+
+            <!-- 日志区 -->
+            <div class="sidebar-section log-section">
+                <h3>日志 <button id="copy-log-btn" style="font-size: 12px; padding: 2px 8px; margin-left: 10px;">复制</button></h3>
+                <div class="log-panel" id="log-panel">
+                    <div class="log-entry">系统就绪</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 属性编辑对话框 -->
+    <div class="modal" id="property-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>控件属性</h3>
+                <span class="modal-close" id="modal-close">&times;</span>
+            </div>
+            <div class="modal-body" id="property-form">
+                <!-- 动态生成表单 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="modal-cancel">取消</button>
+                <button class="btn-primary" id="modal-save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ 调试信息面板（演示模式下显示） -->
+    <div id="debug-panel" style="display: none; position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; z-index: 9999; min-width: 280px;">
+        <div style="font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #0f0; padding-bottom: 5px;">🔧 调试信息</div>
+        <div style="margin: 5px 0;"><span style="color: #aaa;">当前状态:</span> <span id="debug-state" style="color: #ff0;">-</span></div>
+        <div style="margin: 5px 0;"><span style="color: #aaa;">数码管显示:</span> <span id="debug-display" style="color: #ff0;">-</span></div>
+        <div style="margin: 5px 0; border-top: 1px solid #333; padding-top: 5px;">
+            <div style="font-weight: bold; margin-bottom: 5px;">最后按键:</div>
+            <div style="margin: 3px 0;"><span style="color: #aaa;">名称:</span> <span id="debug-key-name" style="color: #0ff;">-</span></div>
+            <div style="margin: 3px 0;"><span style="color: #aaa;">键码:</span> <span id="debug-key-code" style="color: #0ff;">-</span></div>
+            <div style="margin: 3px 0;"><span style="color: #aaa;">事件:</span> <span id="debug-key-event" style="color: #0ff;">-</span></div>
+            <div style="margin: 3px 0;"><span style="color: #aaa;">时长:</span> <span id="debug-key-duration" style="color: #0ff;">-</span></div>
+            <div style="margin: 3px 0;"><span style="color: #aaa;">long_press:</span> <span id="debug-key-longpress" style="color: #0ff;">-</span></div>
+        </div>
+    </div>
+
+    <!-- JavaScript模块 -->
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/logic_layer_adapter.js"></script>
+    <script src="js/js_emc_logic_adapter.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/control_binder.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/config_converter.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/seg_display.js"></script>
+    <script src="js/key_handler.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

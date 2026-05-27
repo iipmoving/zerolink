@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>timer_module 独立测试</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+h1 { color: #e94560; border-bottom: 2px solid #e94560; padding-bottom: 8px; }
+.test { margin: 6px 0; padding: 6px 12px; border-radius: 4px; }
+.PASS { background: #1a3a1a; color: #4eff4e; }
+.FAIL { background: #3a1a1a; color: #ff4e4e; }
+#summary { margin-top: 16px; font-size: 18px; font-weight: bold; }
+#status { color: #ffaa00; }
+pre { background: #111; padding: 8px; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>timer_module 独立测试</h1>
+<p>测试定时器超时: select_timeout(15s), timer_setting 自动确认(15s), boost_timeout(5min), timer_value 倒数</p>
+<p id="status">加载 WASM...</p>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script src="app_logic.js"></script>
+<script src="wasm_adapter.js"></script>
+<script>
+(function() {
+var pass = 0, fail = 0;
+var out = document.getElementById('results');
+
+function t(name, actual, expected) {
+    var ok = (actual === expected);
+    if (ok) pass++; else fail++;
+    out.innerHTML += '<div class="test ' + (ok?'PASS':'FAIL') + '">['
+        + (ok?'PASS':'FAIL') + '] ' + name + ' — got=' + actual + ' expected=' + expected + '</div>';
+}
+
+AppLogicModule().then(function(mod) {
+    document.getElementById('status').textContent = 'WASM 已加载, 运行测试...';
+    var api = createWasmEngine(mod);
+    api.init();
+    api.postKey('POWER', 'long');
+    t('init→working', api.getState().global_mode, 'working');
+
+    // Test 1: select timeout (15s = 150 ticks)
+    api.postKey('HEAD_1', 'tap');
+    api.postKey('5', 'tap');
+    var st1 = api.getState();
+    t('HEAD_1 selecting', st1.heads[0].node, 'selecting');
+    t('HEAD_1 power=5', st1.heads[0].power_level, 5);
+
+    // force select timeout
+    api.forceSelectTimeout(0);
+    var st2 = api.getState();
+    t('select timeout→cooking', st2.heads[0].node, 'cooking');
+    t('select timeout→power=5', st2.heads[0].power_level, 5);
+
+    // Test 2: Boost timeout
+    api.postKey('HEAD_1', 'tap');
+    api.postKey('9', 'long');  // Boost
+    var st3 = api.getState();
+    t('Boost active', st3.heads[0].boost_active, true);
+    api.forceBoostTimeout(0);
+    var st4 = api.getState();
+    t('Boost timeout→exit', st4.heads[0].boost_active, false);
+    t('Boost timeout→power=5', st4.heads[0].power_level, 5);
+
+    // Test 3: timer_value decrement via tick1s
+    api.postKey('TIMER', 'tap');
+    api.tick100ms();  // flush
+    var st5 = api.getState();
+    t('timer_setting=15', st5.heads[0].timer_value, 15);
+
+    // confirm timer
+    api.forceSelectTimeout(0);
+    api.forceSelectTimeout(0);
+    var st6 = api.getState();
+    t('timer_active after confirm', st6.heads[0].timer_active, true);
+    t('timer_value=15', st6.heads[0].timer_value, 15);
+
+    // tick 1s → value decrements
+    api.tick1s();
+    var st7 = api.getState();
+    t('tick1s→value=14', st7.heads[0].timer_value, 14);
+
+    // Test 4: timer expire → idle
+    api.forceTimerExpire(0);
+    var st8 = api.getState();
+    t('timer expire→idle', st8.heads[0].node, 'idle');
+    t('timer expire→power=0', st8.heads[0].power_level, 0);
+    t('timer expire→timer_active=0', st8.heads[0].timer_active, false);
+
+    document.getElementById('summary').textContent =
+        '总计: ' + (pass+fail) + ' | PASS=' + pass + ' FAIL=' + fail
+        + (fail === 0 ? ' ✓ ALL PASS' : ' ✗ FAILURES');
+    document.getElementById('summary').style.color = fail ? '#ff4e4e' : '#4eff4e';
+});
+})();
+</script>
+</body>
+</html>

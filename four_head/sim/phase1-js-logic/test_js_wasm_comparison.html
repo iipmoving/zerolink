@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS vs WASM 逻辑层对比测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .panel {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .log {
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .js-panel {
+            border-color: #2196F3;
+        }
+        .wasm-panel {
+            border-color: #FF9800;
+        }
+        .diff {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        .match {
+            background: #e8f5e9;
+            border-left-color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔬 JS vs WASM 逻辑层自动化对比测试</h1>
+    
+    <div class="panel">
+        <h2>测试控制</h2>
+        <button onclick="runComparisonTest()">开始对比测试</button>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+
+    <!-- ✅ 添加隐藏的Canvas用于控件绑定 -->
+    <div style="display: none;">
+        <canvas id="main-canvas" width="1024" height="768"></canvas>
+    </div>
+
+    <div class="comparison">
+        <div class="panel js-panel">
+            <h2>🔧 JS逻辑层结果</h2>
+            <div id="js-log" class="log"></div>
+        </div>
+        
+        <div class="panel wasm-panel">
+            <h2>⚙️ WASM逻辑层结果</h2>
+            <div id="wasm-log" class="log"></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>差异分析</h2>
+        <div id="diff-log" class="log"></div>
+    </div>
+
+    <!-- 加载所有必要的JS文件 -->
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/logic_layer_adapter.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/control_binder.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/config_converter.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/seg_display.js"></script>
+    <script src="js/key_handler.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/logic_layer.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        const TEST_RESULTS = {
+            js: [],
+            wasm: []
+        };
+
+        function log(message, type = 'info', layer = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            
+            if (layer === 'js') {
+                document.getElementById('js-log').innerHTML += `<div>${logEntry}</div>`;
+                TEST_RESULTS.js.push({time: Date.now(), message});
+            } else if (layer === 'wasm') {
+                document.getElementById('wasm-log').innerHTML += `<div>${logEntry}</div>`;
+                TEST_RESULTS.wasm.push({time: Date.now(), message});
+            } else {
+                document.getElementById('diff-log').innerHTML += `<div class="${type}">${logEntry}</div>`;
+            }
+            
+            // 自动滚动到底部
+            document.querySelectorAll('.log').forEach(el => el.scrollTop = el.scrollHeight);
+        }
+
+        function clearLog() {
+            document.getElementById('js-log').innerHTML = '';
+            document.getElementById('wasm-log').innerHTML = '';
+            document.getElementById('diff-log').innerHTML = '';
+            TEST_RESULTS.js = [];
+            TEST_RESULTS.wasm = [];
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function testLogicLayer(logicType) {
+            const results = [];
+            const layer = logicType === 'js' ? 'js' : 'wasm';
+            
+            log(`========== 开始测试${logicType.toUpperCase()}逻辑层 ==========`, 'info', layer);
+            
+            // 步骤0: 启动演示
+            AppState.useWasm = (logicType === 'wasm');
+            await startDemo(logicType);
+            await sleep(4500); // 等待上电自检完成（S_POWER_ON → S_VERSION → S_SHUTDOWN → S_STANDBY）
+            const standbyState = AppState.dllState?.state;
+            results.push({step: '上电自检', state: standbyState, name: getStateName(standbyState)});
+            log(`上电自检完成: 状态=${getStateName(standbyState)} (${standbyState})`, 'info', layer);
+            
+            if (standbyState !== 4) { // S_STANDBY = 4
+                log(`⚠️ 未进入S_STANDBY状态，当前状态=${getStateName(standbyState)}`, 'warn', layer);
+            }
+            
+            // 步骤2: 按M1选择功能
+            await simulateKeyPress(1, 200); // KEY_M1 = 1
+            await sleep(500);
+            const afterM1 = AppState.dllState?.state;
+            results.push({step: '按M1', state: afterM1, name: getStateName(afterM1)});
+            log(`按M1后: 状态=${getStateName(afterM1)} (${afterM1})`, 'info', layer);
+            
+            // 步骤4: 按START_PAUSE开始烹饪
+            await simulateKeyPress(13, 200); // KEY_START_PAUSE = 13
+            await sleep(500);
+            const afterStart = AppState.dllState?.state;
+            results.push({step: '按START', state: afterStart, name: getStateName(afterStart)});
+            log(`按START后: 状态=${getStateName(afterStart)} (${afterStart})`, 'info', layer);
+            
+            // 步骤5: 快速点击START_PAUSE（短按）
+            await simulateKeyPress(13, 200);
+            await sleep(500);
+            const afterShortPress = AppState.dllState?.state;
+            results.push({step: '短按START', state: afterShortPress, name: getStateName(afterShortPress)});
+            log(`短按START后: 状态=${getStateName(afterShortPress)} (${afterShortPress})`, 'info', layer);
+            
+            // 步骤6: 再快速点击START_PAUSE（恢复烹饪）
+            await simulateKeyPress(13, 200);
+            await sleep(500);
+            const afterResume = AppState.dllState?.state;
+            results.push({step: '再短按START', state: afterResume, name: getStateName(afterResume)});
+            log(`再短按START后: 状态=${getStateName(afterResume)} (${afterResume})`, 'info', layer);
+            
+            // 步骤7: 长按START_PAUSE（取消烹饪）
+            await simulateKeyPress(13, 2000); // 长按2秒
+            await sleep(500);
+            const afterLongPress = AppState.dllState?.state;
+            results.push({step: '长按START', state: afterLongPress, name: getStateName(afterLongPress)});
+            log(`长按START后: 状态=${getStateName(afterLongPress)} (${afterLongPress})`, 'info', layer);
+            
+            // 停止演示
+            stopDemo();
+            await sleep(1000);
+            
+            log(`========== ${logicType.toUpperCase()}逻辑层测试完成 ==========`, 'success', layer);
+            return results;
+        }
+
+        async function simulateKeyPress(keyCode, holdDuration = 200) {
+            // ✅ 直接使用固定坐标点击，不依赖控件查找
+            const keyPositions = {
+                0: {x: 99, y: 276},   // POWER - 开始/暂停键位置
+                1: {x: 659, y: 276},  // M1
+                11: {x: 207, y: 276}, // 加水
+                12: {x: 319, y: 276}, // 加时间
+                13: {x: 99, y: 276}   // START_PAUSE - 与POWER相同位置
+            };
+            
+            const pos = keyPositions[keyCode];
+            if (!pos) {
+                log(`⚠️ 未定义keyCode=${keyCode}的位置`, 'warn');
+                return;
+            }
+            
+            // 模拟mousedown
+            const mouseDownEvent = new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: pos.x + 20,  // 中心点
+                clientY: pos.y + 33
+            });
+            AppState.canvas.dispatchEvent(mouseDownEvent);
+            
+            // 等待指定时间
+            await sleep(holdDuration);
+            
+            // 模拟mouseup
+            const mouseUpEvent = new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: pos.x + 20,
+                clientY: pos.y + 33
+            });
+            AppState.canvas.dispatchEvent(mouseUpEvent);
+            
+            // 等待状态稳定
+            await sleep(500);
+        }
+
+        function findControlByKeyCode(keyCode) {
+            if (!AppState.controls) return null;
+            return AppState.controls.find(c => c.config && c.config.key_code === keyCode);
+        }
+
+        function getStateName(stateCode) {
+            const names = {
+                0: 'S_POWER_ON', 1: 'S_VERSION', 2: 'S_SHUTDOWN',
+                3: 'S_DEMO', 4: 'S_STANDBY', 5: 'S_FUNC_SELECT',
+                6: 'S_COOKING', 7: 'S_PAUSE', 8: 'S_FAULT'
+            };
+            return names[stateCode] || `UNKNOWN(${stateCode})`;
+        }
+
+        function compareResults(jsResults, wasmResults) {
+            log('\n========== 开始对比分析 ==========', 'info');
+            
+            let hasDiff = false;
+            
+            for (let i = 0; i < Math.max(jsResults.length, wasmResults.length); i++) {
+                const js = jsResults[i];
+                const wasm = wasmResults[i];
+                
+                if (!js || !wasm) {
+                    log(`❌ 步骤${i+1}: 一方缺失`, 'diff');
+                    hasDiff = true;
+                    continue;
+                }
+                
+                if (js.state === wasm.state) {
+                    log(`✅ 步骤${i+1} (${js.step}): 状态一致 = ${js.name} (${js.state})`, 'match');
+                } else {
+                    log(`❌ 步骤${i+1} (${js.step}): 状态不一致!`, 'diff');
+                    log(`   JS:   ${js.name} (${js.state})`, 'diff');
+                    log(`   WASM: ${wasm.name} (${wasm.state})`, 'diff');
+                    hasDiff = true;
+                }
+            }
+            
+            if (!hasDiff) {
+                log('\n🎉 完美！JS和WASM逻辑层行为完全一致！', 'match');
+            } else {
+                log('\n⚠️ 发现差异，需要修复JS或WASM逻辑层', 'diff');
+            }
+        }
+
+        async function runComparisonTest() {
+            clearLog();
+            log('开始自动化对比测试...', 'info');
+            
+            try {
+                // ✅ 初始化Canvas
+                AppState.canvas = document.getElementById('main-canvas');
+                if (!AppState.canvas) {
+                    log('❌ Canvas元素未找到', 'diff');
+                    return;
+                }
+                log('✅ Canvas已初始化', 'info');
+                
+                // 先测试JS逻辑层
+                const jsResults = await testLogicLayer('js');
+                await sleep(2000);
+                
+                // 再测试WASM逻辑层
+                const wasmResults = await testLogicLayer('wasm');
+                await sleep(2000);
+                
+                // 对比结果
+                compareResults(jsResults, wasmResults);
+                
+            } catch (error) {
+                log(`❌ 测试出错: ${error.message}`, 'diff');
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

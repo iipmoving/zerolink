@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM长按功能实时测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .panel {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status-display {
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            background: #e8f5e9;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .key-info {
+            font-size: 18px;
+            padding: 15px;
+            background: #fff3e0;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .log {
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .highlight {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 WASM长按功能实时测试</h1>
+    
+    <div class="panel">
+        <h2>当前状态</h2>
+        <div id="currentState" class="status-display">等待启动...</div>
+        <div id="displayContent" style="text-align: center; font-size: 48px; font-family: monospace; margin-top: 10px;">
+            ----
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>按键信息（实时更新）</h2>
+        <div id="keyInfo" class="key-info">
+            最后按键: 无<br>
+            键码: -<br>
+            事件: -<br>
+            时长: - ms<br>
+            long_press配置: -
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>测试说明</h2>
+        <p><strong>目标：</strong>验证C代码能否正确处理START_PAUSE的长按事件</p>
+        <ol>
+            <li>启动演示模式后，进入COOKING状态</li>
+            <li>在COOKING状态下<strong>长按START_PAUSE 2秒以上</strong></li>
+            <li>观察：
+                <ul>
+                    <li>按键信息中显示的时长和事件类型</li>
+                    <li>状态是否从S_COOKING变为S_STANDBY</li>
+                </ul>
+            </li>
+        </ol>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+    
+    <div class="panel">
+        <h2>详细日志</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        const STATE_NAMES = {
+            0: 'S_POWER_ON', 1: 'S_VERSION', 2: 'S_SHUTDOWN',
+            3: 'S_DEMO', 4: 'S_STANDBY', 5: 'S_FUNC_SELECT',
+            6: 'S_COOKING', 7: 'S_PAUSE', 8: 'S_FAULT'
+        };
+
+        const EVENT_NAMES = {
+            0: 'NULL', 1: 'PRESS', 2: 'SHORT', 
+            3: 'LONG', 4: 'REPEAT', 5: 'RELEASE'
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                'info': '#333',
+                'success': '#2e7d32',
+                'error': '#c62828',
+                'warn': '#f57c00',
+                'debug': '#1976d2'
+            };
+            const color = colors[type] || '#333';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStateDisplay() {
+            if (AppState.dllState && AppState.dllState.state !== null) {
+                const stateCode = AppState.dllState.state;
+                const stateName = STATE_NAMES[stateCode] || `UNKNOWN(${stateCode})`;
+                document.getElementById('currentState').textContent = `${stateName} (${stateCode})`;
+                
+                // 更新显示内容
+                if (AppState.dllState.seg) {
+                    let display = '';
+                    for (let i = 0; i < 4; i++) {
+                        const code = AppState.dllState.seg[i];
+                        if (code === 0x40) display += '-';
+                        else if (code === 0x7F) display += ' ';
+                        else display += String.fromCharCode(65 + (code & 0x0F));
+                    }
+                    document.getElementById('displayContent').textContent = display || '----';
+                }
+            }
+        }
+
+        function updateKeyInfo(keyName, keyCode, event, elapsed, isLongPress) {
+            const eventName = EVENT_NAMES[event] || `EVENT_${event}`;
+            const keyInfoDiv = document.getElementById('keyInfo');
+            keyInfoDiv.innerHTML = `
+                最后按键: <span class="highlight">${keyName || '无'}</span><br>
+                键码: <span class="highlight">${keyCode !== undefined ? keyCode : '-'}</span><br>
+                事件: <span class="highlight">${eventName}</span><br>
+                时长: <span class="highlight">${elapsed !== undefined ? elapsed + ' ms' : '-'}</span><br>
+                long_press配置: <span class="highlight">${isLongPress !== undefined ? (isLongPress ? 'true' : 'false') : '-'}</span>
+            `;
+        }
+
+        // 拦截WASM的pressKey调用
+        window.addEventListener('load', () => {
+            log('✅ 页面加载完成', 'success');
+            
+            // 定期检查状态
+            setInterval(updateStateDisplay, 100);
+            
+            // 拦截EmsWasmAdapter.pressKey
+            if (window.EmsWasmAdapter) {
+                const originalPressKey = EmsWasmAdapter.prototype.pressKey;
+                EmsWasmAdapter.prototype.pressKey = function(keyCode, event) {
+                    const eventName = EVENT_NAMES[event] || `EVENT_${event}`;
+                    log(`📤 [前端发送] keyCode=${keyCode}, event=${event} (${eventName})`, 'debug');
+                    
+                    return originalPressKey.call(this, keyCode, event);
+                };
+                log('✅ 已拦截pressKey调用', 'success');
+            }
+            
+            // 监听mousedown和mouseup事件
+            setTimeout(() => {
+                if (AppState.canvas) {
+                    AppState.canvas.addEventListener('mousedown', (e) => {
+                        log('🖱️ Canvas mousedown事件触发', 'debug');
+                    });
+                    
+                    AppState.canvas.addEventListener('mouseup', (e) => {
+                        log('🖱️ Canvas mouseup事件触发', 'debug');
+                    });
+                }
+            }, 1000);
+            
+            log('提示：请手动点击Canvas上的START_PAUSE键进行测试', 'info');
+            log('重点观察：快速点击时的时长是否<1500ms', 'warn');
+        });
+    </script>
+</body>
+</html>

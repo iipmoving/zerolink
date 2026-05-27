@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM长按功能诊断测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-panel {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .log {
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .status {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 WASM长按功能诊断测试</h1>
+    
+    <div class="test-panel">
+        <h2>测试说明</h2>
+        <p>此测试将自动执行以下步骤：</p>
+        <ol>
+            <li>初始化WASM逻辑层</li>
+            <li>等待进入待机状态（S_STANDBY）</li>
+            <li>按M1选择功能（进入S_FUNC_SELECT）</li>
+            <li>按START_PAUSE开始烹饪（进入S_COOKING）</li>
+            <li><strong>长按START_PAUSE 2秒</strong></li>
+            <li>检查最终状态是否为S_STANDBY</li>
+        </ol>
+        <button onclick="runDiagnosticTest()">▶️ 开始诊断测试</button>
+        <button onclick="clearLog()">🗑️ 清空日志</button>
+    </div>
+    
+    <div class="test-panel">
+        <h2>当前状态</h2>
+        <div id="currentState" class="status">等待测试...</div>
+        <div id="displayState" style="margin-top: 10px; font-size: 24px; font-family: monospace;">
+            显示: ----
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>详细日志</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <!-- 加载必要的JS文件 -->
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/emc_logic_js.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        const STATE_NAMES = {
+            0: 'S_POWER_ON',
+            1: 'S_VERSION',
+            2: 'S_SHUTDOWN',
+            3: 'S_DEMO',
+            4: 'S_STANDBY',
+            5: 'S_FUNC_SELECT',
+            6: 'S_COOKING',
+            7: 'S_PAUSE',
+            8: 'S_FAULT'
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const icons = {
+                'info': 'ℹ️',
+                'success': '✅',
+                'error': '❌',
+                'warn': '⚠️',
+                'debug': '🔍'
+            };
+            const icon = icons[type] || 'ℹ️';
+            logDiv.innerHTML += `<div>[${timestamp}] ${icon} ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStateDisplay(stateCode) {
+            const stateName = STATE_NAMES[stateCode] || `UNKNOWN(${stateCode})`;
+            const statusDiv = document.getElementById('currentState');
+            statusDiv.textContent = `当前状态: ${stateName} (${stateCode})`;
+            
+            // 更新显示内容
+            if (AppState.dllState && AppState.dllState.seg) {
+                const seg = AppState.dllState.seg;
+                let display = '';
+                for (let i = 0; i < 4; i++) {
+                    display += seg[i] !== undefined ? seg[i].toString(16).toUpperCase().padStart(2, '0') : '--';
+                }
+                document.getElementById('displayState').textContent = `显示段码: [${display}]`;
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function waitForState(expectedState, timeout = 5000) {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                const checkInterval = setInterval(() => {
+                    const currentState = AppState.dllState.state;
+                    updateStateDisplay(currentState);
+                    
+                    if (currentState === expectedState) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    } else if (Date.now() - startTime > timeout) {
+                        clearInterval(checkInterval);
+                        reject(new Error(`超时等待状态 ${STATE_NAMES[expectedState]}`));
+                    }
+                }, 100);
+            });
+        }
+
+        async function simulateKeyPress(keyCode, holdDuration = 200) {
+            const control = findControlByKeyCode(keyCode);
+            if (!control) {
+                throw new Error(`未找到KeyCode=${keyCode}的控件`);
+            }
+
+            log(`模拟按下: ${control.name} (KeyCode=${keyCode})`, 'debug');
+            
+            // 触发mousedown
+            const mouseDownEvent = new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: control.x + control.width / 2,
+                clientY: control.y + control.height / 2
+            });
+            AppState.canvas.dispatchEvent(mouseDownEvent);
+
+            // 等待指定时间
+            await sleep(holdDuration);
+
+            // 触发mouseup
+            log(`模拟松开: ${control.name} (按住${holdDuration}ms)`, 'debug');
+            const mouseUpEvent = new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: control.x + control.width / 2,
+                clientY: control.y + control.height / 2
+            });
+            AppState.canvas.dispatchEvent(mouseUpEvent);
+
+            // 等待状态稳定
+            await sleep(500);
+        }
+
+        function findControlByKeyCode(keyCode) {
+            if (!AppState.controls) return null;
+            return AppState.controls.find(c => c.config && c.config.key_code === keyCode);
+        }
+
+        async function runDiagnosticTest() {
+            log('========== 开始WASM长按功能诊断测试 ==========');
+            
+            try {
+                // 步骤0: 确保使用WASM逻辑层
+                AppState.useWasm = true;
+                log('✅ 已切换到WASM逻辑层', 'success');
+
+                // 步骤1: 启动演示模式
+                if (!AppState.logicLayer) {
+                    log('步骤1: 启动WASM演示模式...', 'info');
+                    startDemo('wasm');
+                    await sleep(3000); // 等待上电自检完成
+                }
+
+                // 步骤2: 等待进入待机状态
+                log('步骤2: 等待进入待机状态（S_STANDBY）...', 'info');
+                await waitForState(4); // S_STANDBY = 4
+                log('✅ 已进入待机状态', 'success');
+                await sleep(500);
+
+                // 步骤3: 按M1选择功能
+                log('步骤3: 按M1选择功能...', 'info');
+                await simulateKeyPress(1, 200); // KEY_M1 = 1
+                await waitForState(5); // S_FUNC_SELECT = 5
+                log('✅ 已进入功能选择状态', 'success');
+                await sleep(500);
+
+                // 步骤4: 按START_PAUSE开始烹饪
+                log('步骤4: 按START_PAUSE开始烹饪...', 'info');
+                await simulateKeyPress(13, 200); // KEY_START_PAUSE = 13
+                await waitForState(6); // S_COOKING = 6
+                log('✅ 已进入烹饪状态（S_COOKING）', 'success');
+                await sleep(500);
+
+                // 步骤5: 长按START_PAUSE 2秒
+                log('步骤5: 🔥 长按START_PAUSE 2秒（关键测试）...', 'warn');
+                await simulateKeyPress(13, 2000); // KEY_START_PAUSE = 13, 长按2秒
+                
+                // 等待状态稳定
+                await sleep(1000);
+
+                // 步骤6: 检查结果
+                const finalState = AppState.dllState.state;
+                updateStateDisplay(finalState);
+
+                log('========== 测试结果 ==========');
+                
+                if (finalState === 4) { // S_STANDBY
+                    log('✅✅✅ 测试通过！成功回到STANDBY状态', 'success');
+                    log('长按功能正常工作！', 'success');
+                } else if (finalState === 7) { // S_PAUSE
+                    log('❌ 测试失败！进入了PAUSE状态而不是STANDBY', 'error');
+                    log('问题分析：可能没有发送LONG事件，或者C代码没有正确处理', 'error');
+                } else if (finalState === 6) { // S_COOKING
+                    log('❌ 测试失败！仍然在COOKING状态', 'error');
+                    log('问题分析：长按事件可能被忽略，或者状态转移失败', 'error');
+                } else {
+                    log(`⚠️ 意外状态: ${STATE_NAMES[finalState]} (${finalState})`, 'warn');
+                }
+
+                log('========== 测试完成 ==========');
+
+            } catch (error) {
+                log(`❌ 测试出错: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // 监听状态变化
+        window.addEventListener('load', () => {
+            log('页面加载完成，准备就绪', 'info');
+            
+            // 定期检查状态
+            setInterval(() => {
+                if (AppState.dllState && AppState.dllState.state !== null) {
+                    updateStateDisplay(AppState.dllState.state);
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

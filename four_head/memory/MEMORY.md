@@ -1,0 +1,22 @@
+- [JSON覆盖率是核心目标](feedback_json_coverage.md) — 三层剥离架构：Zone Logic / JSON Binding / Presentation Controls
+- [核心设计原则: 孤岛隔离](design-principle-json-isolation.md) — 可配置→JSON声明，执行函数→单向独立，问题→隔离处理
+- [P0-1 四项低难度JSON化完成](project_p0-1-complete.md) — 覆盖率 62%→68%，34/34 测试通过
+- [P0-2 SlotElement + value_map](project_p0-2-complete.md) — 第一个 Presentation Controls 层元素落地，value_map 查表渲染，34/34 通过
+- [P0-3 LEDElement](project_p0-3-complete.md) — LevelLED (single/gradient) + StatusLED，syncLED() 19行→8行，5处 for 循环清零替换为 levelLED.clear()
+- [P0-4 StatusLED 全面集成](project_p0-4-complete.md) — syncStatusLEDs() 替代 35处硬编码，timer/pause/child_lock/head_select 全部JSON声明
+- [P1 BlinkRule 闪烁绑定](project_p1-blink-binding.md) — 闪烁逻辑 JSON 声明化，phase_ms 可配置，~21处硬编码 seg_blink 写入移除
+- [P2 ModeRule 优先级链](project_p2-mode-rule.md) — seg_mode 优先级链绑定，~15处硬编码移除，postDisplay() 统一派生，34/34 通过
+- [里程碑: 87% JSON覆盖率](milestone-87pct-json-coverage.md) — P0~P2 六轮完成，显示层全部声明化，Zone Logic 标准函数保留，稳定节点
+- [触摸库自带中断, 10ms读一次即可](feedback_touch_polling.md) — HAL_Key_Poll 不需要125us轮询, 不要取消注释
+- [松手判定TAP, 长按抑制误触发](feedback_key_release_tap.md) — 长按/短按二义性消除: 长按时不发TAP, 松手后才判定
+- [核心铁律: 解耦第一, JSON覆盖逻辑第二](feedback_core-principles-iron-laws.md) — 刻在DNA里，每次编程必须调入，层间隔离绝对不可妥协
+- [WASM第二轮测试完成 21/34=61.8%](project_wasm-test-round2-complete.md) — 新增7条Flow, 41断言, 0 FAIL
+- [架构耦合审查进行中](project_arch-coupling-audit.md) — 用户发现跨层调用嫌疑, 解耦是架构第一前提, 修正后再继续
+- [独立声明铁律: AI管跨模块类型一致性](methodology_independent-type-declarations.md) — 每模块独立声明类型，相同布局不同命名，interface_map.h文档，AI保证一致性
+- [AI管理__weak回调配对 v2.0](methodology_ai-managed-dependency-injection.md) — interface_map.h是__weak配对唯一真相源，AI保证发送方/接收方函数签名一致，消除编译期耦合
+- [消息ID命名空间管理 已废弃 v2.0](methodology_ai-message-id-namespace.md) — v2.0不再需要，__weak函数名替代MSG ID
+- [AI零耦合方法论 已升级v2.0](methodology_ai-zero-coupling-complete.md) — __weak回调直调架构、五层(无CORE)、六大铁律、独立编译测试
+- [★ 最高优先级: 方法论是唯一产出](methodology_first-principle.md) — 代码是载体，方法论才是目的。每次修BUG必须做根因分析并更新方法论
+- [★ __weak回调零依赖架构 v2.0](methodology_weak-callback-zero-dependency.md) — 彻底消除MsgScheduler，__weak直调+链接器接线，每模块可独立编译测试
+- [★ 完整文件清单 MANIFEST](MANIFEST.md) — 方法论/工具/规格/架构/代码模块的绝对路径索引，新AI会话的入口文档
+- [★ 模块分解黄金输出验证](methodology_golden-output-decomposition.md) — 从单体拆模块禁止重新实现，新模块输出必须与原始代码逐字段一致

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>当前逻辑层检测</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .info-box {
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .info-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+        }
+        .label {
+            font-weight: bold;
+            color: #333;
+        }
+        .value {
+            color: #4CAF50;
+            font-size: 1.2em;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 当前逻辑层检测</h1>
+    
+    <div class="info-box">
+        <h2>AppState配置</h2>
+        <div class="info-item">
+            <span class="label">useWasm:</span>
+            <span class="value" id="useWasm">检测中...</span>
+        </div>
+        <div class="info-item">
+            <span class="label">默认逻辑层:</span>
+            <span class="value" id="defaultLogic">检测中...</span>
+        </div>
+        <div class="info-item">
+            <span class="label">当前模式:</span>
+            <span class="value" id="currentMode">检测中...</span>
+        </div>
+    </div>
+    
+    <div class="info-box">
+        <h2>切换逻辑层</h2>
+        <button onclick="switchToWasm()">切换到WASM逻辑层</button>
+        <button onclick="switchToJS()">切换到JS逻辑层</button>
+        <button onclick="openMainPage()">打开主页面</button>
+    </div>
+    
+    <div class="info-box">
+        <h2>说明</h2>
+        <p><strong>当前配置：</strong>根据state.js第50行和第110行的代码，默认使用<strong>WASM逻辑层</strong>。</p>
+        <p><strong>切换方法：</strong>可以通过修改<code>AppState.useWasm</code>的值来切换逻辑层。</p>
+        <ul>
+            <li><code>AppState.useWasm = true</code> → 使用WASM逻辑层（默认）</li>
+            <li><code>AppState.useWasm = false</code> → 使用JS逻辑层</li>
+        </ul>
+    </div>
+
+    <script>
+        // 模拟AppState
+        const AppState = {
+            useWasm: true,  // 默认值
+            mode: 'edit'
+        };
+        
+        function updateDisplay() {
+            document.getElementById('useWasm').textContent = AppState.useWasm ? 'true (WASM)' : 'false (JS)';
+            document.getElementById('defaultLogic').textContent = AppState.useWasm ? 'WASM C逻辑' : 'JS逻辑';
+            document.getElementById('currentMode').textContent = AppState.mode;
+        }
+        
+        function switchToWasm() {
+            AppState.useWasm = true;
+            updateDisplay();
+            alert('已切换到WASM逻辑层\n\n下次启动演示时将使用WASM C逻辑');
+        }
+        
+        function switchToJS() {
+            AppState.useWasm = false;
+            updateDisplay();
+            alert('已切换到JS逻辑层\n\n下次启动演示时将使用JS逻辑');
+        }
+        
+        function openMainPage() {
+            window.open('index.html', '_blank');
+        }
+        
+        // 初始化显示
+        updateDisplay();
+    </script>
+</body>
+</html>

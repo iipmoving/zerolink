@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "panel_name": "翰林煮面炉控制面板",
+  "canvas_size": {
+    "width": 800,
+    "height": 600
+  },
+  "controls": [
+    {
+      "id": "btn_start_pause",
+      "type": "button",
+      "name": "开始 / 暂停",
+      "x": 370,
+      "y": 450,
+      "width": 60,
+      "height": 40,
+      "style": {
+        "background_color": "#e0e0e0",
+        "border_color": "#999999",
+        "text_color": "#000000",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 13,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_add_water",
+      "type": "button",
+      "name": "加水",
+      "x": 250,
+      "y": 450,
+      "width": 60,
+      "height": 40,
+      "style": {
+        "background_color": "#e0e0e0",
+        "border_color": "#999999",
+        "text_color": "#000000",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 11,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_add_time",
+      "type": "button",
+      "name": "加时间",
+      "x": 490,
+      "y": 450,
+      "width": 60,
+      "height": 40,
+      "style": {
+        "background_color": "#e0e0e0",
+        "border_color": "#999999",
+        "text_color": "#000000",
+        "font_size": 12
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 12,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "btn_m1",
+      "type": "button",
+      "name": "M1",
+      "x": 100,
+      "y": 350,
+      "width": 50,
+      "height": 35,
+      "style": {
+        "background_color": "#e0e0e0",
+        "border_color": "#999999",
+        "text_color": "#000000",
+        "font_size": 11
+      },
+      "config": {
+        "long_press": false,
+        "key_code": 1,
+        "trigger_mode": "press"
+      }
+    },
+    {
+      "id": "led_power",
+      "type": "led",
+      "name": "电源灯",
+      "x": 395,
+      "y": 200,
+      "width": 12,
+      "height": 12,
+      "style": {
+        "on_color": "#00ff00",
+        "off_color": "#666666"
+      },
+      "config": {
+        "led_bit": 0
+      }
+    },
+    {
+      "id": "led_m1",
+      "type": "led",
+      "name": "M1灯",
+      "x": 115,
+      "y": 300,
+      "width": 12,
+      "height": 12,
+      "style": {
+        "on_color": "#00ff00",
+        "off_color": "#666666"
+      },
+      "config": {
+        "led_bit": 1
+      }
+    },
+    {
+      "id": "seg_display",
+      "type": "segment",
+      "name": "四位数码管",
+      "x": 280,
+      "y": 250,
+      "width": 240,
+      "height": 60,
+      "style": {
+        "background_color": "#111111",
+        "text_color": "#00ff00",
+        "font_size": 32
+      },
+      "config": {
+        "digits": 4
+      }
+    }
+  ]
+}

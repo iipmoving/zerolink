@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DLL API 测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        .log { background: #f0f0f0; padding: 10px; margin-top: 20px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🧪 DLL API 连接测试</h1>
+    
+    <button onclick="testStatus()">测试 /api/status</button>
+    <button onclick="testInit()">测试 /api/init</button>
+    
+    <div class="log" id="log">等待测试...</div>
+
+    <script>
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            logDiv.textContent += msg + '\n';
+        }
+
+        async function testStatus() {
+            log('\n=== 测试 /api/status ===');
+            try {
+                const response = await fetch('http://localhost:5000/api/status');
+                log(`状态码: ${response.status}`);
+                const data = await response.json();
+                log(`响应: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log(`❌ 错误: ${error.message}`);
+            }
+        }
+
+        async function testInit() {
+            log('\n=== 测试 /api/init ===');
+            try {
+                const response = await fetch('http://localhost:5000/api/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                log(`状态码: ${response.status}`);
+                const data = await response.json();
+                log(`响应: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log(`❌ 错误: ${error.message}`);
+            }
+        }
+
+        log('页面加载完成，点击按钮开始测试');
+    </script>
+</body>
+</html>

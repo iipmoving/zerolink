@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-05-18T23:42:30.371Z",
+  "logicLayer": "JS",
+  "results": [
+    {
+      "step": "A1-初始上电",
+      "expected": "S_POWER_ON",
+      "result": "FAIL"
+    }
+  ]
+}

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>EMC 面板 - WASM集成演示</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #1a1a1a; 
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto;
+        }
+        h1 { 
+            text-align: center;
+            color: #4CAF50;
+        }
+        .panel-container {
+            position: relative;
+            width: 1000px;
+            height: 600px;
+            margin: 20px auto;
+            background: #2a2a2a;
+            border: 2px solid #555;
+            border-radius: 10px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .status-bar {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+        }
+        .status-item {
+            display: inline-block;
+            margin-right: 30px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎛️ EMC 面板 - WASM集成演示</h1>
+        
+        <div class="controls">
+            <button id="initBtn" onclick="initialize()">🔧 初始化WASM</button>
+            <button id="bindBtn" onclick="bindControls()" disabled>📋 绑定控件</button>
+            <button id="startBtn" onclick="startDemo()" disabled>▶️ 开始演示</button>
+            <button id="stopBtn" onclick="stopDemo()" disabled>⏹ 停止</button>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">状态: <span id="stateDisplay">未初始化</span></div>
+            <div class="status-item">显示: <span id="segDisplay">----</span></div>
+            <div class="status-item">周期: <span id="cycleCount">0</span></div>
+        </div>
+        
+        <div class="panel-container" id="panelContainer">
+            <canvas id="panelCanvas" width="1000" height="600"></canvas>
+        </div>
+        
+        <div class="log" id="consoleLog">等待初始化...</div>
+    </div>
+
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script src="js/control_binder.js"></script>
+    
+    <script>
+        let adapter = null;
+        let binder = null;
+        let canvas = null;
+        let ctx = null;
+        let cycleCount = 0;
+        let isRunning = false;
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('consoleLog');
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        async function initialize() {
+            try {
+                log('正在初始化WASM...');
+                document.getElementById('initBtn').disabled = true;
+                
+                adapter = new EmsWasmAdapter();
+                await adapter.init();
+                
+                log('✅ WASM初始化成功');
+                log('⚠️ 注意：上电后会自动进入自检流程（约3秒）');
+                log('   等待显示"---"后，点击电源键即可开机');
+                
+                document.getElementById('bindBtn').disabled = false;
+                
+                // 自动启动周期运行（关键！）
+                log('\n🔄 自动启动周期运行...');
+                cycleCount = 0;
+                adapter.startCycle(() => {
+                    cycleCount++;
+                    
+                    // 每50个周期更新一次显示
+                    if (cycleCount % 50 === 0) {
+                        updateDisplay();
+                        document.getElementById('cycleCount').textContent = cycleCount;
+                    }
+                });
+                log('✅ 周期运行已启动，系统将自动执行上电自检');
+                
+                // 更新状态显示
+                updateStatus();
+                
+            } catch (error) {
+                log(`❌ 初始化失败: ${error.message}`);
+                document.getElementById('initBtn').disabled = false;
+            }
+        }
+        
+        async function bindControls() {
+            try {
+                log('正在加载配置并绑定控件...');
+                document.getElementById('bindBtn').disabled = true;
+                
+                binder = new ControlBinder(adapter, 'new.json');
+                const success = await binder.loadAndBind();
+                
+                if (success) {
+                    log('✅ 控件绑定成功');
+                    log(`   按键: ${binder.getKeys().join(', ')}`);
+                    log(`   LED: ${binder.getLeds().join(', ')}`);
+                    log(`   数码管: ${binder.getSegments().join(', ')}`);
+                    
+                    // 设置Canvas
+                    setupCanvas();
+                    
+                    document.getElementById('startBtn').disabled = false;
+                } else {
+                    log('❌ 控件绑定失败');
+                    document.getElementById('bindBtn').disabled = false;
+                }
+                
+            } catch (error) {
+                log(`❌ 绑定失败: ${error.message}`);
+                document.getElementById('bindBtn').disabled = false;
+            }
+        }
+        
+        function setupCanvas() {
+            canvas = document.getElementById('panelCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // 绘制背景
+            drawBackground();
+            
+            // 绘制控件
+            drawControls();
+            
+            // 绑定点击事件
+            canvas.addEventListener('click', handleCanvasClick);
+            
+            log('Canvas设置完成，可以点击按键测试');
+        }
+        
+        function drawBackground() {
+            // 绘制深色背景
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制标题
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('EMC 控制面板', canvas.width / 2, 40);
+        }
+        
+        function drawControls() {
+            if (!binder) return;
+            
+            // 绘制按键
+            binder.controls.forEach(control => {
+                if (control.type === '按键') {
+                    drawButton(control);
+                } else if (control.type === 'LED灯') {
+                    drawLed(control, false);
+                } else if (control.type === '数码管') {
+                    drawSegment(control, '----');
+                }
+            });
+        }
+        
+        function drawButton(control) {
+            const x = control.x;
+            const y = control.y;
+            const w = control.width;
+            const h = control.height;
+            
+            // 绘制按钮背景
+            ctx.fillStyle = control.bg_color || '#2a2a2a';
+            ctx.strokeStyle = control.border_color || '#555';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 5);
+            ctx.fill();
+            ctx.stroke();
+            
+            // 绘制按钮文字
+            ctx.fillStyle = control.text_color || '#ccc';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(control.name, x + w/2, y + h/2);
+        }
+        
+        function drawLed(control, isOn) {
+            const x = control.x;
+            const y = control.y;
+            const size = control.width;
+            
+            // 绘制LED
+            ctx.fillStyle = isOn ? '#00ff00' : (control.bg_color || '#333');
+            ctx.strokeStyle = control.border_color || '#555';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // 绘制LED标签
+            ctx.fillStyle = '#aaa';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(control.name, x + size/2, y + size + 12);
+        }
+        
+        function drawSegment(control, text) {
+            const x = control.x;
+            const y = control.y;
+            const w = control.width;
+            const h = control.height;
+            
+            // 绘制数码管背景
+            ctx.fillStyle = control.bg_color || '#111';
+            ctx.strokeStyle = control.border_color || '#555';
+            ctx.lineWidth = 2;
+            
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeRect(x, y, w, h);
+            
+            // 绘制数码管文字
+            ctx.fillStyle = control.text_color || '#4f4';
+            ctx.font = 'bold 36px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x + w/2, y + h/2);
+        }
+        
+        function handleCanvasClick(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            if (binder.handleCanvasClick(x, y)) {
+                log(`👆 点击坐标: (${x.toFixed(0)}, ${y.toFixed(0)})`);
+                
+                // 立即更新显示（无需延迟）
+                setTimeout(() => {
+                    updateDisplay();
+                    const state = adapter.getState();
+                    const stateName = adapter.STATE_NAMES[state] || `UNKNOWN(${state})`;
+                    log(`   当前状态: ${stateName}`);
+                }, 50);
+            } else {
+                log(`❌ 点击位置无效: (${x.toFixed(0)}, ${y.toFixed(0)})`);
+            }
+        }
+        
+        async function startDemo() {
+            if (!adapter || !binder) {
+                log('❌ 请先初始化和绑定控件');
+                return;
+            }
+            
+            log('\n========== 演示已就绪 ==========');
+            log('💡 操作提示：');
+            log('   1. 等待上电自检完成（显示"---"）');
+            log('   2. 点击Canvas上的"电源"键开机');
+            log('   3. 点击功能键（M1-M10）选择模式');
+            log('   4. 观察LED和数码管的变化');
+            
+            isRunning = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+        }
+        
+        function stopDemo() {
+            if (adapter) {
+                adapter.stopCycle();
+                log('⏹ 周期运行已停止');
+            }
+            
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        }
+        
+        function updateDisplay() {
+            if (!adapter || !binder) return;
+            
+            // 同步显示
+            const status = binder.syncDisplay();
+            
+            // 更新状态栏
+            document.getElementById('stateDisplay').textContent = status.stateName;
+            document.getElementById('segDisplay').textContent = status.display;
+            
+            // 重绘Canvas
+            redrawCanvas(status);
+        }
+        
+        function updateStatus() {
+            if (!adapter) return;
+            
+            const state = adapter.getState();
+            const stateName = adapter.getStateName();
+            const display = adapter.getDisplayString();
+            
+            document.getElementById('stateDisplay').textContent = stateName;
+            document.getElementById('segDisplay').textContent = display;
+        }
+        
+        function redrawCanvas(status) {
+            if (!ctx || !binder) return;
+            
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制背景
+            drawBackground();
+            
+            // 绘制所有控件
+            binder.controls.forEach(control => {
+                if (control.type === '按键') {
+                    drawButton(control);
+                } else if (control.type === 'LED灯') {
+                    // 根据LED状态绘制
+                    const ledState = status.led || {};
+                    const ledKey = binder.LED_NAME_MAP[control.name];
+                    let isOn = false;
+                    
+                    if (ledKey && ledState[ledKey] !== undefined) {
+                        isOn = ledState[ledKey];
+                    }
+                    
+                    drawLed(control, isOn);
+                } else if (control.type === '数码管') {
+                    drawSegment(control, status.display || '----');
+                }
+            });
+        }
+        
+        // 页面加载提示
+        window.onload = () => {
+            log('页面加载完成，点击"初始化WASM"开始');
+        };
+    </script>
+</body>
+</html>

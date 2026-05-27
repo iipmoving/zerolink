@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "description": "控件名称与数组索引的映射配置",
+  "key_mapping": {
+    "description": "按键名称到KeyCode的映射（用于WASM按键事件）",
+    "mappings": [
+      {"name": "开始 / 暂停", "code": 13, "description": "启动/暂停烹饪"},
+      {"name": "加水", "code": 11, "description": "增加水量"},
+      {"name": "加时间", "code": 12, "description": "增加烹饪时间"},
+      {"name": "M1", "code": 1, "description": "功能选择1"},
+      {"name": "M2", "code": 2, "description": "功能选择2"},
+      {"name": "M3", "code": 3, "description": "功能选择3"},
+      {"name": "M4", "code": 4, "description": "功能选择4"},
+      {"name": "M5", "code": 5, "description": "功能选择5"},
+      {"name": "M6", "code": 6, "description": "功能选择6"},
+      {"name": "M7", "code": 7, "description": "功能选择7"},
+      {"name": "M8", "code": 8, "description": "功能选择8"},
+      {"name": "M9", "code": 9, "description": "功能选择9"},
+      {"name": "M10", "code": 10, "description": "功能选择10"}
+    ]
+  },
+  "led_mapping": {
+    "description": "LED名称到位号的映射（用于dllState.ledBits数组索引）",
+    "mappings": [
+      {"name": "电源灯", "index": 0, "description": "系统电源状态指示"},
+      {"name": "M1 灯", "index": 1, "description": "功能1选择指示"},
+      {"name": "M2 灯", "index": 2, "description": "功能2选择指示"},
+      {"name": "M3 灯", "index": 3, "description": "功能3选择指示"},
+      {"name": "M4 灯", "index": 4, "description": "功能4选择指示"},
+      {"name": "M5 灯", "index": 5, "description": "功能5选择指示"},
+      {"name": "M6 灯", "index": 6, "description": "功能6选择指示"},
+      {"name": "M7 灯", "index": 7, "description": "功能7选择指示"},
+      {"name": "M8 灯", "index": 8, "description": "功能8选择指示"},
+      {"name": "M9 灯", "index": 9, "description": "功能9选择指示"},
+      {"name": "M10 灯", "index": 10, "description": "功能10选择指示"},
+      {"name": "加水灯", "index": 11, "description": "加水操作指示"},
+      {"name": "加时间灯", "index": 12, "description": "加时间操作指示"},
+      {"name": "mL 指示灯", "index": 13, "description": "水量显示指示"},
+      {"name": "定时指示灯", "index": 14, "description": "定时显示指示"}
+    ]
+  },
+  "segment_mapping": {
+    "description": "数码管显示映射（用于dllState.seg数组）",
+    "mappings": [
+      {"name": "seg_0", "index": 0, "description": "第1位数码管（最左）"},
+      {"name": "seg_1", "index": 1, "description": "第2位数码管"},
+      {"name": "seg_2", "index": 2, "description": "第3位数码管"},
+      {"name": "seg_3", "index": 3, "description": "第4位数码管（最右）"}
+    ]
+  }
+}

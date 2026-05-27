@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WASM回调机制测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; font-size: 16px; }
+        .log { background: #263238; color: #aed581; padding: 15px; border-radius: 4px; 
+               font-family: monospace; white-space: pre-wrap; margin-top: 20px; min-height: 200px; }
+        .status { margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 WASM回调机制测试</h1>
+        
+        <div>
+            <button onclick="testInit()">1. 初始化WASM</button>
+            <button onclick="testCycle()">2. 运行周期</button>
+            <button onclick="checkState()">3. 检查状态</button>
+        </div>
+        
+        <div class="status" id="status">
+            <strong>当前状态:</strong> 等待初始化...
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+    
+    <script src="wasm/emc_test.js"></script>
+    <script src="js/ems_wasm_adapter.js"></script>
+    <script>
+        let adapter = null;
+        
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${time}] ${msg}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        async function testInit() {
+            try {
+                log('正在初始化WASM...');
+                
+                adapter = new EmsWasmAdapter();
+                await adapter.init();
+                
+                log('✅ WASM初始化成功');
+                log('✅ 回调函数已注册');
+                
+                document.getElementById('status').innerHTML = '<strong>当前状态:</strong> 已初始化，可以运行周期';
+            } catch (error) {
+                log('❌ 初始化失败: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        function testCycle() {
+            if (!adapter) {
+                log('❌ 请先初始化WASM');
+                return;
+            }
+            
+            log('\n运行10个周期...');
+            for (let i = 0; i < 10; i++) {
+                adapter.runCycle();
+            }
+            
+            log('✅ 周期运行完成');
+        }
+        
+        function checkState() {
+            if (!adapter) {
+                log('❌ 请先初始化WASM');
+                return;
+            }
+            
+            const state = adapter.getState();
+            const display = adapter.getDisplay();
+            const led = adapter.getLedState();
+            
+            log('\n========== 状态信息 ==========');
+            log(`状态码: ${state}`);
+            log(`状态名: ${adapter.STATE_NAMES[state] || 'UNKNOWN'}`);
+            log(`数码管: ${display.display}`);
+            log(`段码: ${display.seg.map(c => '0x' + c.toString(16).toUpperCase().padStart(2, '0')).join(', ')}`);
+            log(`LED状态:`);
+            log(`  - 电源灯: ${led.power ? '亮' : '灭'}`);
+            log(`  - 功能灯: 0x${led.func_leds.toString(16).toUpperCase()}`);
+            log(`  - 加水灯: ${led.add_water ? '亮' : '灭'}`);
+            log(`  - 加时灯: ${led.add_time ? '亮' : '灭'}`);
+            
+            document.getElementById('status').innerHTML = `
+                <strong>当前状态:</strong> ${adapter.STATE_NAMES[state]}<br>
+                <strong>数码管显示:</strong> ${display.display}<br>
+                <strong>电源灯:</strong> ${led.power ? '✅ 亮' : '❌ 灭'}<br>
+                <strong>M1-M10灯:</strong> ${led.func_leds > 0 ? '✅ 亮' : '❌ 灭'}
+            `;
+        }
+    </script>
+</body>
+</html>
