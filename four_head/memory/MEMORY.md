@@ -1,3 +1,4 @@
+- [★ 我们与 AI 是方法论的共同缔造者](user_role-methodology-co-creator.md) — 角色从项目执行者转为约束系统构建者，L0-L2 阻断层级，2026-05-27 确立
 - [JSON覆盖率是核心目标](feedback_json_coverage.md) — 三层剥离架构：Zone Logic / JSON Binding / Presentation Controls
 - [核心设计原则: 孤岛隔离](design-principle-json-isolation.md) — 可配置→JSON声明，执行函数→单向独立，问题→隔离处理
 - [P0-1 四项低难度JSON化完成](project_p0-1-complete.md) — 覆盖率 62%→68%，34/34 测试通过
