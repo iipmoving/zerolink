@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>SC32L14xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\FWLib\SC32F1XXX_Lib\inc;..\CMSIS;..\MCU_Drivers;..\Claude\app;..\Claude;..\Claude\src;..\Claude\test;..\Claude\hal;..\Claude\core;..\Claude\drv</IncludePath>
+              <IncludePath>..\src\vendor\FWLib\SC32F1XXX_Lib\inc;..\src\vendor\CMSIS;..\src\vendor\MCU_Drivers;..\src\app;..\src;..\src\hal;..\src\core;..\src\drv;..\src\proto;..\src\cfg</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -386,57 +386,57 @@
             <File>
               <FileName>sc32f1xxx_iap.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_iap.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_iap.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_crc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_crc.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_crc.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_wdt.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_wdt.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_wdt.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_btm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_btm.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_btm.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_adc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_adc.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_adc.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_tim.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_tim.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_tim.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_rcc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_rcc.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_rcc.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_uart.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_uart.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_uart.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_option.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_option.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_option.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_gpio.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_gpio.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_gpio.c</FilePath>
             </File>
             <File>
               <FileName>sc32f1xxx_temper.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_temper.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_temper.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -492,7 +492,7 @@
             <File>
               <FileName>sc32f1xxx_twi.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_twi.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_twi.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -548,7 +548,7 @@
             <File>
               <FileName>sc32f1xxx_dma.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_dma.c</FilePath>
+              <FilePath>..\src\vendor\FWLib\SC32F1XXX_Lib\src\sc32f1xxx_dma.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -568,7 +568,7 @@
             <File>
               <FileName>msg_scheduler.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\core\msg_scheduler.c</FilePath>
+              <FilePath>..\src\core\msg_scheduler.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -578,42 +578,42 @@
             <File>
               <FileName>hal_gpio.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_gpio.c</FilePath>
+              <FilePath>..\src\hal\hal_gpio.c</FilePath>
             </File>
             <File>
               <FileName>hal_timer.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_timer.c</FilePath>
+              <FilePath>..\src\hal\hal_timer.c</FilePath>
             </File>
             <File>
               <FileName>hal_uart.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_uart.c</FilePath>
+              <FilePath>..\src\hal\hal_uart.c</FilePath>
             </File>
             <File>
               <FileName>hal_key.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_key.c</FilePath>
+              <FilePath>..\src\hal\hal_key.c</FilePath>
             </File>
             <File>
               <FileName>hal_comm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_comm.c</FilePath>
+              <FilePath>..\src\hal\hal_comm.c</FilePath>
             </File>
             <File>
               <FileName>hal_display.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_display.c</FilePath>
+              <FilePath>..\src\hal\hal_display.c</FilePath>
             </File>
             <File>
               <FileName>hal_buzzer.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_buzzer.c</FilePath>
+              <FilePath>..\src\hal\hal_buzzer.c</FilePath>
             </File>
             <File>
               <FileName>hal_smg.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\hal\hal_smg.c</FilePath>
+              <FilePath>..\src\hal\hal_smg.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -623,7 +623,7 @@
             <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\src\main.c</FilePath>
+              <FilePath>..\src\main.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -702,12 +702,12 @@
             <File>
               <FileName>test_module_a.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\test\test_module_a.c</FilePath>
+              <FilePath>..\test\test_module_a.c</FilePath>
             </File>
             <File>
               <FileName>test_module_b.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\test\test_module_b.c</FilePath>
+              <FilePath>..\test\test_module_b.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -717,27 +717,27 @@
             <File>
               <FileName>app_comm_mgr.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\app\app_comm_mgr.c</FilePath>
+              <FilePath>..\src\app\app_comm_mgr.c</FilePath>
             </File>
             <File>
               <FileName>app_protect.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\app\app_protect.c</FilePath>
+              <FilePath>..\src\app\app_protect.c</FilePath>
             </File>
             <File>
               <FileName>app_power.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\app\app_power.c</FilePath>
+              <FilePath>..\src\app\app_power.c</FilePath>
             </File>
             <File>
               <FileName>app_cooking.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\app\app_cooking.c</FilePath>
+              <FilePath>..\src\app\app_cooking.c</FilePath>
             </File>
             <File>
               <FileName>app_hmi.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\app\app_hmi.c</FilePath>
+              <FilePath>..\src\app\app_hmi.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -750,37 +750,37 @@
             <File>
               <FileName>system_sc32f1xxx.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\four_head_ih_cooker1\lib\system_sc32f1xxx.c</FilePath>
+              <FilePath>..\src\vendor\lib\system_sc32f1xxx.c</FilePath>
             </File>
             <File>
               <FileName>SC_TK_Scan.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\lib\SC_TK_Scan.c</FilePath>
+              <FilePath>..\src\vendor\lib\SC_TK_Scan.c</FilePath>
             </File>
             <File>
               <FileName>SMG_Disp_General_Lib_1.5.lib</FileName>
               <FileType>4</FileType>
-              <FilePath>..\Claude\lib\SMG_Disp_General_Lib_1.5.lib</FilePath>
+              <FilePath>..\src\vendor\lib\SMG_Disp_General_Lib_1.5.lib</FilePath>
             </File>
             <File>
               <FileName>SC32L14xx_DynamicDebug_V0.1.lib</FileName>
               <FileType>4</FileType>
-              <FilePath>..\MCU_Drivers\SOC_DebugTouchKey_Lib\SC32L14xx_DynamicDebug_V0.1.lib</FilePath>
+              <FilePath>..\src\vendor\MCU_Drivers\SOC_DebugTouchKey_Lib\SC32L14xx_DynamicDebug_V0.1.lib</FilePath>
             </File>
             <File>
               <FileName>SC_M0+_HighSensitive_lib_Basic_V1.0.lib</FileName>
               <FileType>4</FileType>
-              <FilePath>..\MCU_Drivers\TKDriverNew\SC_M0+_HighSensitive_lib_Basic_V1.0.lib</FilePath>
+              <FilePath>..\src\vendor\MCU_Drivers\TKDriverNew\SC_M0+_HighSensitive_lib_Basic_V1.0.lib</FilePath>
             </File>
             <File>
               <FileName>SC_M0+_HighSensitive_lib_T1_V1.0.lib</FileName>
               <FileType>4</FileType>
-              <FilePath>..\MCU_Drivers\TKDriverNew\SC_M0+_HighSensitive_lib_T1_V1.0.lib</FilePath>
+              <FilePath>..\src\vendor\MCU_Drivers\TKDriverNew\SC_M0+_HighSensitive_lib_T1_V1.0.lib</FilePath>
             </File>
             <File>
               <FileName>TKDriver.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\MCU_Drivers\TKDriverNew\TKDriver.c</FilePath>
+              <FilePath>..\src\vendor\MCU_Drivers\TKDriverNew\TKDriver.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -790,17 +790,17 @@
             <File>
               <FileName>drv_key.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\drv\drv_key.c</FilePath>
+              <FilePath>..\src\drv\drv_key.c</FilePath>
             </File>
             <File>
               <FileName>drv_display.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\drv\drv_display.c</FilePath>
+              <FilePath>..\src\drv\drv_display.c</FilePath>
             </File>
             <File>
               <FileName>drv_buzzer.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\drv\drv_buzzer.c</FilePath>
+              <FilePath>..\src\drv\drv_buzzer.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -810,7 +810,7 @@
             <File>
               <FileName>proto_modbus.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\proto\proto_modbus.c</FilePath>
+              <FilePath>..\src\proto\proto_modbus.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -820,7 +820,7 @@
             <File>
               <FileName>hmi_data.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Claude\cfg\hmi_data.c</FilePath>
+              <FilePath>..\src\cfg\hmi_data.c</FilePath>
             </File>
           </Files>
         </Group>
