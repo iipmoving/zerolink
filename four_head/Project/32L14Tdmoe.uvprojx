@@ -708,6 +708,16 @@
               <FileType>1</FileType>
               <FilePath>..\src\drv\drv_buzzer.c</FilePath>
             </File>
+            <File>
+              <FileName>drv_comm_mgr.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\drv\drv_comm_mgr.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_comm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\drv\drv_comm.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
