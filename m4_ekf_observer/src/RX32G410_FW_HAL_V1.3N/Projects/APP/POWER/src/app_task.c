@@ -279,7 +279,7 @@ void SystemInitial(void)
 
 //	API_HRTIM_SetDmaHandle();
 	API_HRTIM1_Init();
-	API_HRTIM_MasterSync_InitMaster(MIN_FRE_PWM);      // Master 周期 = 基频
+	API_HRTIM_MasterSync_InitMaster(MAX_FRE_PWM*2);      // Master 周期 = 基频
 	
 #if 0	
 #include "API_hrtim_fullbridge.h"	
@@ -316,7 +316,8 @@ API_FB_Stop(PotCh2);
 	PPGvalueDef		value;
 	value.duty=PAN_FRE_PWM;
 	value.prioed=PAN_FRE_PWM*2;
-
+	
+	API_HRTIM_MasterSync_SetPeriod(value.prioed);
 	API_PPG_setValue(PotCh1,value);
 	API_PPG_setValue(PotCh2,value);
 	API_PPG_setValue(PotCh3,value);	
@@ -324,7 +325,7 @@ API_FB_Stop(PotCh2);
 	API_PPG_setValue(PotChTest1,value);	
 	API_PPG_setValue(PotChBase,value);		
   /* Enable HRTIM's outputs TD1 and start Timer D */
-	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
+//	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
 	
 	API_I2C_Init();
 	API_TIM_INIT();

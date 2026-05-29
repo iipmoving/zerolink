@@ -12,7 +12,7 @@
 #define TIMD_PWM_FREQ               100000
 #define TIMD_DUTY_CYCLE             0.5
 
-//extern HRTIM_HandleTypeDef hhrtim1;
+
 
 
 enum{
@@ -335,10 +335,10 @@ void	API_PPG_SET_SINGLE(uint8_t ch);
 
 
 void		API_PPG_setPluse(uint8_t ppgCh ,uint16_t value);	
-void		API_PPG_setPeriodChx(uint8_t ppgCh ,uint16_t value);	
+//void		API_PPG_setPeriodChx(uint8_t ppgCh ,uint16_t value);	
 
 void		API_PPG_setValueChx(uint8_t ppgCh ,uint16_t period,uint16_t duty);
-void		API_PPG_setPeriod(uint16_t value);			//设置PWM输出周期
+//void		API_PPG_setPeriod(uint16_t value);			//设置PWM输出周期
 
 
 void				API_PPG_DeadTime(uint8_t ppgCh,uint8_t upDts,uint8_t downDts);		//死区时间设置 
@@ -413,6 +413,7 @@ void API_HRTIM_MasterSync_InitMaster(uint16_t masterPeriod);
 void API_HRTIM_MasterSync_ConfigSlave(uint8_t ch, uint16_t slavePeriod);
 void API_HRTIM_MasterSync_StartAll(void);
 void API_HRTIM_MasterSync_StopAll(void);
+void API_HRTIM_MasterSync_SetPeriod(uint16_t masterPeriod);
 
 
 // 寄存器地址定义（需根据实际硬件手册补充）

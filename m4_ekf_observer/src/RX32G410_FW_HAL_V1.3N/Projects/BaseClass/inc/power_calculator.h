@@ -4,66 +4,66 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ¹¤×÷ÖÜÆÚ¶¨Òå
+// å·¥ä½œå‘¨æœŸå®šä¹‰
 typedef struct {
-    uint16_t start;         //HRTIM¿ªÊ¼µã
-    uint16_t end;            //HRTIM½áÊøµã   
+    uint16_t start;         //HRTIMå¼€å§‹ç‚¹
+    uint16_t end;            //HRTIMç»“æŸç‚¹   
 
 	
-    uint16_t highOn;		    //ËÀÇøºó¸ß¶Ë¿ªÍ¨HRTIMÖµ
-	uint16_t highOff;			//¸ß¶Ë¹Ø±Õ£¬Ò²¾ÍÊÇDUTY PPGÕ¼¿Õ±È 
+    uint16_t highOn;		    //æ­»åŒºåé«˜ç«¯å¼€é€šHRTIMå€¼
+	uint16_t highOff;			//é«˜ç«¯å…³é—­ï¼Œä¹Ÿå°±æ˜¯DUTY PPGå ç©ºæ¯” 
 	
-    uint16_t lowOn;		        //ËÀÇøºóµÍ¶Ë¿ªÍ¨
-	uint16_t lowOff;			//µÍ¶Ë¹Ø±Õ£¬Ò²¾ÍÊÇprioed	PPGÖÜÆÚ
+    uint16_t lowOn;		        //æ­»åŒºåä½ç«¯å¼€é€š
+	uint16_t lowOff;			//ä½ç«¯å…³é—­ï¼Œä¹Ÿå°±æ˜¯prioed	PPGå‘¨æœŸ
    
-    uint16_t zero_cross_high; // ¸ß¶Ë¹ıÁãµãË÷Òı
-    uint16_t zero_cross_low;  // µÍ¶Ë¹ıÁãµãË÷Òı
+    uint16_t zero_cross_high; // é«˜ç«¯è¿‡é›¶ç‚¹ç´¢å¼•
+    uint16_t zero_cross_low;  // ä½ç«¯è¿‡é›¶ç‚¹ç´¢å¼•
 	
-		uint16_t perAdc;				//Ã¿¸öADC¶ÔÓ¦µÄHRTIMÖµ
-		uint16_t lagDuty;  // æ»åè‡‚å ç©ºæ¯”CMPå€¼ï¼ˆå…¨æ¡¥ï¼‰
-}PowerCalculatorInputDef;	        //Ğ³ÕñµçÁ÷¼ÆËãÊäÈë²ÎÊı
+		uint16_t perAdc;				//æ¯ä¸ªADCå¯¹åº”çš„HRTIMå€¼
+		uint16_t lagDuty;  // å©Šç‚²æ‚—é‘·å‚šå´°ç»Œçƒ˜ç˜®CMPéŠç¡·ç´™éã„¦Ë‰é”›ï¿½
+}PowerCalculatorInputDef;	        //è°æŒ¯ç”µæµè®¡ç®—è¾“å…¥å‚æ•°
 
-// ·åÖµµçÁ÷ĞÅÏ¢
+// å³°å€¼ç”µæµä¿¡æ¯
 typedef struct {
-    uint16_t index;   // ·åÖµË÷Òı
-    uint16_t value;   // ·åÖµµçÁ÷Öµ
+    uint16_t index;   // å³°å€¼ç´¢å¼•
+    uint16_t value;   // å³°å€¼ç”µæµå€¼
 }PeakInfo;
 
 
 typedef struct {
-    uint32_t voltage;   // ·åÖµË÷Òı
-    uint32_t current;   // ·åÖµµçÁ÷Öµ
+    uint32_t voltage;   // å³°å€¼ç´¢å¼•
+    uint32_t current;   // å³°å€¼ç”µæµå€¼
 }CalculatorResultDef;
 
 
 
-// ¹¦ÂÊ¼ÆËã½á¹û
+// åŠŸç‡è®¡ç®—ç»“æœ
 typedef struct {
-    int32_t active_power;     // ÓĞ¹¦¹¦ÂÊ
-    int32_t active_current;   // ÎŞ¹¦¹¦ÂÊ
+    int32_t active_power;     // æœ‰åŠŸåŠŸç‡
+    int32_t active_current;   // æ— åŠŸåŠŸç‡
 
-		uint16_t peak_current;    	// ·åÖµµçÁ÷
-    uint16_t zero_current;    	// ¹ıÁãµãµçÁ÷Öµ   
+		uint16_t peak_current;    	// å³°å€¼ç”µæµ
+    uint16_t zero_current;    	// è¿‡é›¶ç‚¹ç”µæµå€¼   
 	
-		int16_t phase_angleUp;      // ÏàÎ»½Ç£¨¶È*100£©
+		int16_t phase_angleUp;      // ç›¸ä½è§’ï¼ˆåº¦*100ï¼‰
     int16_t phase_angleDown;
 
-    uint16_t zero_cross_high; // ¸ß¶Ë¹ıÁãµãË÷Òı
-    uint16_t zero_cross_low;  // µÍ¶Ë¹ıÁãµãË÷Òı
+    uint16_t zero_cross_high; // é«˜ç«¯è¿‡é›¶ç‚¹ç´¢å¼•
+    uint16_t zero_cross_low;  // ä½ç«¯è¿‡é›¶ç‚¹ç´¢å¼•
 
-    uint16_t esr;               //µÈĞ§µç×è
+    uint16_t esr;               //ç­‰æ•ˆç”µé˜»
     uint16_t voltage; 
 
 }PowerResult;
 
 /**
- * @brief ¼ÆËã¹¦ÂÊ¼°Ïà¹Ø²ÎÊı
- * @param resonant_current Ğ³ÕñµçÁ÷Êı×é
- * @param hrtim_values HRTIMÊ±¼ä´ÁÊı×é
- * @param voltage_data µçÑ¹Êı¾İ£¨¿ÉÑ¡£©
- * @param count Êı¾İµãÊıÁ¿
- * @param ppg ¹¤×÷ÖÜÆÚ¶¨Òå
- * @return PowerResult ¼ÆËã½á¹û½á¹¹Ìå
+ * @brief è®¡ç®—åŠŸç‡åŠç›¸å…³å‚æ•°
+ * @param resonant_current è°æŒ¯ç”µæµæ•°ç»„
+ * @param hrtim_values HRTIMæ—¶é—´æˆ³æ•°ç»„
+ * @param voltage_data ç”µå‹æ•°æ®ï¼ˆå¯é€‰ï¼‰
+ * @param count æ•°æ®ç‚¹æ•°é‡
+ * @param ppg å·¥ä½œå‘¨æœŸå®šä¹‰
+ * @return PowerResult è®¡ç®—ç»“æœç»“æ„ä½“
  */
 PowerResult CalculatePower(
     uint16_t* resonant_current,
@@ -71,17 +71,17 @@ PowerResult CalculatePower(
     uint16_t* voltage_data,
     PowerCalculatorInputDef* input
 );
-int16_t * Power_Calculator_GetVoltageBuffAddress(uint8_t ch);		//µÃµ½µçÑ¹µ÷ÊÔÊı¾İ
-int16_t * Power_Calculator_GetHrtimBuffAddress(uint8_t ch);       //µÃµ½µ÷ÊÔHRTIMµØÖ·
-int16_t * Power_Calculator_GetTxaBuffAddress(uint8_t ch);       //µÃµ½µ÷ÊÔÊı¾İµØÖ·
-int16_t Power_Calculator_GetTxaBuffSize(uint8_t ch);			//µÃµ½µ÷ÊÔÊı¾İ´óĞ¡
+int16_t * Power_Calculator_GetVoltageBuffAddress(uint8_t ch);		//å¾—åˆ°ç”µå‹è°ƒè¯•æ•°æ®
+int16_t * Power_Calculator_GetHrtimBuffAddress(uint8_t ch);       //å¾—åˆ°è°ƒè¯•HRTIMåœ°å€
+int16_t * Power_Calculator_GetTxaBuffAddress(uint8_t ch);       //å¾—åˆ°è°ƒè¯•æ•°æ®åœ°å€
+int16_t Power_Calculator_GetTxaBuffSize(uint8_t ch);			//å¾—åˆ°è°ƒè¯•æ•°æ®å¤§å°
 PowerCalculatorInputDef*	Power_Calculator_GetInputArrayAddress(uint8_t ch);
 
 
-#define     ZERO_WINDOW_MIN     8           //¹ıÁã×îĞ¡¼ì²â´°¿Ú£¬+- 2* ZERO_WINDOW_MIN+1 ¸öµã
+#define     ZERO_WINDOW_MIN     8           //è¿‡é›¶æœ€å°æ£€æµ‹çª—å£ï¼Œ+- 2* ZERO_WINDOW_MIN+1 ä¸ªç‚¹
 
 #define testCh	0
-
+#define		PHASE_DEG_BASE		1800   //180.0æ´ï¿½
 #endif // POWER_CALCULATOR_H
 
 

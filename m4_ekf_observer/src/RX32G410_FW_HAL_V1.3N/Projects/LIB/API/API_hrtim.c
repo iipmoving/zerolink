@@ -765,7 +765,7 @@ void API_HRTIM1_Init(void)
     hhrtim1.Instance = HRTIM1;
     hhrtim1.Init.HRTIMInterruptResquests = HRTIM_IT_NONE;
     hhrtim1.Init.SyncOptions = HRTIM_SYNCOPTION_SLAVE|HRTIM_SYNCOPTION_MASTER;												//触发从模式							
-    hhrtim1.Init.SyncInputSource = HRTIM_SYNCINPUTSOURCE_EXTERNALEVENT;				//外部触发(IO口触发同步  PB6定义为触发口HRTIM_SCIN)
+    hhrtim1.Init.SyncInputSource =	HRTIM_SYNCINPUTSOURCE_NONE; //HRTIM_SYNCINPUTSOURCE_EXTERNALEVENT;				//外部触发(IO口触发同步  PB6定义为触发口HRTIM_SCIN)
 //    hhrtim1.Init.SyncOutputSource = HRTIM_SYNCOUTPUTSOURCE_TIMA_START;
     hhrtim1.Init.SyncOutputSource = HRTIM_SYNCOUTPUTSOURCE_TIMA_CMP1;       //与hrtim_out_sync2关联，触发TIM_BLANKING,
     hhrtim1.Init.SyncOutputPolarity = HRTIM_SYNCOUTPUTPOLARITY_POSITIVE;
@@ -1014,23 +1014,23 @@ inline void		API_PPG_setValueChx(uint8_t ppgCh ,uint16_t period,uint16_t duty)
 	timer->CMP3xR=duty+BLKS_DIV;
 }
 
-inline void		API_PPG_setPeriodChx(uint8_t ppgCh ,uint16_t period)	
-{
-	uint32_t ch=HRTIM_CFG_NUM[ppgCh].num;
-	HRTIM_Timerx_TypeDef*  timer=&hhrtim1.Instance->sTimerxRegs[ch];
-	timer->PERxR=period;
-}
+//inline void		API_PPG_setPeriodChx(uint8_t ppgCh ,uint16_t period)	
+//{
+//	uint32_t ch=HRTIM_CFG_NUM[ppgCh].num;
+//	HRTIM_Timerx_TypeDef*  timer=&hhrtim1.Instance->sTimerxRegs[ch];
+//	timer->PERxR=period;
+//}
 
 
-void		API_PPG_setPeriod(uint16_t value)			//设置PWM输出周期
-{
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A,value);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_B,value);	
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_C,value);	
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_D,value);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_E,value);	
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_F,value);		
-}
+//void		API_PPG_setPeriod(uint16_t value)			//设置PWM输出周期
+//{
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A,value);
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_B,value);	
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_C,value);	
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_D,value);
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_E,value);	
+//	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_F,value);		
+//}
 
 
 uint32_t    API_PPG_GetPeroid(uint8_t ppgCh)
@@ -1292,12 +1292,41 @@ void	API_HRTIM1_PAN_IRQHandler(uint8_t ch)		//检锅起振
       				//开始起振
 			break;
 			
+/*
+ * [原始版本 — 已废弃]
+ * 修改原因: 检锅结束后需恢复MASTER同步，在下一个零点与其他通道统一重新同步。
+ * 修改日期: 2026-05-28
+ *
 			case	PAN_END+1:
-				
-			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
-			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);	
 
-			
+			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
+			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+
+
+			break;
+*/
+
+// [新版本] 检锅结束 — 恢复输出 + 恢复MASTER同步
+// 修改原因: 检锅完成，该通道需要重新加入MASTER同步体系。
+//           恢复 UpdateTrigger=MASTER, ResetTrigger=MASTER_PER。
+//           下一次GPIO同步脉冲(API_GPIO_PinPull翻转SYN引脚)时，
+//           该通道在零点与其他MASTER通道统一重同步。
+// 修改日期: 2026-05-28
+			case	PAN_END+1:
+
+			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
+			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+
+			// ★ 修改: 恢复MASTER同步 — 重新配置为MASTER触发更新+MASTER周期复位
+			{
+				HRTIM_TimerCfgTypeDef pTimerCfg = PPGTimerCfg;
+				pTimerCfg.UpdateTrigger = HRTIM_TIMUPDATETRIGGER_MASTER;
+				pTimerCfg.ResetTrigger = HRTIM_TIMRESETTRIGGER_MASTER_PER;
+				pTimerCfg.FaultEnable = HRTIM_CFG_NUM[ch].FaultEnable;
+				pTimerCfg.DelayedProtectionMode = HRTIM_CFG_NUM[ch].DelayedProtectionMode;
+				HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_CFG_NUM[ch].num, &pTimerCfg);
+			}
+
 			break;
 			case	PAN_START_PPG_COUNT+1:
 
@@ -1562,86 +1591,17 @@ void	API_HRTIM_CountRest(uint8_t ch )
 }
 
 #define		SYN_BY_INT		1			//零点同步用中断保持上管先开通
-void 	TIMsynchronous(void)			//HRTIM同步
-{
-
-#if 0	
-	uint32_t  preiod;
-  uint32_t  duty;
-	uint8_t 	ch=PotCh1;
-	hrtimPan.ch=ch;
-
-		preiod=START_FRE_PWM*2;
-
-#if SYN_BY_INT	
-	hrtimPan.count=PAN_END;
-	duty=preiod*95/100;
-#else
-	duty=preiod*80/100;
-#endif	
-
-//		MX_HRTIM1_Init();
-//	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
-//	hhrtim1.Instance->sMasterRegs.MCR &= ~(HRTIM_MCR_SYNC_SRC);
-//  hhrtim1.Instance->sMasterRegs.MCR |= HRTIM_SYNCINPUTSOURCE_EXTERNALEVENT & HRTIM_MCR_SYNC_SRC;
-	hhrtim1.Instance->sTimerxRegs[0].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[1].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[2].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[3].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[4].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[5].TIMxCR&=	~HRTIM_PRELOAD_ENABLED;
-
-	__HAL_HRTIM_MASTER_CLEAR_IT(&hhrtim1,HRTIM_MASTER_IT_SYNC);
-	HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TB1|HRTIM_OUTPUT_TB2|HRTIM_OUTPUT_TE1|HRTIM_OUTPUT_TE2|HRTIM_OUTPUT_TA1|HRTIM_OUTPUT_TA2|HRTIM_OUTPUT_TD1|HRTIM_OUTPUT_TD2);
-	HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_TIMERID_TIMER_F|HRTIM_TIMERID_TIMER_B|HRTIM_TIMERID_TIMER_E|HRTIM_TIMERID_TIMER_A|HRTIM_TIMERID_TIMER_D|HRTIM_TIMERID_TIMER_C);
-#if SYN_BY_INT		
-	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A,COMPAREUNIT_PAN,duty);		
-	__HAL_HRTIM_TIMER_CLEAR_FLAG(&hhrtim1,	HRTIM_TIMERINDEX_TIMER_A,HRTIM1_PAN_ICR);
-	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A, HRTIM1_PAN_IT);	
-#endif
-
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_A,preiod);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_B,preiod);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_C,preiod);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_D,preiod);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_E,preiod);
-	__HAL_HRTIM_SETPERIOD(&hhrtim1,HRTIM_TIMERINDEX_TIMER_F,preiod);
 
 
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A,duty);
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_B,duty);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_C,duty);			
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D,duty);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E,duty);			
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F,duty);	
 
-
-	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_F|HRTIM_TIMERID_TIMER_B|HRTIM_TIMERID_TIMER_E|HRTIM_TIMERID_TIMER_A|HRTIM_TIMERID_TIMER_D|HRTIM_TIMERID_TIMER_C);
- 
-#if SYN_BY_INT	
-	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
-	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
-	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave|HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2);
-	
-#else
-	__disable_irq();	
-	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
-	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
-	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave|HRTIM_OUTPUT_TE1|HRTIM_OUTPUT_TE2);
-	
-  __enable_irq();
-#endif	
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[0].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[1].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[2].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[3].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[4].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-	hhrtim1.Instance->sTimerxRegs[HRTIM_CFG_NUM[5].num].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
-
-#endif
-}	
-
-
+/*
+ * [原始版本 — 已废弃]
+ * 修改原因: 原方案通过GPIO翻转SYN引脚实现过零同步（IO触发）。
+ *          改为MASTER同步后，同步源是MASTER定时器内部产生，
+ *          不再依赖外部GPIO引脚。改用 MasterSync_StartAll()
+ *          实现软件重同步——停止全部定时器(含MASTER)，统一从0启动。
+ * 修改日期: 2026-05-28
+ *
 void 	TIMsynchronousPower(void)			//HRTIM同步
 {
 
@@ -1667,20 +1627,20 @@ void 	TIMsynchronousPower(void)			//HRTIM同步
 	HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TB1|HRTIM_OUTPUT_TB2|HRTIM_OUTPUT_TE1|HRTIM_OUTPUT_TE2|HRTIM_OUTPUT_TA1|HRTIM_OUTPUT_TA2|HRTIM_OUTPUT_TD1|HRTIM_OUTPUT_TD2);
 	HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_TIMERID_TIMER_F|HRTIM_TIMERID_TIMER_B|HRTIM_TIMERID_TIMER_E|HRTIM_TIMERID_TIMER_A|HRTIM_TIMERID_TIMER_D|HRTIM_TIMERID_TIMER_C);
 
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A,period);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_B,period);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_C,period);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D,period);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E,period);	
-	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F,period);		
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_A,period);
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_B,period);
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_C,period);
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_D,period);
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E,period);
+	__HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F,period);
 
 	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_TIMER_F|HRTIM_TIMERID_TIMER_B|HRTIM_TIMERID_TIMER_E|HRTIM_TIMERID_TIMER_A|HRTIM_TIMERID_TIMER_D|HRTIM_TIMERID_TIMER_C);
- 
+
 
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
 	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave|HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2);
-	
+
 
 	hhrtim1.Instance->sTimerxRegs[0].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
 	hhrtim1.Instance->sTimerxRegs[1].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
@@ -1690,6 +1650,22 @@ void 	TIMsynchronousPower(void)			//HRTIM同步
 	hhrtim1.Instance->sTimerxRegs[5].TIMxCR|=	HRTIM_PRELOAD_ENABLED;
 
 
+}
+*/
+
+// [新版本] HRTIM MASTER同步 — 过零点软件重同步
+// 修改原因: MASTER同步模式下，同步源是MASTER定时器（内部产生），
+//          不再依赖GPIO翻转SYN引脚（IO触发）。
+//          通过 MasterSync_StartAll() 统一停止MASTER+全部Slave，
+//          计数器清零，同时启动。MASTER首次溢出时所有Slave统一复位同步。
+//          不再操作PRELOAD——MASTER同步要求预装载保持ENABLED。
+// 修改日期: 2026-05-28
+void 	TIMsynchronousPower(void)			//HRTIM同步 (MASTER模式)
+{
+	API_HRTIM_MasterSync_StartAll();
+
+	// 补充: StartAll 只恢复 HrtimOutPutPinSave，这里补上 Test 通道输出
+	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TC1 | HRTIM_OUTPUT_TC2);
 }	
 
 
@@ -1703,8 +1679,14 @@ void	API_HRTIM_WaitCom(uint8_t ch)
 
 }
 
+/*
+ * [原始版本 — 已废弃]
+ * 修改原因: 检锅炉头需要以独立频率发检锅脉冲，必须临时脱离MASTER同步约束。
+ *          检锅完成后在 PAN_END+1 中断中恢复MASTER同步。
+ * 修改日期: 2026-05-28
+ *
 void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
-{	
+{
 	uint32_t  period;
 	hrtimPan.ch=ch;
 	hrtimPan.count=0;
@@ -1714,7 +1696,7 @@ void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
 
 	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ch].num,COMPAREUNIT_PAN,period);
 	__HAL_HRTIM_TIMER_CLEAR_FLAG(&hhrtim1,	HRTIM_CFG_NUM[ch].num,HRTIM1_PAN_ICR);
-	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);	
+	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
   __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_CFG_NUM[ch].num,0);
 
 	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
@@ -1722,6 +1704,39 @@ void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);          //等待HRTIM中断停止
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
 //	API_PPG_OnOff_NoFault(ch,1);
+
+
+}
+*/
+
+// [新版本] 检锅脉冲检查 — 临时脱离MASTER同步
+// 修改原因: 检锅炉头需以独立频率发脉冲，必须临时解除MASTER同步约束。
+//           WaveformCountStop后立即调用 API_PPG_SET_CONTINUOUS 恢复独立连续模式，
+//           使该通道的 UpdateTrigger/ResetTrigger 回到 NONE，不受后续GPIO同步脉冲影响。
+//           PAN_END+1 中断中恢复MASTER同步配置，下一个零点与其他通道统一重同步。
+// 修改日期: 2026-05-28
+void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
+{
+	uint32_t  period;
+	hrtimPan.ch=ch;
+	hrtimPan.count=0;
+	period=__HAL_HRTIM_GETPERIOD(&hhrtim1,HRTIM_CFG_NUM[ch].num);
+	period=period*6/10;
+  HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
+
+	// ★ 修改: 解除MASTER同步，恢复独立连续模式 (UpdateTrigger/ResetTrigger → NONE)
+	//         使检锅脉冲以独立频率运行，不受MASTER同步脉冲影响
+	API_PPG_SET_CONTINUOUS(ch);
+
+	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ch].num,COMPAREUNIT_PAN,period);
+	__HAL_HRTIM_TIMER_CLEAR_FLAG(&hhrtim1,	HRTIM_CFG_NUM[ch].num,HRTIM1_PAN_ICR);
+	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+  __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_CFG_NUM[ch].num,0);
+
+	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
+
+	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);          //等待HRTIM中断停止
+	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
 
 
 }
@@ -1755,19 +1770,16 @@ void API_HRTIM_MasterSync_InitMaster(uint16_t masterPeriod)
     HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_TIMERINDEX_MASTER);
 }
 
+void API_HRTIM_MasterSync_SetPeriod(uint16_t masterPeriod)
+{
+    hhrtim1.Instance->sMasterRegs.MPER = masterPeriod;
+}
+
 void API_HRTIM_MasterSync_ConfigSlave(uint8_t ch, uint16_t slavePeriod)
 {
     uint32_t timerIdx = HRTIM_CFG_NUM[ch].num;
 
-    /* 保存旧周期和占空比, 用于按比例缩放 CMP */
-    uint16_t oldPeriod = __HAL_HRTIM_GETPERIOD(&hhrtim1, timerIdx);
-    uint16_t oldDuty   = __HAL_HRTIM_GETCOMPARE(&hhrtim1, timerIdx, COMPAREUNIT_REST);
-
-    uint32_t dutyRatio = 80;  /* 默认80%占空比 (与起振同步一致) */
-    if (oldPeriod > 0) {
-        dutyRatio = (uint32_t)oldDuty * 100U / oldPeriod;
-    }
-    uint16_t newDuty = (uint16_t)((uint32_t)slavePeriod * dutyRatio / 100U);
+    uint16_t newDuty = slavePeriod /2;
 
     /* ---- 时基配置: 新周期 ---- */
     HRTIM_TimeBaseCfgTypeDef timeBaseCfg = {
@@ -1817,6 +1829,29 @@ void API_HRTIM_MasterSync_StartAll(void)
     __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_E, 0);
     __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_TIMERINDEX_TIMER_F, 0);
 
+
+			API_HRTIM_MasterSync_InitMaster(START_FRE_PWM*2);
+			
+    // ★ 重配所有 Slave 定时器为 MASTER 同步触发源
+    //   检锅脱离 MASTER(API_PPG_SET_CONTINUOUS) 后 UpdateTrigger/ResetTrigger=NONE，
+    //   必须在此恢复为 MASTER/MASTER_PER，否则启动后 Slave 不会跟随 Master 复位。
+    for (uint8_t i = 0; i < 6; i++) {
+//        HRTIM_TimerCfgTypeDef timerCfg = PPGTimerCfg;
+//        timerCfg.FaultEnable           = HRTIM_CFG_NUM[i].FaultEnable;
+//        timerCfg.DelayedProtectionMode = HRTIM_CFG_NUM[i].DelayedProtectionMode;
+//        timerCfg.StartOnSync   = HRTIM_SYNCSTART_DISABLED;
+//        timerCfg.UpdateTrigger = HRTIM_TIMUPDATETRIGGER_MASTER;
+//        timerCfg.ResetTrigger  = HRTIM_TIMRESETTRIGGER_MASTER_PER;
+//        timerCfg.PreloadEnable = HRTIM_PRELOAD_ENABLED;
+//        HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_CFG_NUM[i].num, &timerCfg);
+//        HAL_HRTIM_SoftwareUpdate(&hhrtim1, HRTIM_CFG_NUM[i].num);
+			API_HRTIM_MasterSync_ConfigSlave(i,START_FRE_PWM*2);
+    }
+		
+		
+
+		
+		
     HAL_HRTIM_WaveformCountStart(&hhrtim1,
         HRTIM_TIMERID_MASTER |
         HRTIM_TIMERID_TIMER_A | HRTIM_TIMERID_TIMER_B |

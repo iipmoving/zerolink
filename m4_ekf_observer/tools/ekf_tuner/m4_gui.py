@@ -24,7 +24,7 @@ from collections import deque, OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from m4_modbus_tool import (
-    M4ModbusClient, READ_REGS, EKF_REGS,
+    M4ModbusClient, DataLogger, READ_REGS, EKF_REGS,
     READ_START_ADDR, READ_COUNT, EKF_START_ADDR, EKF_COUNT
 )
 
@@ -268,6 +268,16 @@ class M4DebugApp:
         self.monitor_job = None
         self._sample_interval_ms = 50   # 默认 20Hz 刷新
 
+        # 遥测选择
+        self._mon_std = tk.BooleanVar(value=False)  # 标准遥测 (默认关, 节省带宽)
+        self._mon_ekf = tk.BooleanVar(value=True)   # EKF 遥测
+
+        # 数据记录
+        self._recording = False
+        self._records = []   # 内存记录, 停止时批量写 CSV
+        self._csv_fields = ["timestamp", "freq_hz", "phase_deg",
+                           "delta_ppg_signed", "power_actual", "power_target"]
+
         # 遥测行组件引用
         self.reg_rows = {}      # name → RegisterRow (标准)
         self.ekf_rows = {}      # name → RegisterRow (EKF)
@@ -345,7 +355,7 @@ class M4DebugApp:
         # 波特率
         tk.Label(bar, text="Baud", bg=BG2, fg=DIM,
                 font=("Consolas", 8)).pack(side=tk.LEFT)
-        self.baud_var = tk.StringVar(value="115200")
+        self.baud_var = tk.StringVar(value="57600")
         baud_cb = ttk.Combobox(bar, textvariable=self.baud_var,
                                values=["9600", "19200", "38400", "57600", "115200"],
                                width=6, font=("Consolas", 9))
@@ -390,6 +400,26 @@ class M4DebugApp:
                                      activebackground=BORDER, relief=tk.FLAT,
                                      cursor="hand2", state=tk.DISABLED, width=7)
         self.refresh_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.rec_btn = tk.Button(bar, text="● 记录", command=self._toggle_record,
+                                  bg=BORDER, fg=FG, font=("Consolas", 9),
+                                  activebackground=BORDER, relief=tk.FLAT,
+                                  cursor="hand2", state=tk.DISABLED, width=7)
+        self.rec_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        # 遥测选择 checkboxes
+        sep2 = tk.Frame(bar, width=2, bg=BORDER)
+        sep2.pack(side=tk.RIGHT, padx=6, fill=tk.Y)
+        cb1 = tk.Checkbutton(bar, text="标准", variable=self._mon_std,
+                            bg=BG2, fg=FG, font=("Consolas", 8),
+                            selectcolor=BG, activebackground=BG2,
+                            activeforeground=FG)
+        cb1.pack(side=tk.RIGHT, padx=(0, 2))
+        cb2 = tk.Checkbutton(bar, text="EKF", variable=self._mon_ekf,
+                            bg=BG2, fg=FG, font=("Consolas", 8),
+                            selectcolor=BG, activebackground=BG2,
+                            activeforeground=FG)
+        cb2.pack(side=tk.RIGHT, padx=(0, 2))
 
     def _build_reg_panel(self, parent, title, reg_dict, prefix, side):
         """构建寄存器面板"""
@@ -449,6 +479,7 @@ class M4DebugApp:
             sep2.pack(fill=tk.X, padx=6, pady=(6, 4))
 
             computed = [
+                ("power_actual", "实际功率",     "W"),
                 ("freq_hz",     "频率 (Hz)",     "Hz"),
                 ("phase_deg",   "相位角 (deg)",  "°"),
                 ("delta_ppg_signed", "PID增量",  ""),
@@ -570,6 +601,10 @@ class M4DebugApp:
                             bg=ACCENT, fg=BG, font=("Consolas", 8, "bold"),
                             activebackground=ACCENT, relief=tk.FLAT, cursor="hand2")
         write_btn.pack(side=tk.RIGHT, padx=(6, 0))
+        force_btn = tk.Button(hdr, text="⬇强制下发", command=self._force_write_all_init,
+                            bg=RED, fg=BG, font=("Consolas", 8, "bold"),
+                            activebackground=RED, relief=tk.FLAT, cursor="hand2")
+        force_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
         # 可滚动 canvas
         canvas = tk.Canvas(outer, bg=BG2, highlightthickness=0, height=108)
@@ -730,6 +765,31 @@ class M4DebugApp:
             time.sleep(0.02)  # 2ms delay between writes
         self._set_status(f"已写入 {len(self._init_config)} 个控制寄存器")
 
+    def _force_write_all_init(self):
+        """强制下发: 先读设备再写, 确保配置生效 (用于初始化场景)"""
+        if not self.client:
+            return
+        # 1. 先读一次设备当前值
+        raw = self.client.read_registers(INIT_START_ADDR, INIT_COUNT)
+        if raw is None:
+            self._set_status("强制下发失败: 读取设备超时")
+            return
+        # 2. 合并: 设备值做底, 本地配置覆盖
+        merged = {}
+        for i, (addr, (_name, _label, _cat)) in enumerate(INIT_REGS.items()):
+            merged[addr] = raw[i]
+        for addr, val in self._init_config.items():
+            merged[addr] = val
+        # 3. 全部写入设备
+        for addr in sorted(merged.keys()):
+            self.client.write_register(addr, merged[addr])
+            time.sleep(0.02)
+        # 4. 更新本地配置
+        self._init_config = merged
+        self._refresh_init_display()
+        self._save_config()
+        self._set_status(f"强制下发完成: {len(merged)} 个寄存器 (先读后写)")
+
     # ---- JSON 配置持久化 ---------------------------------------
 
     def _config_path(self):
@@ -844,6 +904,11 @@ class M4DebugApp:
             self._set_status(f"已连接 {c.port} @ {c.baudrate} baud, 从站={c.slave_addr}")
             # 协议初始化: 检查 SYS_STA bit 7, 按需触发初始化
             self.client.check_and_init()
+            # 连接后先关功率, 避免沿用设备旧状态
+            self.power_var.set(0)
+            self.client.set_power(0)
+            self.client.set_work_sta(False, fan_on=True)
+            self.client.start_heartbeat(power_watt=0, fan_on=True)
             self._read_once()
             # 自动加载 init regs (优先JSON本地配置, 再读设备)
             if not self._init_config:
@@ -858,6 +923,7 @@ class M4DebugApp:
 
     def _disconnect(self):
         self._stop_monitor()
+        self._stop_recording()
         if self.plotter:
             self.plotter.close()
             self.plotter = None
@@ -887,6 +953,7 @@ class M4DebugApp:
 
         self.refresh_btn.configure(state=state)
         self.mon_btn.configure(state=state)
+        self.rec_btn.configure(state=state)
         self.power_btn.configure(state=state)
         self.on_btn.configure(state=state)
         self.off_btn.configure(state=state)
@@ -976,33 +1043,57 @@ class M4DebugApp:
         if not self.monitoring or not self.client:
             return
 
-        data = self.client.read_telemetry()
-        ekf = self.client.read_ekf_telemetry()
+        pwr = 0
 
-        if data:
-            self._update_reg_display(data, self.reg_rows)
-            pwr = data.get("power_w", 0)
-            # 加热状态灯
-            work_sta = data.get("sys_sta", 0)
-            heat_color = RED if (work_sta & 0x10) else DIM
-            self.heat_led.itemconfig(self._heat_circle, fill=heat_color)
+        if self._mon_std.get():
+            data = self.client.read_telemetry()
+            if data:
+                self._update_reg_display(data, self.reg_rows)
+                pwr = data.get("power_w", 0)
+                work_sta = data.get("sys_sta", 0)
+                heat_color = RED if (work_sta & 0x10) else DIM
+                self.heat_led.itemconfig(self._heat_circle, fill=heat_color)
+        else:
+            # 不从标准遥测读功率时, 用心跳状态推算
+            pwr = self.client._heartbeat_power_w * 25
+            heat_on = bool(self.client._heartbeat_work_sta & 0x10)
+            self.heat_led.itemconfig(self._heat_circle,
+                                    fill=RED if heat_on else DIM)
 
-        if ekf:
-            self._update_reg_display(ekf, self.ekf_rows)
-            self._update_ekf_computed(ekf)
+        ekf = None
+        if self._mon_ekf.get():
+            ekf = self.client.read_ekf_telemetry()
+            if ekf:
+                # 补充实际功率 (0x1006 = Practical_Power, 单位 W)
+                pwr_raw = self.client.read_registers(0x1006, 1)
+                if pwr_raw is not None:
+                    ekf["power_actual"] = pwr_raw[0]
+                self._update_reg_display(ekf, self.ekf_rows)
+                self._update_ekf_computed(ekf)
 
-            # 喂绘图器
-            if self.plotter:
-                freq_hz = ekf.get("freq_hz", 0)
-                phase_deg = ekf.get("phase_deg", 0)
-                delta = ekf.get("delta_ppg_signed", 0)
-                self.plotter.feed(power_w=pwr if data else 0,
-                                 freq_hz=freq_hz,
-                                 phase_deg=phase_deg,
-                                 delta_ppg=delta)
-                self.plotter.update_plot()
+        # 数据记录 (内存攒, 停止时批量写 CSV)
+        if self._recording and ekf:
+            self._records.append({
+                "timestamp": datetime.now().isoformat(timespec="milliseconds"),
+                "freq_hz": ekf.get("freq_hz", 0),
+                "phase_deg": ekf.get("phase_deg", 0),
+                "delta_ppg_signed": ekf.get("delta_ppg_signed", 0),
+                "power_actual": ekf.get("power_actual", 0),
+                "power_target": self.client._heartbeat_power_w * 25,
+            })
 
-        self._set_status(f"监视中 @ {datetime.now().strftime('%H:%M:%S')}  |  {self._sample_interval_ms}ms")
+        # 喂绘图器
+        if self.plotter and ekf:
+            self.plotter.feed(power_w=pwr,
+                             freq_hz=ekf.get("freq_hz", 0),
+                             phase_deg=ekf.get("phase_deg", 0),
+                             delta_ppg=ekf.get("delta_ppg_signed", 0))
+            self.plotter.update_plot()
+
+        status = f"监视中 @ {datetime.now().strftime('%H:%M:%S')}  |  {self._sample_interval_ms}ms"
+        if self._recording:
+            status += f"  |  已记录 {len(self._records)} 条"
+        self._set_status(status)
 
         self.monitor_job = self.root.after(self._sample_interval_ms, self._monitor_poll)
 
@@ -1034,9 +1125,8 @@ class M4DebugApp:
         if not self.client:
             return
         watts = self.power_var.get()
-        self.client.set_power(watts)
-        self.client.update_heartbeat_power(watts)
-        self._set_status(f"设定功率: {watts}W")
+        self.client.set_power(watts)  # FC10 批下发, 已包含全部控制寄存器
+        self._set_status(f"设定功率: {watts}W (FC10 批下发)")
 
     def _quick_power(self, watts):
         self.power_var.set(watts)
@@ -1045,26 +1135,53 @@ class M4DebugApp:
     def _turn_on(self):
         if not self.client:
             return
-        # 确保设备已初始化
         self.client.check_and_init()
-        # 先确保功率>0
         if self.power_var.get() == 0:
             self.power_var.set(500)
-            self.client.set_power(500)
-            time.sleep(0.1)
-        self.client.set_work_sta(True)
-        # 启动心跳, 防止通讯超时自动保护关机
-        self.client.start_heartbeat(power_watt=self.power_var.get())
+        self.client.set_power(self.power_var.get())
+        self.client.set_work_sta(True, fan_on=True)
+        self.client.start_heartbeat(power_watt=self.power_var.get(), fan_on=True)
         self.heat_led.itemconfig(self._heat_circle, fill=RED)
-        self._set_status("加热已启动 (心跳中)")
+        self._set_status(f"加热已启动 — {self.power_var.get()}W")
 
     def _turn_off(self):
         if not self.client:
             return
-        self.client.stop_heartbeat()
-        self.client.set_work_sta(False)
+        self.power_var.set(0)
+        self.client.set_power(0)
+        self.client.set_work_sta(False, fan_on=True)
         self.heat_led.itemconfig(self._heat_circle, fill=DIM)
-        self._set_status("加热已停止")
+        self._set_status("加热已停止 — power=0, jitter=0")
+
+    # ---- 数据记录 ----------------------------------------------
+
+    def _toggle_record(self):
+        if self._recording:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _start_recording(self):
+        self._records.clear()
+        self._recording = True
+        self.rec_btn.configure(text="■ 停止", fg=RED)
+        self._set_status("EKF 数据记录中...")
+
+    def _stop_recording(self):
+        self._recording = False
+        self.rec_btn.configure(text="● 记录", fg=FG)
+        if self._records:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   f"m4_ekf_{ts}.csv")
+            logger = DataLogger(filepath)
+            logger.open(self._csv_fields)
+            for row in self._records:
+                logger.write(row)
+            logger.close()
+            self._set_status(f"已保存 {len(self._records)} 条 → {os.path.basename(filepath)}")
+        else:
+            self._set_status("记录已停止 (无数据)")
 
     # ---- 工具方法 ----------------------------------------------
 
@@ -1073,6 +1190,7 @@ class M4DebugApp:
 
     def on_close(self):
         self._stop_monitor()
+        self._stop_recording()
         if self.plotter:
             self.plotter.close()
         if self.client:

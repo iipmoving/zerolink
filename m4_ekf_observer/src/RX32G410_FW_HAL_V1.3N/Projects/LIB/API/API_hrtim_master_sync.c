@@ -1382,12 +1382,41 @@ void	API_HRTIM1_PAN_IRQHandler(uint8_t ch)		//检锅起振
       				//开始起振
 			break;
 			
+/*
+ * [原始版本 — 已废弃]
+ * 修改原因: 检锅结束后需恢复MASTER同步，在下一个零点与其他通道统一重新同步。
+ * 修改日期: 2026-05-28
+ *
 			case	PAN_END+1:
-				
-			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
-			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);	
 
-			
+			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
+			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+
+
+			break;
+*/
+
+// [新版本] 检锅结束 — 恢复输出 + 恢复MASTER同步
+// 修改原因: 检锅完成，该通道需要重新加入MASTER同步体系。
+//           恢复 UpdateTrigger=MASTER, ResetTrigger=MASTER_PER。
+//           下一次GPIO同步脉冲(API_GPIO_PinPull翻转SYN引脚)时，
+//           该通道在零点与其他MASTER通道统一重同步。
+// 修改日期: 2026-05-28
+			case	PAN_END+1:
+
+			HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
+			__HAL_HRTIM_TIMER_DISABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+
+			// ★ 修改: 恢复MASTER同步 — 重新配置为MASTER触发更新+MASTER周期复位
+			{
+				HRTIM_TimerCfgTypeDef pTimerCfg = PPGTimerCfg;
+				pTimerCfg.UpdateTrigger = HRTIM_TIMUPDATETRIGGER_MASTER;
+				pTimerCfg.ResetTrigger = HRTIM_TIMRESETTRIGGER_MASTER_PER;
+				pTimerCfg.FaultEnable = HRTIM_CFG_NUM[ch].FaultEnable;
+				pTimerCfg.DelayedProtectionMode = HRTIM_CFG_NUM[ch].DelayedProtectionMode;
+				HAL_HRTIM_WaveformTimerConfig(&hhrtim1, HRTIM_CFG_NUM[ch].num, &pTimerCfg);
+			}
+
 			break;
 			case	PAN_START_PPG_COUNT+1:
 
@@ -1793,8 +1822,14 @@ void	API_HRTIM_WaitCom(uint8_t ch)
 
 }
 
+/*
+ * [原始版本 — 已废弃]
+ * 修改原因: 检锅炉头需要以独立频率发检锅脉冲，必须临时脱离MASTER同步约束。
+ *          检锅完成后在 PAN_END+1 中断中恢复MASTER同步。
+ * 修改日期: 2026-05-28
+ *
 void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
-{	
+{
 	uint32_t  period;
 	hrtimPan.ch=ch;
 	hrtimPan.count=0;
@@ -1804,11 +1839,47 @@ void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
 
 	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ch].num,COMPAREUNIT_PAN,period);
 	__HAL_HRTIM_TIMER_CLEAR_FLAG(&hhrtim1,	HRTIM_CFG_NUM[ch].num,HRTIM1_PAN_ICR);
-	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);	
+	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
   __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_CFG_NUM[ch].num,0);
 
 	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
 
+	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);          //等待HRTIM中断停止
+	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
+//	API_PPG_OnOff_NoFault(ch,1);
+
+
+}
+*/
+
+// [新版本] 检锅脉冲检查 — 临时脱离MASTER同步
+// 修改原因: 检锅炉头需以独立频率发脉冲，必须临时解除MASTER同步约束。
+//           WaveformCountStop后立即调用 API_PPG_SET_CONTINUOUS 恢复独立连续模式，
+//           使该通道的 UpdateTrigger/ResetTrigger 回到 NONE，不受后续GPIO同步脉冲影响。
+//           PAN_END+1 中断中恢复MASTER同步配置，下一个零点与其他通道统一重同步。
+// 修改日期: 2026-05-28
+void	API_HRTIM_CHECK_PAN_PLUSE(uint8_t ch )
+{
+	uint32_t  period;
+	hrtimPan.ch=ch;
+	hrtimPan.count=0;
+	period=__HAL_HRTIM_GETPERIOD(&hhrtim1,HRTIM_CFG_NUM[ch].num);
+	period=period*6/10;
+  HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
+
+	// ★ 修改: 解除MASTER同步，恢复独立连续模式 (UpdateTrigger/ResetTrigger → NONE)
+	//         使检锅脉冲以独立频率运行，不受MASTER同步脉冲影响
+	API_PPG_SET_CONTINUOUS(ch);
+
+	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ch].num,COMPAREUNIT_PAN,period);
+	__HAL_HRTIM_TIMER_CLEAR_FLAG(&hhrtim1,	HRTIM_CFG_NUM[ch].num,HRTIM1_PAN_ICR);
+	__HAL_HRTIM_TIMER_ENABLE_IT(&hhrtim1, HRTIM_CFG_NUM[ch].num, HRTIM1_PAN_IT);
+  __HAL_HRTIM_SETCOUNTER(&hhrtim1, HRTIM_CFG_NUM[ch].num,0);
+
+	HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_CFG_NUM[ch].TIMERID);
+
+	// GPIO同步脉冲 — 检锅炉头已脱离MASTER，不受此脉冲影响。
+	// 其他MASTER同步通道正常响应此同步事件。
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);          //等待HRTIM中断停止
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
 //	API_PPG_OnOff_NoFault(ch,1);

@@ -80,34 +80,34 @@
 
 ### 5.1 初始化参数 (0x2000-0x200D + 0x2014)
 
-| 偏移 | 地址 | 名称 | 说明 | 范围 |
-|------|------|------|------|------|
-| 0 | 0x2000 | CheckPanLV | 检锅强度: 高8bit=间隔时间(s), 低8bit=检锅强度 | 0-0xFFFF |
-| 1 | 0x2001 | PPG_Max | 最大 PPG 限制 | — |
-| 2 | 0x2002 | PanPower | 移锅功率阈值 | ×25W |
-| 3 | 0x2003 | HVolLimited | 反压限制 | — |
-| 4 | 0x2004 | LoadCurrent | 负载有效电流 | — |
-| 5 | 0x2005 | CurrentCal | 电流修正系数 | — |
-| 6 | 0x2006 | PowerMIX | 最小连续功率 | ×25W |
-| 7 | 0x2007 | PowerMAX | 最大连续功率 | ×25W |
-| 8 | 0x2008 | WrongPan | 恶劣锅具保护功率 | ×25W |
-| 9 | 0x2009 | SyntonyCurrent | 谐振电流保护值 (高 nibble) | — |
-| 10 | 0x200A | PhasePan | 移锅相位 (高 nibble) | — |
-| 11 | 0x200B | PhaseMix | 最小相位: 高6bit=最小相位, 低2bit=低电压电流限制 | — |
-| 12 | 0x200C | SteelCal | 钢铁锅修正: 高4bit=delta from min phase, 低4bit=钢铁限制差 | — |
-| 13 | 0x200D | NPanSyntonyC | 移锅谐振电流限制 | — |
-| 20 | 0x2014 | SyntonyShort | 短路保护谐振电流 (高 nibble) | — |
+| 偏移  | 地址     | 名称             | 说明                                             | 范围       |
+| --- | ------ | -------------- | ---------------------------------------------- | -------- |
+| 0   | 0x2000 | CheckPanLV     | 检锅强度: 高8bit=间隔时间(s), 低8bit=检锅强度                | 0-0xFFFF |
+| 1   | 0x2001 | PPG_Max        | 最大 PPG 限制                                      | —        |
+| 2   | 0x2002 | PanPower       | 移锅功率阈值                                         | ×25W     |
+| 3   | 0x2003 | HVolLimited    | 反压限制                                           | —        |
+| 4   | 0x2004 | LoadCurrent    | 负载有效电流                                         | —        |
+| 5   | 0x2005 | CurrentCal     | 电流修正系数                                         | —        |
+| 6   | 0x2006 | PowerMIX       | 最小连续功率                                         | ×25W     |
+| 7   | 0x2007 | PowerMAX       | 最大连续功率                                         | ×25W     |
+| 8   | 0x2008 | WrongPan       | 恶劣锅具保护功率                                       | ×25W     |
+| 9   | 0x2009 | SyntonyCurrent | 谐振电流保护值 (高 nibble)                             | —        |
+| 10  | 0x200A | PhasePan       | 移锅相位 (高 nibble)                                | —        |
+| 11  | 0x200B | PhaseMix       | 最小相位: 高6bit=最小相位, 低2bit=低电压电流限制                | —        |
+| 12  | 0x200C | SteelCal       | 钢铁锅修正: 高4bit=delta from min phase, 低4bit=钢铁限制差 | —        |
+| 13  | 0x200D | NPanSyntonyC   | 移锅谐振电流限制                                       | —        |
+| 20  | 0x2014 | SyntonyShort   | 短路保护谐振电流 (高 nibble)                            | —        |
 
 ### 5.2 控制参数 (0x200E-0x2013) — 心跳包下发此4个寄存器
 
-| 偏移 | 地址 | 名称 | 说明 |
-|------|------|------|------|
-| 14 | **0x200E** | **Work_STA** | **工作状态控制字** (见 §6.3) |
-| 15 | 0x200F | FAN_Speed | 风扇转速: 0-4 档, 0=停转 |
-| 16 | 0x2010 | target_Power | 目标功率 (原码为 W/25, 例 40=1000W) |
-| 17 | 0x2011 | IntermittentHeat | 间断加热: 高8bit=加热时间(0.1s), 低8bit=停止时间(0.1s) |
-| 18 | 0x2012 | jitter_freq | 抖频参数 (对应 I2C 协议的 powerSwitch 字节) |
-| 19 | 0x2013 | BuzzCof | 蜂鸣器控制 |
+| 偏移  | 地址         | 名称               | 说明                                       |
+| --- | ---------- | ---------------- | ---------------------------------------- |
+| 14  | **0x200E** | **Work_STA**     | **工作状态控制字** (见 §6.3)                     |
+| 15  | 0x200F     | FAN_Speed        | 风扇转速: 0-4 档, 0=停转                        |
+| 16  | 0x2010     | target_Power     | 目标功率 (原码为 W/25, 例 40=1000W)              |
+| 17  | 0x2011     | IntermittentHeat | 间断加热: 高8bit=加热时间(0.1s), 低8bit=停止时间(0.1s) |
+| 18  | 0x2012     | jitter_freq      | 抖频参数 (对应 I2C 协议的 powerSwitch 字节)         |
+| 19  | 0x2013     | BuzzCof          | 蜂鸣器控制                                    |
 
 ---
 

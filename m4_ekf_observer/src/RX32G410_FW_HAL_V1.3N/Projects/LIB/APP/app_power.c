@@ -563,6 +563,11 @@ AppPowerStaticDef			PowerStaticReg[POTNUM];			//定义两个炉寄存器空间
 AppPowerKeepDef				PowerKeepReg[POTNUM];			//定义两个炉寄存器空间(不清零）
 
 AppPowerDef*					PowerControl;							//当前处理炉头指针	
+
+
+int	PidReturn[4];
+
+
 // APP_POWER_PAN_DEF				PanRes;
 
 // static uint32_t 	PowerOvpValueAll=0xFFF;			//统一限电流
@@ -2522,7 +2527,7 @@ void		APP_POWER_PhaseHalfTypeSet(void)
 	powerPhase=20;
 	
 #endif
-	powerPhase=20;
+
 	if(powerPhase<=PhaseProtectValue)
 	{
 		phaseType=PhaseProtect;
@@ -2850,6 +2855,7 @@ INT8U s_ppg_fun(void)
 
 			t_pidReturn=FixedPID_Compute(&PowerPid, t_power_adc_trig, g_power_adc_fact, g_p25_ad);  
 			
+			PidReturn[Power_channel]=t_pidReturn;
 
 
 			// t_tem_ppg_add=t_pidReturn;
@@ -2877,7 +2883,7 @@ INT8U s_ppg_fun(void)
 						if(PowerDeadCnt>5)
 						{	
 							PowerDeadCnt=5;
-							TOPValue=ActualPower;
+	
 							g_power_limit_flag |= B_PWDEAD;					//设置死区稳定标志
 						}	
 					}
@@ -4267,7 +4273,7 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 	
 	
 
-
+TOPValue+=1;
 
 	// TOPValue=s_ppg_limit>>8;
 	ActualPPG= g_power_duty>>8;	
@@ -4481,6 +4487,7 @@ void	powerOnSetMIN(uint8_t chn)
 {
 	
 //	FunPPGcenOnoff(0);	
+
 	if(chn<=PotCh4)		//powermem 只定义了4个
 	{	
 		PowerMem[chn].staticReg->PowerDuty=START_FRE_PWM;
@@ -4493,6 +4500,7 @@ void	powerOnSetMIN(uint8_t chn)
 
 	PPGsetHalf(chn,START_FRE_PWM);
 	PowerCycle=START_FRE_PWM*2;
+
 }
 
 void	ClearStruct(int* structAdr,int size)
@@ -4532,7 +4540,7 @@ uint8_t	power_zero_adjust(uint8_t chn)
 
 
 			powerOnSetMIN(chn);						//所有炉头重新从小功率启动
-
+			API_HRTIM_MasterSync_SetPeriod(PowerCycle);
 			
 			FunDeadTimeSetValue(DTS4US,DTS4US);
 			FunPPGonOff(PPG_ON);
@@ -4788,7 +4796,7 @@ void	powerZeroChange(void)
 		{
 				powerOnSetMIN(i);						//所有炉头重新从小功率启动
 		}			
-//		TIMsynchronous();
+		TIMsynchronousPower();
 		APP_POWER_PotCheckRest();
 		
 
@@ -4855,7 +4863,7 @@ const unsigned char g_core_para_init[8]={
 				0x17,	 			//检锅 
 				0x90,    		//maxppg
 				600/25,    	//锅具有效功率
-				0x0,    		//反压限制幅度
+				0x60,    		//反压限制幅度
 				0x10,    		//检锅电流
 				0x8f,   		//电流修正系数
 				400/25,     //最小功率
@@ -4962,19 +4970,20 @@ void API_UART_RxInitCallback(uint8_t chn,int8_t *buff, uint8_t len)
 
 
 //----------返回状态数据--------------------
-uint8_t* API_POWER_TxStatusCallback(uint8_t chn, uint8_t len)	
+uint8_t* API_POWER_TxStatusCallback(uint8_t chn, uint8_t len)
 {
-	
+
 		uint8_t*  p;
-	
+
 		p=(uint8_t*)&(PowerInput[chn].status);
 #if	 PotChWorkAll		//强制赋值多个
 
-#else	
+#else
 		p=(uint8_t*)&(PowerInput[PotChWork].status);
-#endif	
+#endif
 
-	
+		if (!(PowerInput[chn].status.ihStatus & 0x80))
+			return NULL;
 		return p;
 
 }	
@@ -4987,18 +4996,19 @@ uint8_t* API_UART_TxStatusCallback(uint8_t chn, uint8_t len)
 	return	API_POWER_TxStatusCallback(chn,len);
 }
 //----------返回初始化数据--------------------
-uint8_t* API_POWER_TxInitCallback(uint8_t chn, uint8_t len)	
+uint8_t* API_POWER_TxInitCallback(uint8_t chn, uint8_t len)
 {
 		uint8_t*  p;
-	
+
 		p=(uint8_t*)&(PowerInput[chn].init);
 #if	 PotChWorkAll		//强制赋值多个
 
-#else	
+#else
 		p=(uint8_t*)&(PowerInput[PotChWork].init);
-#endif	
+#endif
 
-	
+		if (!(PowerInput[chn].status.ihStatus & 0x80))
+			return NULL;
 		return p;
 
 }	
@@ -5647,17 +5657,28 @@ void	APP_ADC_IRQ_PPGstepChangeCallBack(void)
 
 
 
-			
+
 
 POWER_CHANGE_CYCLE_Line:
+			
+				API_HRTIM_MasterSync_SetPeriod(PowerCycle);
+			
 				for(uint8_t i=0;i<PotNum;i++)
 				{
 					API_PPG_setValueChx(i,powerCycle[i],powerDuty[i]);
+
+					
+					
 				}
 
+				
+				
 				API_PPG_setValueChx(PotChTest1,PowerCycle,PowerCycle/2);
 				API_PPG_setValueChx(PotChBase,PowerCycle,PowerCycle/2);
-			
+
+				// MASTER同步: 更新MASTER周期, Slave 靠 MASTER_PER 复位
+
+
 				PowerChangeStatus=POWER_CHANGE_DUTY;	
 		
 //				API_GPIO_WritePin(DebugA_pin,0);
@@ -6249,7 +6270,7 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
 
     ppg = API_PPG_getValue(chn);
 
-    /* 相位 (int16, 0.1° 单位) */
+    /* 相位 (int16, 1 单位) 0~180 */
     ekf->Phase_Angle = (uint16_t)PowerMem[chn].staticReg->phaseValue;
 
     /* 频率: f_hz = 384000000 / prioed */
@@ -6266,10 +6287,10 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
     ekf->PPG_Duty   = ppg.duty;
 
     /* PID 增量: 暂未暴露 */
-    ekf->Delta_PPG = 0;
+    ekf->Delta_PPG = PidReturn[chn];
 
     /* 谐振电流: 暂未暴露 (TODO: 从 TXA ADC 读取) */
-    ekf->Resonant_Curr = 0;
+    ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;;//谐振电流平均值（一阶滤波后）
 }
 
 //**********************************end of file********************************

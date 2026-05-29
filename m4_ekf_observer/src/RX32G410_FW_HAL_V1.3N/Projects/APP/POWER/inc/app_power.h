@@ -218,7 +218,7 @@ void		AdcGroupValueFun(void);			//主循环处理谐振电流
 #define	PanUpMinLine		1600			//脉冲最小值， 小于认为=0
 #define	APP_POWER_PAN_DELAY		30			//检锅延时参数
 
-#define	PotChWork			PotCh2	//PotAll				//当等于0XFF时代表多炉头工作，1~4CH代表单炉头调试
+#define	PotChWork			PotCh1	//PotAll				//当等于0XFF时代表多炉头工作，1~4CH代表单炉头调试
 
 #define	PotChWorkAll		0	// 1  多炉头 此时PotChWork无效  0：单炉头PotChWork工作
 #define	TxaCount				5

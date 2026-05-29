@@ -104,6 +104,41 @@ SYS_REGS = {
 WORK_STA_OFF = 0x0000   # 停止加热
 WORK_STA_ON  = 0x0010   # 启动加热 (对应 powerSwitch=0x10)
 
+# 风扇控制
+FAN_SPEED_FULL = 0xAA   # 风扇全速值 (参考 work_power_out.c:1077)
+FAN_CTRL_BIT    = 0x04  # 风机控制位 = bit 2 (参考 CTRL_SET 结构体)
+
+
+def nibble_invert(low_nibble: int) -> int:
+    """高低4位求反编码 (参考 s_comm.c:377-386)
+
+    high_nibble = ~low_nibble & 0x0F
+    返回完整字节: (high_nibble << 4) | low_nibble
+
+    例: low_nibble=0x4 → high=0xB → 返回 0xB4
+    """
+    lo = low_nibble & 0x0F
+    hi = (~lo) & 0x0F
+    return (hi << 4) | lo
+
+
+def make_work_sta_byte(heat_on: bool, fan_on: bool) -> int:
+    """构造 Work_STA 控制字节 (带高低4位反码验证)
+
+    低4位: Beep(2bit) | FAN(1bit=bit2) | freqJit(1bit)
+    高4位: ~低4位
+
+    heat_on: 置 bit4 (加热使能)
+    fan_on:  置 bit2 (风机使能) + nibble 反码
+    """
+    lo_nibble = 0
+    if fan_on:
+        lo_nibble |= FAN_CTRL_BIT   # bit 2 = 风机
+    ctrl_byte = nibble_invert(lo_nibble)
+    if heat_on:
+        ctrl_byte |= 0x10           # bit 4 = 加热使能 (独立于反码机制)
+    return ctrl_byte
+
 
 # ============================================================
 # MODBUS 通信类
@@ -135,7 +170,8 @@ class M4ModbusClient:
         self._heartbeat_power_w = 0        # 0x2010 功率寄存器值 (W/25)
         self._heartbeat_work_sta = 0x0000  # 0x200E
         self._heartbeat_fan_speed = 0      # 0x200F
-        self._heartbeat_jitter = 0         # 0x2012
+        self._heartbeat_fan_on = False     # 风机使能标志
+        self._heartbeat_jitter = 0x0000    # 0x2012 powerSwitch (0=关机, 2=关功率检锅)
 
     def connect(self) -> bool:
         """建立 MODBUS RTU 连接"""
@@ -324,27 +360,51 @@ class M4ModbusClient:
             result["delta_ppg_signed"] = delta_raw
         return result
 
+    # ---- 控制批下发 (FC10, 模拟 I2C 一次性传输) ----
+
+    def _send_control_batch(self) -> bool:
+        """FC10 批量写 5 个连续寄存器 (0x200E-0x2012)
+        对应固件 PowerControlDef 结构, 必须一次下发完整结构体,
+        单寄存器 FC06 会被最小长度检查拦截 (I2C 遗留)。
+
+        结构: {powerControlSet, fanSpeed, powerSetm, intermittentHeat, powerSwitch}
+              0x200E            0x200F     0x2010      0x2011             0x2012
+        """
+        fan_val = FAN_SPEED_FULL if self._heartbeat_fan_on else self._heartbeat_fan_speed
+        return self.write_registers(0x200E, [
+            self._heartbeat_work_sta,   # 0x200E Work_STA (保持原值)
+            fan_val,                    # 0x200F FAN_Speed (0xAA=全速)
+            self._heartbeat_power_w,    # 0x2010 target_Power (powerSetm)
+            0x0000,                     # 0x2011 IntermittentHeat
+            self._heartbeat_jitter,     # 0x2012 jitter_freq (powerSwitch)
+        ])
+
     def set_power(self, power_watt: int) -> bool:
-        """设定目标功率 (单位: W, 自动转为 25W 单位)"""
+        """设定目标功率 (单位: W, 自动转为 25W 单位) — 更新内部状态, 心跳下发"""
         if power_watt < 0 or power_watt > 3000:
             print(f"[错误] 功率超出范围: {power_watt}W (0-3000W)")
             return False
         val_25w = max(power_watt // 25, 1) if power_watt > 0 else 0
-        print(f"  设定功率: {power_watt}W -> 寄存器值={val_25w} (x25W)")
-        ok = self.write_register(WRITE_REGS["target_power"], val_25w)
-        if ok:
-            self._heartbeat_power_w = val_25w
-        return ok
+        print(f"  设定功率: {power_watt}W -> 寄存器值={val_25w} (x25W), 心跳下发")
+        self._heartbeat_power_w = val_25w
+        return True
 
-    def set_work_sta(self, on: bool) -> bool:
-        """启动/停止加热"""
-        val = WORK_STA_ON if on else WORK_STA_OFF
+    def set_work_sta(self, on: bool, fan_on: bool = False) -> bool:
+        """启动/停止加热, 可选开启风机 — 立即 FC10 批下发"""
+        fan = fan_on or (on and self._heartbeat_fan_on)
         action = "启动加热" if on else "停止加热"
-        print(f"  {action}: 写 0x200E={val:#06X}")
-        ok = self.write_register(WRITE_REGS["work_sta"], val)
-        if ok:
-            self._heartbeat_work_sta = val
-        return ok
+        if fan:
+            action += " + 风机"
+            self._heartbeat_fan_speed = FAN_SPEED_FULL
+        self._heartbeat_work_sta = WORK_STA_ON if on else WORK_STA_OFF
+        self._heartbeat_fan_on = fan
+        self._heartbeat_jitter = 0x0002 if on else 0x0000  # powerSwitch: 2=检锅, 0=关机
+        fs = FAN_SPEED_FULL if fan else self._heartbeat_fan_speed
+        print(f"  {action}: FC10 批下发 5regs "
+              f"(Work_STA=0x{self._heartbeat_work_sta:04X}, "
+              f"pwr={self._heartbeat_power_w}, fan=0x{fs:02X}, "
+              f"jitter={self._heartbeat_jitter})")
+        return self._send_control_batch()
 
     # ---- 心跳 / 协议状态机 ----
 
@@ -408,8 +468,8 @@ class M4ModbusClient:
                 print(f"  SYS_STA=0x{sys_sta:02X} (未初始化, 炉头={head}), "
                       f"发送初始化帧...")
 
-            # 写 Work_STA=0 触发 Modbus_I2c_Data_Main() → init callback
-            self.write_register(WRITE_REGS["work_sta"], 0x0000)
+            # FC10 批写全零触发 Modbus_I2c_Data_Main() → init callback
+            self.write_registers(0x200E, [0x0000, 0x0000, 0x0000, 0x0000, 0x0000])
             time.sleep(retry_interval)
 
         if verbose:
@@ -417,26 +477,17 @@ class M4ModbusClient:
         return True  # 超时也继续, 允许手动操作
 
     def send_heartbeat(self) -> bool:
-        """发送心跳帧: FC10 批量写 5 个连续寄存器 (0x200E-0x2012)
-        对应固件 PowerControlDef 结构:
-          {powerControlSet, fanSpeed, powerSetm, intermittentHeat, powerSwitch}
-               0x200E         0x200F     0x2010       0x2011          0x2012
-        参考 M4 固件 Modbus_I2c_Data_Main() → API_UART_RxControlCallback()
-        """
-        return self.write_registers(0x200E, [
-            self._heartbeat_work_sta,   # 0x200E Work_STA (powerControlSet)
-            self._heartbeat_fan_speed,  # 0x200F FAN_Speed (fanSpeed)
-            self._heartbeat_power_w,    # 0x2010 target_Power (powerSetm)
-            0x0000,                     # 0x2011 IntermittentHeat (默认=连续加热)
-            self._heartbeat_jitter,     # 0x2012 jitter_freq (powerSwitch)
-        ])
+        """发送心跳帧: 与 set_power/set_work_sta 使用同一 FC10 批下发路径"""
+        return self._send_control_batch()
 
     def start_heartbeat(self, power_watt: int = 0,
+                        fan_on: bool = True,
                         interval_s: float | None = None) -> bool:
         """启动后台心跳线程.
 
         Args:
             power_watt: 当前目标功率 (W), 用于周期性重写
+            fan_on: 是否开启风机 (默认开, 0xAA 全速)
             interval_s: 心跳间隔, 默认 HEARTBEAT_INTERVAL (0.5s)
 
         Returns: True if started, False if already running.
@@ -448,6 +499,8 @@ class M4ModbusClient:
             interval_s = self.HEARTBEAT_INTERVAL
 
         self._heartbeat_power_w = max(power_watt // 25, 0) if power_watt > 0 else 0
+        self._heartbeat_fan_on = fan_on
+        self._heartbeat_fan_speed = FAN_SPEED_FULL if fan_on else 0
         self._heartbeat_stop = threading.Event()
 
         def _worker():
@@ -538,10 +591,12 @@ def interactive_mode(client: M4ModbusClient):
 │  ekf   读取 EKF 遥测寄存器 (0x1020)           │
 │  p N   设定功率为 N 瓦 (例: p 1000)           │
 │  on    启动加热                                │
+│  on fan 启动加热 + 风机全速 (0xAA)            │
 │  off   停止加热                                │
+│  fan   切换风机 ON/OFF                         │
 │  log   开始 CSV 记录 (每100ms一条)             │
 │  stop  停止 CSV 记录                           │
-│  mon   实时监视 (每秒刷新)                     │
+│  mon   实时监视 (50ms刷新, s/e切换遥测)        │
 │  mon plot  实时监视 + 波形图                   │
 │  q     退出                                    │
 └──────────────────────────────────────────────┘
@@ -607,15 +662,25 @@ def interactive_mode(client: M4ModbusClient):
         elif parts[0] == 'on':
             # 先检查设备初始化状态
             client.check_and_init()
-            client.set_work_sta(True)
+            fan = len(parts) >= 2 and parts[1] == 'fan'
+            client.set_work_sta(True, fan_on=fan)
             # 启动心跳, 防止通讯超时关机
             if not client._heartbeat_thread or \
                not client._heartbeat_thread.is_alive():
-                client.start_heartbeat(power_watt=0)
+                client.start_heartbeat(power_watt=0, fan_on=fan)
+
+        elif parts[0] == 'fan':
+            # 切换风机状态
+            current = client._heartbeat_fan_on
+            new_state = not current
+            client._heartbeat_fan_on = new_state
+            client._heartbeat_fan_speed = FAN_SPEED_FULL if new_state else 0
+            print(f"  风机: {'ON (0xAA 全速)' if new_state else 'OFF'}")
+            # 如果心跳在跑, 下一跳自动更新
 
         elif parts[0] == 'off':
             client.stop_heartbeat()
-            client.set_work_sta(False)
+            client.set_work_sta(False, fan_on=False)
 
         elif parts[0] == 'log':
             # 开始记录
@@ -653,12 +718,19 @@ def interactive_mode(client: M4ModbusClient):
                     plotter.open()
                     print("  [绘图] 波形窗口已开启")
 
-            sample_interval = 0.1 if plotter else 1.0
-            print(f"  实时监视 (Ctrl+C 停止, 采样={sample_interval}s)...")
+            # 遥测选择状态
+            mon_std = True   # 标准遥测
+            mon_ekf = True   # EKF 遥测
+
+            sample_interval = 0.1 if plotter else 0.05  # 默认50ms刷新
+            print(f"  实时监视 (Ctrl+C 停止, 采样={sample_interval}s)")
+            print(f"  遥测: 标准={'ON' if mon_std else 'OFF'}  EKF={'ON' if mon_ekf else 'OFF'}")
+            print(f"  [s]切换标准  [e]切换EKF  其他键停止")
             try:
+                import select
                 while True:
-                    data = client.read_telemetry()
-                    ekf = client.read_ekf_telemetry()
+                    data = client.read_telemetry() if mon_std else None
+                    ekf = client.read_ekf_telemetry() if mon_ekf else None
                     if data:
                         power = data.get("power_w", 0)
                         vol = data.get("vol_ad", 0)
@@ -679,6 +751,39 @@ def interactive_mode(client: M4ModbusClient):
                             plotter.feed(power_w=power, freq_hz=freq_hz,
                                         phase_deg=phase_deg, delta_ppg=delta)
                             plotter.update_plot()
+
+                    # 检查键盘输入 (非阻塞)
+                    if sys.platform == 'win32':
+                        import msvcrt
+                        if msvcrt.kbhit():
+                            key = msvcrt.getch().decode('utf-8', errors='ignore').lower()
+                            if key == 's':
+                                mon_std = not mon_std
+                                print(f"\n  标准遥测: {'ON' if mon_std else 'OFF'}")
+                            elif key == 'e':
+                                mon_ekf = not mon_ekf
+                                print(f"\n  EKF遥测: {'ON' if mon_ekf else 'OFF'}")
+                            else:
+                                break
+                    else:
+                        import termios, tty
+                        fd = sys.stdin.fileno()
+                        old = termios.tcgetattr(fd)
+                        try:
+                            tty.setraw(fd)
+                            r, _, _ = select.select([sys.stdin], [], [], 0)
+                            if r:
+                                key = sys.stdin.read(1).lower()
+                                if key == 's':
+                                    mon_std = not mon_std
+                                    print(f"\n  标准遥测: {'ON' if mon_std else 'OFF'}")
+                                elif key == 'e':
+                                    mon_ekf = not mon_ekf
+                                    print(f"\n  EKF遥测: {'ON' if mon_ekf else 'OFF'}")
+                                else:
+                                    break
+                        finally:
+                            termios.tcsetattr(fd, termios.TCSADRAIN, old)
                     time.sleep(sample_interval)
             except KeyboardInterrupt:
                 print("\n  监视停止")
@@ -729,6 +834,7 @@ def main():
     parser.add_argument("--power", type=int, metavar="W", help="设定目标功率(W)")
     parser.add_argument("--on", action="store_true", help="启动加热")
     parser.add_argument("--off", action="store_true", help="停止加热")
+    parser.add_argument("--fan", action="store_true", help="启动加热时开启风机 (0xAA 全速)")
     parser.add_argument("--log", type=int, metavar="SEC", const=60, nargs='?',
                         help="记录数据N秒 (默认60秒)")
     parser.add_argument("--csv", type=str, metavar="FILE", help="CSV输出文件路径")
@@ -757,8 +863,9 @@ def main():
             time.sleep(0.1)
 
         if args.on:
-            client.set_work_sta(True)
-            client.start_heartbeat(power_watt=args.power or 0)
+            fan = args.fan
+            client.set_work_sta(True, fan_on=fan)
+            client.start_heartbeat(power_watt=args.power or 0, fan_on=fan)
             time.sleep(0.1)
 
         if args.off:

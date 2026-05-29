@@ -409,7 +409,7 @@ PowerResult FB_CalculatePower(
         if (hrtim_lead[phaseUp] > input->highOn) {
             uint32_t angle = hrtim_lead[phaseUp] - input->highOn;
             xReturn.zero_cross_high = angle / (FRE_PER_ADC / 4);
-            angle *= 180;
+            angle *=PHASE_DEG_BASE;
             angle /= input->highOff - input->highOn;
             xReturn.phase_angleUp = angle;
         }
