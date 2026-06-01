@@ -1,8 +1,7 @@
 /********************************************************************************
     FileName    :  wave_capture.h
-    Brief       :  WaveCapture — 多帧拼接 → MODBUS FC03 回读
-                   基于 printMessage 的 Push 逻辑 (一次拷贝全部数组)
-                   累积 N 帧后冻结, 等 MODBUS 主机读完再解冻
+    Brief       :  WaveCapture — 多帧拼接, 通用数据采集缓冲
+                   累积 N 帧后冻结, 等外部读完再解冻
 
                    MessageDef 的 array/size/num 由调用方配置,
                    本模块不关心里面存的是什么。
@@ -11,16 +10,29 @@
     Copyright (c) Foshan XinSun Electronic Technology CO.,Ltd
 ********************************************************************************/
 #ifndef WAVE_CAPTURE_H
-//#define WAVE_CAPTURE_H
+#define WAVE_CAPTURE_H
 
 #include <stdint.h>
 
 /* ========== 独立消息结构 (与 printMessage.h 布局一致, 零 include) ======== */
 #define  CAPTURE_MSG_BUFF_SIZE   (8)
 
+/* 数据源名称枚举 — 供 CSV 表头使用 */
+typedef enum {
+    CAPTURE_SRC_CNT    = 0,   /* HRTIM CNT 快照 */
+    CAPTURE_SRC_V_AD   = 1,   /* 谐振电压 ADC */
+    CAPTURE_SRC_I_AD   = 2,   /* 谐振电流 ADC */
+    CAPTURE_SRC_VDC_AD = 3,   /* 直流母线 ADC */
+    CAPTURE_SRC_CMP1   = 10,  /* 比较值 1 */
+    CAPTURE_SRC_CMP2   = 11,  /* 比较值 2 */
+    CAPTURE_SRC_CMP3   = 12,  /* 比较值 3 */
+    CAPTURE_SRC_CMP4   = 13,  /* 比较值 4 */
+    CAPTURE_SRC_POWER  = 20,  /* 功率 */
+} CaptureSrcId;
+
 typedef struct {
     uint16_t size;
-    uint16_t res;
+    uint16_t name_id;   /* CaptureSrcId */
     uint16_t* buff;
 } CaptureMsgBuff_t;
 
@@ -65,23 +77,26 @@ typedef struct {
 
     /* ---- 数据体 (0x5006+) ---- */
     /* 自描述格式: [size0][帧0数据][size1][帧1数据]...
-       每帧前 1 word 是该帧的字数, MATLAB 依次读 size → 读数据 → 重复 COUNT 次 */
+       每帧前 1 word 是该帧的字数 */
     volatile uint16_t data[WAVE_MAX_DATA_WORDS];
 } WaveCaptureFrame;
 
 /* ========== API ===================================================== */
 
 void     WaveCapture_Init(void);
+void*    WaveCapture_GetFramePtr(void);
 uint8_t  WaveCapture_IsReady(void);
 void     WaveCapture_MarkRead(void);
 
 /**
- * @brief 推入一帧数据 (与 PrintMessagePush 签名一致)
- * @param msg  MessageDef 指针, array[i].buff→数据源, array[i].size→长度
+ * @brief 推入一帧数据
+ * @param msg  CaptureMsgDef_t 指针, array[i].buff→数据源, array[i].size→长度
  * @return 1=成功, 0=拒绝 (帧满未读/数据溢出)
- * @note   每帧独立, 大小不必相同
- *         满 max_frames 帧后自动冻结, status bit0=1
+ * @note   满 max_frames 帧后自动冻结, status bit0=1
  */
-uint8_t  WaveCapture_PushMessage(CaptureMsgDef_t* msg);
+uint8_t  WaveCapture_PushMessage(void* msg_in);
+
+/* 测试数据生成 — 填充 10 帧锯齿波 */
+void     WaveCapture_GenerateTestData(void);
 
 #endif /* WAVE_CAPTURE_H */

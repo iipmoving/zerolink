@@ -12,8 +12,9 @@
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
 #define DF_Versions             1
-#define DF_MB_Uart_Rx_LONG      50
-#define DF_Modbus_AREA_COUNT    4   /* 每个从机的内存区域数: 0x1000, 0x2000, 0x3000, 0x1020 */
+#define DF_MB_Uart_Rx_LONG      256   /* MODBUS RTU 最大帧 256B */
+#define DF_Modbus_AREA_COUNT    5   /* 区域数: 0x1000, 0x2000, 0x3000, 0x1020, 0x5000 */
+#define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
 
 /* MODBUS 从机地址 */
 static const unsigned char s_slave_addrs[DF_Stove_Quantity] = {0x05, 10, 15, 20};
@@ -73,6 +74,7 @@ typedef struct {
     unsigned short  jitter_frequency;       /* 0x2012 抖频参数 */
     unsigned short  BuzzCof;                /* 0x2013 蜂鸣器控制 */
     unsigned short  syntony_Current_Short;  /* 0x2014 短路保护 */
+    unsigned short  Capture_Ack;           /* 0x2015 命令: 采集确认 (写1触发) */
 } IH_STA_READ_WRITE;
 
 typedef struct {
@@ -148,6 +150,20 @@ static ModbusSlaveCtx s_slaves[DF_Stove_Quantity];
 static PDUData_TypeDef s_pdu_cfg[DF_Stove_Quantity];
 static Register_Area_t s_areas[DF_Stove_Quantity][DF_Modbus_AREA_COUNT];
 
+/* ========== WaveCapture — __weak 回调 (零耦合) ==========================
+ * 输入: Modbus_ProvideCaptureBuffer() — 调一次, 返回值赋给 wave_FramePtr
+ *       wave_capture.c 强覆盖, 返回 &s_frame
+ * 输出: Modbus_OnCaptureAck() — 0x2000 写入时调用, wave_capture 强覆盖 */
+static uint16_t s_wave_dummy[WAVE_FRAME_WORDS];
+static void    *wave_FramePtr;
+
+__attribute__((weak)) void* Modbus_ProvideCaptureBuffer(void)
+{
+    return (void*)s_wave_dummy;
+}
+
+__attribute__((weak)) void Modbus_OnCaptureAck(uint16_t val) { (void)val; }
+
 /* ========== __weak 回调 (APP 层重写) ================================ */
 
 __attribute__((weak)) void API_UART_RxControlCallback(uint8_t ch, int8_t *buff, uint8_t len) {}
@@ -172,22 +188,46 @@ __attribute__((weak)) uint8_t* API_UART_TxInitCallback(uint8_t chn, uint8_t len)
  */
 
 /* --- S1 --- */
-static unsigned char S1_Check_Write_0x2000(void) { return 1; }
+static unsigned char S1_Check_Write_0x2000(void) {
+    if (s_slaves[0].reg_2000.Capture_Ack) {
+        Modbus_OnCaptureAck(s_slaves[0].reg_2000.Capture_Ack);
+        s_slaves[0].reg_2000.Capture_Ack = 0;
+    }
+    return 1;
+}
 static unsigned char S1_Check_Write_0x3000(void) {
     unsigned short v = s_slaves[0].reg_3000.Power_Calibration;
     return (v >= 36 && v <= 96) ? 1 : 0;
 }
 
 /* --- S2 --- */
-static unsigned char S2_Check_Write_0x2000(void) { return 1; }
+static unsigned char S2_Check_Write_0x2000(void) {
+    if (s_slaves[1].reg_2000.Capture_Ack) {
+        Modbus_OnCaptureAck(s_slaves[1].reg_2000.Capture_Ack);
+        s_slaves[1].reg_2000.Capture_Ack = 0;
+    }
+    return 1;
+}
 static unsigned char S2_Check_Write_0x3000(void) { return 1; }
 
 /* --- S3 --- */
-static unsigned char S3_Check_Write_0x2000(void) { return 1; }
+static unsigned char S3_Check_Write_0x2000(void) {
+    if (s_slaves[2].reg_2000.Capture_Ack) {
+        Modbus_OnCaptureAck(s_slaves[2].reg_2000.Capture_Ack);
+        s_slaves[2].reg_2000.Capture_Ack = 0;
+    }
+    return 1;
+}
 static unsigned char S3_Check_Write_0x3000(void) { return 1; }
 
 /* --- S4 --- */
-static unsigned char S4_Check_Write_0x2000(void) { return 1; }
+static unsigned char S4_Check_Write_0x2000(void) {
+    if (s_slaves[3].reg_2000.Capture_Ack) {
+        Modbus_OnCaptureAck(s_slaves[3].reg_2000.Capture_Ack);
+        s_slaves[3].reg_2000.Capture_Ack = 0;
+    }
+    return 1;
+}
 static unsigned char S4_Check_Write_0x3000(void) {
     unsigned short v = s_slaves[3].reg_3000.Power_Calibration;
     return (v >= 36 && v <= 96) ? 1 : 0;
@@ -231,6 +271,7 @@ static void load_default_init(IH_STA_READ_WRITE *r2k)
     r2k->jitter_frequency     = 0;    /* 0x2012 关=0, 开=2 */
     r2k->BuzzCof              = 0;    /* 0x2013 */
     r2k->syntony_Current_Short = 144; /* 0x2014 */
+    r2k->Capture_Ack          = 0;   /* 0x2015 */
 }
 
 /* ========== Get_IHPower_Main_Init_DATA =============================== */
@@ -298,6 +339,9 @@ static void Modbus_Cofg_Init_SET(void)
 
     API_UART_DMA_ReadValue(UARTX, MB_Uart_Rx_Data, DF_MB_Uart_Rx_LONG);
 
+    /* 一次性获取 capture 帧缓冲区地址 (__weak → strong) */
+    wave_FramePtr = Modbus_ProvideCaptureBuffer();
+
     for (i = 0; i < DF_Stove_Quantity; i++) {
         /* Area 0: 0x1000 只读状态 */
         s_areas[i][0].Start_Address   = 0x1000;
@@ -334,6 +378,15 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][3].Check_Write_Data = NULL;
         s_areas[i][3].Data_Size       = sizeof(unsigned short);
         s_areas[i][3].Data_Pyte       = 0;
+
+        /* Area 4: 0x5000 WaveCapture (只读) */
+        s_areas[i][4].Start_Address   = 0x5000;
+        s_areas[i][4].End_Address     = 0x5000 + WAVE_FRAME_WORDS;
+        s_areas[i][4].Data_ptr        = wave_FramePtr;
+        s_areas[i][4].Data_ptr_EEPROM = NULL;
+        s_areas[i][4].Check_Write_Data = NULL;
+        s_areas[i][4].Data_Size       = sizeof(unsigned short);
+        s_areas[i][4].Data_Pyte       = 0;
 
         /* PDU 配置 */
         s_pdu_cfg[i].Us_Cof_ARM_Num       = s_areas[i];

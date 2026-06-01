@@ -49,7 +49,8 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "adc_processing.h"	
 #include	"API_FMAC.H"
 
-
+#include	"printMessage.h"
+#include	"power_calculator.h"
 
 #define		FMAC_OFFSET		(FmacLeve/2+2)
 
@@ -247,6 +248,9 @@ typedef struct	__attribute__((aligned(1)))
 
 
 APP_ADC_AWD_DNTR_DEF	APP_ADC_Dntr[2]={{0,0,0,{0},},{0,2,0,{0}}};			//ch赋初值
+
+
+PowerCalculatorInputDef inputArray[4];		//两组同步炉头，每组是同频率
 
 #define		APP_ADC_DNTR_T12A	APP_ADC_Dntr[DNTR_T12A]
 #define		APP_ADC_DNTR_T34A	APP_ADC_Dntr[DNTR_T34A]
@@ -2332,8 +2336,7 @@ TxaHrtimPointDef	APP_ADC_GetTxaStartPoint(uint8_t potCh)		//从DMA中提取一�
 }
 
 
-#include	"printMessage.h"
-#include	"power_calculator.h"
+
 
 
 
@@ -2400,14 +2403,16 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 			message.array[0].size=size;		
 			message.array[1].size=size;				
 			message.array[2].size=size;	
-			message.array[3].size=size;	
+			message.array[3].size=0;	
 
 			message.array[0].buff=TxaHrtimBuff[PotChWork];
 			message.array[1].buff=TxaVcBuff[PotChWork];
-			message.array[2].buff=TxaAdcBuff[PotChWork];		
-			message.array[3].buff=TxaFmacBuff[PotChWork]+fmacLeveNum/2;
+//			message.array[2].buff=TxaAdcBuff[PotChWork];		
+			message.array[2].buff=TxaFmacBuff[PotChWork]+fmacLeveNum/2;
+		
 
-#if 1	
+
+#if 0	
 		
 		
 		
@@ -2422,34 +2427,12 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 			message.array[6].buff=AdcFromApiDma20ms.Power[PotChWork];
 			message.array[7].buff=AdcFromApiDma20ms.Txa[PotChWork];
 #else
-//			inputCh=input;			//显示通道0
-//			start=inputCh->start;
-//			end=inputCh->end;
-//			size=(end-start);
-//			message.array[4].size=size;		
-//			message.array[5].size=size;				
-//			message.array[6].size=size;	
-//			message.array[7].size=size;	
 
-//			message.array[4].buff=TxaHrtimBuff[0];
-//			message.array[5].buff=TxaVcBuff[0];
-//			message.array[6].buff=TxaAdcBuff[0];		
-//			message.array[7].buff=TxaFmacBuff[0]+fmacLeveNum/2;
-			size*=2;
-
-			start=50;//arrayPoint[PotChWork];
-
+			size =0;
 			message.array[4].size=size;		
 			message.array[5].size=size;				
-			message.array[6].size=0;	
-			message.array[7].size=0;	
-
-			message.array[4].buff=(uint16_t*)&TxA_ADC_AdcDmaBuff.HrtimSave[PotChWork][0];
-			message.array[5].buff=(uint16_t*)&TxaBuffCh1[0];	
-			
-//		message.array[5].buff=0;			
-//		message.array[7].buff=TxaFmacBuff[0]+fmacLeveNum/2;
-
+			message.array[6].size=size;	
+			message.array[7].size=size;	
 
 
 #endif
@@ -2458,20 +2441,37 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 			
 
 			
-
+#if 0
 				uint16_t para[4];
 				para[0]=AdcFromApiDma20ms.ceilQ[PotChWork][count];						//相位值
 				para[1]=AdcFromApiDma20ms.phase[PotChWork][count];	
 				para[2]=AdcFromApiDma20ms.phaseValue[PotChWork][count];
 				para[3]=arrayPoint[PotChWork];//AdcFromApiDma20ms.Power[PotChWork][count];
-			
+#else				
+				uint16_t para[5];
+				para[0]=inputCh->highOn;						//相位值
+				para[1]=inputCh->highOff;	
+				para[2]=inputCh->lowOn;
+				para[3]=inputCh->lowOff;
+				para[4]=0x10;
+#endif
+
+
 			message.paraArray.buff=para;	
-			message.paraArray.size=4;
+			message.paraArray.size=5;
 			message.num=TXA_MESSAGE;
+			
+			
+#if 0			
 			if(PrintMessagePush(message)==0)
 			{//打印数据缓存成功
 					printf(" Message txa Printf Fail");
 			}
+#else
+#include	"wave_capture.h"
+			WaveCapture_PushMessage((void*)&message);
+#endif
+
 
 //					API_GPIO_WritePin(DebugB_pin,0);
 					
@@ -2484,7 +2484,7 @@ void	APP_ADC_WaitTxaCalOver(void)		//等待TXA DMA采集完成，防止与检锅
 {
 	while(TxA_ADC_AdcDmaBuff.step!=TXA_StepStart);
 }
-PowerCalculatorInputDef inputArray[4];		//两组同步炉头，每组是同频率
+
 
 void 	APP_ADC_GetTxaPeiodPoint(void)			//从DMA缓存到TXA数组转换
 {
@@ -2634,6 +2634,7 @@ startLoop:
 
 void	APP_ADC_CalculatePower(void)
 {		
+		
 	
 	if(TxA_ADC_AdcDmaBuff.step==TXA_StepFmacEnd)
 	{	
@@ -2707,48 +2708,27 @@ void	APP_ADC_CalculatePower(void)
 					{
 						TxaHrtimPointDef* txaHrtimPoint=(TxaHrtimPointDef*)&inputArray[potCh].start;
 
-						
-						MessageCnt++;
-
-						if(MessageCnt>5000)
-						{
 
 
-//							MessageCnt=5000;
 
-							if(MessageCnt<5000+10)
-							{
 								APP_ADC_TxaMessageOut(inputArray);//调试信息内存赋值
 					
 
-							}
-							else
-							{
-									MessageCnt=0;
-							}	
-				
 
-						}	
 					}											
 						
 						
 						
 						
-					}
-					else
-					{
-					
-					}	
+				}
+
 
 	
 
 
 					
 				}
-				else
-				{		//没有加热的炉头
 
-				}	
 			}
 
 			
@@ -2758,8 +2738,7 @@ void	APP_ADC_CalculatePower(void)
 	{
 
 	}
-}			
-
+}
 #define		TXA_MAX_BUFF		120			//18K 最大数据缓存
 
 

@@ -39,7 +39,7 @@
 #include	"adc_processing.h"
 #include	"API_UART.H"
 #include "Modbus_Lib_Init_An_Analysis.h" 
-
+#include	"wave_capture.h"
 void Task_Sys(void);
 /*********************************************变量申请*/
 
@@ -254,6 +254,8 @@ void SystemInitial(void)
 	
 	API_SystemClocks_Init();  
 //	CopyISRToRAM();
+	
+	WaveCapture_Init();
 	API_GPIO_PORT_INIT();
 	API_DMA_Init();	
 
