@@ -4,12 +4,11 @@ function raw = load_data(csv_path, cal)
 %   cal      : calibration struct (含 V_SCALE, I_SCALE 等)
 %   返回 raw : struct 含 t, I, V, Vdc, CNT, CMP (4列), meta
 %
-% CSV 定义格式 (10列带表头):
-%   t_us, I_adc, V_adc, Vdc_adc, CNT, CMP_UON, CMP_UOFF, CMP_LON, CMP_LOFF, POWER
-%
-% 每帧第一行为独立参数行 (t_us..CNT 为空, CMP..POWER 有值)
-% 后续为采样行 (t_us..CNT 有值, CMP..POWER 为空)
-% 本脚本自动前向填充参数列并移除参数行
+% CSV 定义格式:
+%   第1行:       t_us, I_adc, V_adc, Vdc_adc, CNT, CMP_UON, CMP_UOFF, CMP_LON, CMP_LOFF  (全局表头)
+%   每帧第1行:   SIZE, N, N, N, N, N, 1, 1, 1, 1  (列采样数, "SIZE"文本标记帧边界)
+%   每帧第2-N行: 数据行, CMP列仅首行有值(稀疏), fillmissing前向填充
+%   帧间空行:    分隔 (readmatrix自动跳过)
 %
 % t_us    : 时间戳 (μs)
 % I_adc   : 谐振电流 ADC 原始值
@@ -24,13 +23,13 @@ if ~exist(csv_path, 'file')
     error('[load_data] 文件不存在: %s', csv_path);
 end
 
-% 读取数值（跳过表头）
+% 读取数值 (跳过全局表头, SIZE行/空行由 readmatrix 自动处理)
 data = readmatrix(csv_path, 'NumHeaderLines', 1);
 if isempty(data)
     error('[load_data] CSV 为空或只有表头');
 end
 
-% 读取表头做列名校验
+% 读取表头
 fid = fopen(csv_path, 'r');
 header_line = fgetl(fid);
 fclose(fid);
@@ -39,19 +38,28 @@ fprintf('[load_data] 表头: %s\n', header_line);
 [n_rows, n_cols] = size(data);
 fprintf('[load_data] 读取 %d 行 × %d 列\n', n_rows, n_cols);
 
-%% 2) 列赋值 + 前向填充参数列 + 移除参数行
-% 格式: t_us(1), I_adc(2), V_adc(3), Vdc_adc(4), CNT(5),
-%        CMP_UON(6), CMP_UOFF(7), CMP_LON(8), CMP_LOFF(9), POWER(10)
+% 检测 SIZE 行 (col 1 = "SIZE" → readmatrix 读为 NaN)
+size_idx = find(isnan(data(:, 1)));
+n_frames = length(size_idx);
+fprintf('[load_data] 检测到 %d 个 SIZE 标记 → %d 帧\n', n_frames, n_frames);
+for i = 1:n_frames
+    fprintf('[load_data]   帧%d SIZE: %s\n', i-1, ...
+            strjoin(string(data(size_idx(i), 2:end)), ','));
+end
 
-% 前向填充 CMP 和 POWER 列 (参数行才有值, 采样行为空→NaN)
+% 移除 SIZE 行
+data(size_idx, :) = [];
+[n_rows, n_cols] = size(data);
+fprintf('[load_data] 移除 SIZE 行后: %d 行 × %d 列\n', n_rows, n_cols);
+
+%% 2) 列赋值 + 前向填充参数列
+% 格式: t_us(1), I_adc(2), V_adc(3), Vdc_adc(4), CNT(5),
+%        CMP_UON(6), CMP_UOFF(7), CMP_LON(8), CMP_LOFF(9)
+
+% 前向填充 CMP 列 (每帧仅首行有值, 其余为NaN)
 if n_cols >= 6
     data(:, 6:end) = fillmissing(data(:, 6:end), 'previous');
 end
-
-% 移除参数行 (t_us 为空→NaN 的行)
-data = data(~isnan(data(:, 1)), :);
-[n_rows, n_cols] = size(data);
-fprintf('[load_data] 移除参数行后: %d 行 × %d 列\n', n_rows, n_cols);
 
 t_us    = data(:, 1);          % μs
 I_adc   = data(:, 2);
@@ -60,12 +68,8 @@ Vdc_adc = data(:, 4);          % 直流母线电压 ADC (帧内均值)
 CNT     = data(:, 5);
 CMP     = data(:, 6:9);        % UON, UOFF, LON, LOFF
 
-% POWER 列 (第10列, 若存在)
-if n_cols >= 10
-    POWER = data(:, 10);
-else
-    POWER = NaN(n_rows, 1);
-end
+% POWER 列 (新格式不含, 填充NaN)
+POWER = NaN(n_rows, 1);
 
 %% 3) 物理量还原
 t      = t_us * 1e-6;          % μs → s

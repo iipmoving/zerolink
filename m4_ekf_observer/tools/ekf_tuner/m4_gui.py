@@ -13,7 +13,6 @@ M4 半桥电磁炉 — MODBUS 调试界面
 
 import sys
 import os
-import csv
 import json
 import time
 import tkinter as tk
@@ -68,6 +67,42 @@ INIT_REGS = OrderedDict([
 INIT_START_ADDR = 0x2000
 INIT_COUNT = len(INIT_REGS)  # 21 registers
 
+# ============================================================
+# WaveCapture 数据布局 (与 wave_capture.h CaptureSrcId 对齐)
+# 每帧数据结构: [CNT×N][V_AD×N][I_AD×N][CMP1][CMP2][CMP3][CMP4][POWER]
+# ============================================================
+
+# C 端数据解析布局 (-1 = 动态, 从帧size推算)
+CAPTURE_LAYOUT = [
+    # (内部键, 每帧字数, -1=等分剩余)
+    ("CNT",   -1),  # CAPTURE_SRC_CNT    = 0
+    ("V_AD",  -1),  # CAPTURE_SRC_V_AD   = 1
+    ("I_AD",  -1),  # CAPTURE_SRC_I_AD   = 2
+    ("CMP1",   1),  # CAPTURE_SRC_CMP1   = 10
+    ("CMP2",   1),  # CAPTURE_SRC_CMP2   = 11
+    ("CMP3",   1),  # CAPTURE_SRC_CMP3   = 12
+    ("CMP4",   1),  # CAPTURE_SRC_CMP4   = 13
+    ("POWER",  1),  # CAPTURE_SRC_POWER  = 20  (解析用, 不输出CSV)
+]
+
+# 动态列数 (count == -1)
+_CAPTURE_DYNAMIC_COUNT = sum(1 for _, c in CAPTURE_LAYOUT if c == -1)
+# 固定列总字数 (count > 0)
+_CAPTURE_FIXED_SUM = sum(c for _, c in CAPTURE_LAYOUT if c > 0)
+
+# CSV 输出列定义: (MATLAB列名, 来源键)
+# 来源键 "t_us" / "Vdc_adc" 为 GUI 合成, 其余对应 CAPTURE_LAYOUT 内部键
+CSV_COLUMNS = [
+    ("t_us",       "t_us"),       # sample × 0.5μs
+    ("I_adc",      "I_AD"),       # C端: 谐振电流 ADC
+    ("V_adc",      "V_AD"),       # C端: 谐振电压 ADC
+    ("Vdc_adc",    "Vdc_adc"),    # GUI计算: mean(V_AD) 帧内均值
+    ("CNT",        "CNT"),        # C端: HRTIM 计数器
+    ("CMP_UON",    "CMP1"),       # C端: 上管开通比较值
+    ("CMP_UOFF",   "CMP2"),       # C端: 上管关断比较值
+    ("CMP_LON",    "CMP3"),       # C端: 下管开通比较值
+    ("CMP_LOFF",   "CMP4"),       # C端: 下管关断比较值
+]
 # ============================================================
 # 主题颜色
 # ============================================================
@@ -260,6 +295,7 @@ class M4DebugApp:
         self.root = root
         self.root.title("M4 半桥电磁炉 — MODBUS 调试工具")
         self.root.geometry("960x780")
+        self.root.state("zoomed")  # Windows 最大化
         self.root.configure(bg=BG)
         self.root.minsize(800, 600)
 
@@ -277,22 +313,7 @@ class M4DebugApp:
         self._recording = False
         self._records = []   # 内存记录, 停止时批量写 CSV
         self._csv_fields = ["timestamp", "freq_hz", "phase_deg",
-                           "delta_ppg_signed", "res_cur_adc",
-                           "power_actual", "power_target"]
-
-        # WaveCapture 波形批量回读
-        self._mon_wave = tk.BooleanVar(value=False)
-        self._wave_interval_ms = 2000
-        self._wave_job = None
-        self._wave_csv = None
-        self._wave_file = None
-        self._wave_batch_id = 0
-        self._wave_csv_path = ""
-        self._wave_csv_fields = [
-            "batch_id", "frame_idx", "sample_idx", "value",
-            "para0", "para1", "para2", "para3", "para4"
-        ]
-        self._mon_wave.trace_add('write', self._on_wave_toggle)
+                           "delta_ppg_signed", "power_actual", "power_target"]
 
         # 遥测行组件引用
         self.reg_rows = {}      # name → RegisterRow (标准)
@@ -436,11 +457,12 @@ class M4DebugApp:
                             selectcolor=BG, activebackground=BG2,
                             activeforeground=FG)
         cb2.pack(side=tk.RIGHT, padx=(0, 2))
-        cb3 = tk.Checkbutton(bar, text="Wave", variable=self._mon_wave,
-                            bg=BG2, fg=FG, font=("Consolas", 8),
-                            selectcolor=BG, activebackground=BG2,
-                            activeforeground=FG)
-        cb3.pack(side=tk.RIGHT, padx=(0, 2))
+
+        self.cap_btn = tk.Button(bar, text="■ Capt", command=self._read_capture,
+                                  bg=BORDER, fg=FG, font=("Consolas", 9),
+                                  activebackground=BORDER, relief=tk.FLAT,
+                                  cursor="hand2", state=tk.DISABLED, width=7)
+        self.cap_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
     def _build_reg_panel(self, parent, title, reg_dict, prefix, side):
         """构建寄存器面板"""
@@ -562,7 +584,7 @@ class M4DebugApp:
         self.power_slider.pack(side=tk.LEFT, padx=(0, 12))
 
         # 快捷功率按钮
-        for w in [1000, 1500, 2000, 2200, 2400, 2600, 2800, 3000]:
+        for w in [500, 1000, 1500, 2000]:
             btn = tk.Button(inner, text=str(w), command=lambda v=w: self._quick_power(v),
                            bg=BORDER, fg=FG, font=("Consolas", 8),
                            activebackground=ACCENT, relief=tk.FLAT,
@@ -945,7 +967,6 @@ class M4DebugApp:
     def _disconnect(self):
         self._stop_monitor()
         self._stop_recording()
-        self._mon_wave.set(False)  # triggers _wave_stop via trace
         if self.plotter:
             self.plotter.close()
             self.plotter = None
@@ -980,6 +1001,7 @@ class M4DebugApp:
         self.on_btn.configure(state=state)
         self.off_btn.configure(state=state)
         self.power_slider.configure(state=state)
+        self.cap_btn.configure(state=state)
         for btn in getattr(self, '_quick_btns', []):
             btn.configure(state=state)
 
@@ -1007,6 +1029,127 @@ class M4DebugApp:
             self._update_ekf_computed(ekf)
 
         self._set_status(f"刷新完成 @ {datetime.now().strftime('%H:%M:%S')}")
+
+    def _read_capture(self):
+        """按 Capture 按钮: 读取 0x5000 区 + 保存 CSV"""
+        import csv
+        import os
+        if not self.client:
+            self._set_status("未连接")
+            return
+
+        self._set_status("读取 0x5000 WaveCapture...")
+        cap = self.client.read_capture()
+        if cap is None:
+            self._set_status("读取 0x5000 失败")
+            return
+
+        hdr = cap["header"]
+        data = cap["data"]
+
+        # 控制台打印原始数据
+        print(f"\n=== 0x5000 Capture @ {datetime.now().strftime('%H:%M:%S')} ===")
+        print(f"  ack=0x{hdr['ack']:04X} status=0x{hdr['status']:04X}"
+              f" {'READY' if hdr['status'] & 1 else ''}{'COLLECTING' if hdr['status'] & 2 else ''}")
+        print(f"  frame_id={hdr['frame_id']} count={hdr['count']}"
+              f"  data_words={hdr['data_words']} max_frames={hdr['max_frames']}")
+        print(f"  received data len = {len(data)}")
+        if data:
+            for k in range(0, min(len(data), 64), 16):
+                chunk = " ".join(f"{w:04X}" for w in data[k:k+16])
+                print(f"  [{k:4d}] {chunk}")
+        print(f"=== end ===\n")
+
+        self._set_status(
+            f"0x5000: status=0x{hdr['status']:04X} "
+            f"帧数={hdr['count']} 数据字数={hdr['data_words']} "
+            f"最大帧数={hdr['max_frames']} frame_id={hdr['frame_id']}"
+        )
+
+        if hdr['count'] == 0 or len(data) == 0:
+            self._set_status("0x5000: 无数据 (count=0)")
+            return
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"capture_{ts}.csv"
+        filepath = os.path.join(os.path.dirname(__file__), filename)
+
+        csv_header = [name for name, _ in CSV_COLUMNS]
+
+        with open(filepath, 'w', newline='') as f:
+            writer = csv.writer(f)
+
+            # 全局表头 (仅一次)
+            writer.writerow(csv_header)
+
+            offset = 0
+            frame_idx = 0
+            dwords = min(hdr["data_words"], len(data))
+            total_rows = 0
+
+            while offset < dwords and frame_idx < hdr["count"]:
+                sz = data[offset]  # size prefix
+                offset += 1
+                if offset + sz > dwords:
+                    break
+
+                # 动态计算每列采样数: N = (sz - 固定总字数) / 动态列数
+                N = (sz - _CAPTURE_FIXED_SUM) // _CAPTURE_DYNAMIC_COUNT
+
+                # 每帧第一行: SIZE 行 (文本标记 "SIZE", MATLAB 读为 NaN 可检测)
+                size_row = ["SIZE"]
+                for csv_name, src_key in CSV_COLUMNS[1:]:  # 跳过 t_us
+                    if src_key in ("Vdc_adc",):
+                        size_row.append(N)
+                    else:
+                        c = next((cnt for k, cnt in CAPTURE_LAYOUT if k == src_key), 1)
+                        size_row.append(N if c == -1 else c)
+                writer.writerow(size_row)
+
+                # 按动态 N 切分本帧数据
+                pos = offset
+                columns = {}
+                for key, count in CAPTURE_LAYOUT:
+                    n = N if count == -1 else count
+                    if pos + n > offset + sz:
+                        columns[key] = []
+                        break
+                    columns[key] = list(data[pos:pos + n])
+                    pos += n
+
+                # 计算帧级派生值
+                v_adc_vals = columns.get("V_AD", [])
+                vdc_adc = round(sum(v_adc_vals) / len(v_adc_vals)) if v_adc_vals else 0
+
+                # 写入采样行
+                for s in range(N):
+                    row = []
+                    for csv_name, src_key in CSV_COLUMNS:
+                        if src_key == "t_us":
+                            row.append(s * 0.5)
+                        elif src_key == "Vdc_adc":
+                            row.append(vdc_adc)
+                        else:
+                            vals = columns.get(src_key, [])
+                            if not vals:
+                                row.append("")
+                            elif s < len(vals):
+                                row.append(vals[s])
+                            else:
+                                row.append("")  # 帧级参数 (CMP), 仅第0行
+                    writer.writerow(row)
+                    total_rows += 1
+
+                # 帧间空行分隔
+                writer.writerow([])
+
+                offset += sz
+                frame_idx += 1
+
+        self._set_status(
+            f"保存 {filename} — {frame_idx}帧, {total_rows}行, "
+            f"列: {','.join(csv_header)}"
+        )
 
     def _update_reg_display(self, data, row_dict):
         for name, row in row_dict.items():
@@ -1086,10 +1229,10 @@ class M4DebugApp:
         if self._mon_ekf.get():
             ekf = self.client.read_ekf_telemetry()
             if ekf:
-                # 补充实际功率 (0x1006 = Practical_Power, 寄存器值需 *25 = W)
+                # 补充实际功率 (0x1006 = Practical_Power, 单位 W)
                 pwr_raw = self.client.read_registers(0x1006, 1)
                 if pwr_raw is not None:
-                    ekf["power_actual"] = pwr_raw[0] * 25
+                    ekf["power_actual"] = pwr_raw[0]
                 self._update_reg_display(ekf, self.ekf_rows)
                 self._update_ekf_computed(ekf)
 
@@ -1100,7 +1243,6 @@ class M4DebugApp:
                 "freq_hz": ekf.get("freq_hz", 0),
                 "phase_deg": ekf.get("phase_deg", 0),
                 "delta_ppg_signed": ekf.get("delta_ppg_signed", 0),
-                "res_cur_adc": ekf.get("res_cur_adc", 0),
                 "power_actual": ekf.get("power_actual", 0),
                 "power_target": self.client._heartbeat_power_w * 25,
             })
@@ -1160,7 +1302,7 @@ class M4DebugApp:
             return
         self.client.check_and_init()
         if self.power_var.get() == 0:
-            self.power_var.set(1000)
+            self.power_var.set(500)
         self.client.set_power(self.power_var.get())
         self.client.set_work_sta(True, fan_on=True)
         self.client.start_heartbeat(power_watt=self.power_var.get(), fan_on=True)
@@ -1206,77 +1348,6 @@ class M4DebugApp:
         else:
             self._set_status("记录已停止 (无数据)")
 
-    # ---- WaveCapture 波形批量回读 -------------------------------
-
-    def _on_wave_toggle(self, *_):
-        if self._mon_wave.get():
-            self._wave_start()
-        else:
-            self._wave_stop()
-
-    def _wave_start(self):
-        if not self.client:
-            return
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._wave_csv_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            f"wave_{ts}.csv")
-        self._wave_file = open(self._wave_csv_path, 'w', newline='',
-                               encoding='utf-8')
-        self._wave_csv = csv.DictWriter(self._wave_file,
-                                        fieldnames=self._wave_csv_fields)
-        self._wave_csv.writeheader()
-        self._wave_batch_id = 0
-        self._set_status(f"Wave 记录开始 → {os.path.basename(self._wave_csv_path)}")
-        self._wave_poll()
-
-    def _wave_stop(self):
-        if self._wave_job:
-            self.root.after_cancel(self._wave_job)
-            self._wave_job = None
-        if self._wave_file:
-            self._wave_file.close()
-            self._wave_file = None
-            self._wave_csv = None
-            self._set_status(f"Wave 记录已停止 → "
-                           f"{os.path.basename(self._wave_csv_path)}")
-
-    def _wave_poll(self):
-        if not self._mon_wave.get() or not self.client:
-            return
-
-        w = self.client.read_wave_capture()
-        if w and w['count'] > 0:
-            bid = self._wave_batch_id
-            self._wave_batch_id += 1
-
-            for fi, frame in enumerate(w['frames']):
-                data = frame['data']
-                para = frame['para']
-
-                for si, val in enumerate(data):
-                    row = {
-                        'batch_id': bid,
-                        'frame_idx': fi,
-                        'sample_idx': si,
-                        'value': val,
-                        'para0': para[0] if len(para) > 0 else 0,
-                        'para1': para[1] if len(para) > 1 else 0,
-                        'para2': para[2] if len(para) > 2 else 0,
-                        'para3': para[3] if len(para) > 3 else 0,
-                        'para4': para[4] if len(para) > 4 else 0,
-                    }
-                    self._wave_csv.writerow(row)
-
-            self._wave_file.flush()
-            self._set_status(
-                f"Wave #{bid} saved: {w['count']} frames × "
-                f"~{w.get('data_words', 0)}w "
-                f" → {os.path.basename(self._wave_csv_path)}")
-
-        self._wave_job = self.root.after(self._wave_interval_ms,
-                                         self._wave_poll)
-
     # ---- 工具方法 ----------------------------------------------
 
     def _set_status(self, msg):
@@ -1285,7 +1356,6 @@ class M4DebugApp:
     def on_close(self):
         self._stop_monitor()
         self._stop_recording()
-        self._mon_wave.set(False)  # triggers _wave_stop via trace
         if self.plotter:
             self.plotter.close()
         if self.client:

@@ -84,6 +84,12 @@ EKF_REGS = OrderedDict([
 EKF_START_ADDR = 0x1020
 EKF_COUNT = len(EKF_REGS)
 
+# --- WaveCapture 0x5000 区 ---
+CAPTURE_START_ADDR = 0x5000
+CAPTURE_HEADER_WORDS = 6
+CAPTURE_MAX_DATA_WORDS = 4000
+CAPTURE_FRAME_WORDS = CAPTURE_HEADER_WORDS + CAPTURE_MAX_DATA_WORDS
+
 # --- 可读写控制寄存器: 0x2000-0x2014 ---
 WRITE_REGS = {
     "work_sta":     0x200E,  # 工作状态 (powerControlSet)
@@ -360,217 +366,44 @@ class M4ModbusClient:
             result["delta_ppg_signed"] = delta_raw
         return result
 
-    # ---- 波形采集 (WaveCapture: 0x5000 区) ----
+    # ---- WaveCapture 0x5000 读取 ----
+    MAX_READ_WORDS = 120  # 响应 ≤ 245B (MCU RX buf = 256)
 
-    def wave_capture(self, head_idx: int = 0,
-                     wait_s: float = 1.5,
-                     data_dir: str = "wave_data") -> str | None:
-        """采集一帧波形数据 (WaveCapture 0x5000 区, 列优先)
-
-        帧结构 (MODBUS 0x5004+):
-          [0] magic      — 0xA5A5
-          [1] frame_id
-          [2] head_idx
-          [3] cycle_cnt  — SIZE, 每列行数
-          [4] ch_cnt     — 列数
-          [5] f_sw_avg
-          [6..10] para   — 5 words
-          [11+]  data    — 列优先: 第c列起始 = 11 + c × cycle_cnt
-
-       流程:
-         1. WAVE_HEAD(0x5001)=head   2. WAVE_CTRL(0x5000)=1
-         3. 等待 ~1.5S               4. WAVE_CTRL=0
-         5. 读帧头, 验证 MAGIC       6. 读 PARA + 周期体
-         7. 列优先解析 → CSV
-
-       Returns: CSV 路径, 失败返回 None
-       """
-        import os
-        os.makedirs(data_dir, exist_ok=True)
-
-        WAVE_REG_CTRL   = 0x5000
-        WAVE_REG_HEAD   = 0x5001
-        WAVE_REG_MAGIC  = 0x5004
-        WAVE_CTRL_START = 1
-        WAVE_CTRL_STOP  = 0
-        WAVE_MAGIC_OK   = 0xA5A5
-        HDR_WORDS       = 6    # 0x5004-0x5009
-        PARA_WORDS      = 5    # 0x500A-0x500E
-
-        print(f"\n  [WaveCapture] 开始采集 — 炉头 {head_idx}")
-
-        # Step 1: 炉头
-        if not self.write_register(WAVE_REG_HEAD, head_idx & 0x03):
-            print("  [错误] 设置炉头失败")
-            return None
-        time.sleep(0.05)
-
-        # Step 2: 启动
-        if not self.write_register(WAVE_REG_CTRL, WAVE_CTRL_START):
-            print("  [错误] 启动采集失败")
-            return None
-
-        # Step 3: 等待
-        print(f"  [等待] {wait_s:.0f}秒 (MCU 填帧)...")
-        time.sleep(wait_s)
-
-        # Step 4: 停止
-        if not self.write_register(WAVE_REG_CTRL, WAVE_CTRL_STOP):
-            print("  [警告] 停止失败")
-
-        # Step 5: 读帧头 → 验证 MAGIC + 获取 ch_cnt / cycle_cnt
-        hdr = self.read_registers(WAVE_REG_MAGIC, HDR_WORDS)
-        if not hdr or hdr[0] != WAVE_MAGIC_OK:
-            print(f"  [错误] 帧同步头无效")
-            return None
-
-        magic     = hdr[0]
-        frame_id  = hdr[1]
-        f_head    = hdr[2]
-        cycle_cnt = hdr[3]   # SIZE = 每列行数
-        ch_cnt    = hdr[4]   # 列数
-        f_sw_avg  = hdr[5]
-
-        if cycle_cnt == 0 or ch_cnt == 0:
-            print("  [错误] 空帧 (cycle_cnt=0)")
-            return None
-
-        body_words = ch_cnt * cycle_cnt
-        print(f"  [OK] 帧#{frame_id}: {ch_cnt}列 × {cycle_cnt}行 = {body_words} words")
-
-        # Step 6: 读 PARA + 周期体
-        data_addr = WAVE_REG_MAGIC + HDR_WORDS  # = 0x500A
-        data_words = PARA_WORDS + body_words
-        raw = self.read_registers(data_addr, data_words)
-        if not raw or len(raw) < data_words:
-            print(f"  [错误] 读帧数据失败")
-            return None
-
-        para = raw[:PARA_WORDS]          # [ppg, high_on, power, period, res]
-        body = raw[PARA_WORDS:]          # body_words 个值 (含 SIZE 目录)
-
-        # Step 7: 读 SIZE 目录 → 解析列数据
-        # body[0..ch_cnt-1]  = 每列 SIZE
-        # body[ch_cnt..]     = 列数据 (第c列起始 = ch_cnt + sum(SIZE[0..c-1]))
-        sizes = list(body[:ch_cnt])
-        col_data = body[ch_cnt:]
-
-        max_rows = max(sizes) if sizes else 0
-        if max_rows == 0:
-            print("  [错误] 所有列 SIZE=0")
-            return None
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_path = f"{data_dir}/wave_{timestamp}_head{head_idx}.csv"
-        col_names = [f"col_{c}(sz={sizes[c]})" for c in range(ch_cnt)]
-
-        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(["# magic",       f"0x{magic:04X}"])
-            writer.writerow(["# frame_id",    frame_id])
-            writer.writerow(["# head_idx",    f_head])
-            writer.writerow(["# cycle_cnt",   cycle_cnt])
-            writer.writerow(["# ch_cnt",      ch_cnt])
-            writer.writerow(["# col_sizes",   ",".join(str(s) for s in sizes)])
-            writer.writerow(["# f_sw_hz",     f_sw_avg])
-            writer.writerow(["# para_ppg",    para[0]])
-            writer.writerow(["# para_high_on",para[1]])
-            writer.writerow(["# para_power",  para[2]])
-            writer.writerow(["# para_period", para[3]])
-            writer.writerow(["# --- 周期体 (列优先, 每列独立 SIZE) ---"])
-            writer.writerow(["row"] + col_names)
-
-            # 按行输出
-            for r in range(max_rows):
-                row = [r]
-                col_start = 0
-                for c in range(ch_cnt):
-                    if r < sizes[c]:
-                        row.append(col_data[col_start + r])
-                    else:
-                        row.append(0)
-                    col_start += sizes[c]
-                writer.writerow(row)
-
-        print(f"  [保存] {csv_path}")
-        return csv_path
-
-    # ---- 波形批量回读 (WaveCapture 0x5000 区, 新协议) ----
-
-    def read_wave_capture(self) -> dict | None:
-        """读取 0x5000 区波形数据, 解析自描述格式
-
-        协议:
-          [size0][帧0数据][size1][帧1数据]...
-          每帧前 1 word = 该帧总字数 (array + paraArray)
-
-        Returns: {
-            'frame_id': int,
-            'count': int,
-            'frames': [
-                {'data': [uint16...], 'para': [uint16...]},
-                ...
-            ]
-        } 或 None (未就绪/通信失败)
-        """
-        # 1. 读 header (0x5000-0x5005, 6 words)
-        hdr = self.read_registers(0x5000, 6)
-        if hdr is None:
-            return None
-
-        ack, status, frame_id, count, data_words, max_frames = hdr
-
-        # 2. 检查 READY
-        if not (status & 0x01):
-            return None
-
-        if count == 0 or data_words == 0:
-            # 写 ACK 解冻, 让 MCU 开始下一批
-            self.write_register(0x5000, 1)
-            return None
-
-        # 3. 读数据体
-        raw = self.read_registers(0x5006, data_words)
+    def read_capture(self, max_data_words: int = 2000) -> dict | None:
+        """读取 WaveCapture 0x5000 区: 先读帧头6字, 再按需读数据体."""
+        # Step 1: 读帧头
+        raw = self.read_registers(CAPTURE_START_ADDR, CAPTURE_HEADER_WORDS)
         if raw is None:
             return None
-
-        # 4. 按自描述格式解析: [size][frame_data]...
-        frames = []
-        pos = 0
-        para_size = 5  # paraArray 固定 5 words (PPG 参数)
-
-        for i in range(count):
-            if pos >= len(raw):
-                break
-            fw = raw[pos]       # 本帧总字数
-            pos += 1
-            if pos + fw > len(raw):
-                break
-            frame_data = raw[pos:pos + fw]
-            pos += fw
-
-            # 分离数据体和参数区
-            if fw >= para_size:
-                data_part = list(frame_data[:-para_size])
-                para_part = list(frame_data[-para_size:])
-            else:
-                data_part = list(frame_data)
-                para_part = []
-
-            frames.append({
-                'data': data_part,
-                'para': para_part,
-            })
-
-        # 5. 确认读完 → 解冻
-        self.write_register(0x5000, 1)
-
-        return {
-            'frame_id': frame_id,
-            'count': count,
-            'data_words': data_words,
-            'frames': frames,
+        header = {
+            "ack":        raw[0],
+            "status":     raw[1],
+            "frame_id":   raw[2],
+            "count":      raw[3],
+            "data_words": raw[4],
+            "max_frames": raw[5],
         }
+
+        # Step 2: 读数据体 (分块)
+        data_words = min(header["data_words"], max_data_words,
+                         CAPTURE_MAX_DATA_WORDS)
+        if data_words == 0:
+            return {"header": header, "data": []}
+
+        data = []
+        data_start = CAPTURE_START_ADDR + CAPTURE_HEADER_WORDS
+        remaining = data_words
+        offset = 0
+        while remaining > 0:
+            chunk = min(remaining, self.MAX_READ_WORDS)
+            raw = self.read_registers(data_start + offset, chunk)
+            if raw is None:
+                break
+            data.extend(raw)
+            offset += chunk
+            remaining -= chunk
+
+        return {"header": header, "data": data}
 
     # ---- 控制批下发 (FC10, 模拟 I2C 一次性传输) ----
 
@@ -809,7 +642,6 @@ def interactive_mode(client: M4ModbusClient):
 │  log   开始 CSV 记录 (每100ms一条)             │
 │  stop  停止 CSV 记录                           │
 │  mon   实时监视 (50ms刷新, s/e切换遥测)        │
-│  wave     采集波形 (WaveCapture 0x5000 区)    │
 │  mon plot  实时监视 + 波形图                   │
 │  q     退出                                    │
 └──────────────────────────────────────────────┘
@@ -820,16 +652,10 @@ def interactive_mode(client: M4ModbusClient):
     stop_log = threading.Event()
 
     def _log_worker():
-        """后台记录线程 — 同时采集标准遥测 + EKF 遥测"""
+        """后台记录线程"""
         while not stop_log.is_set():
             data = client.read_telemetry()
-            ekf  = client.read_ekf_telemetry()
             if data and logger:
-                # 合并 EKF 数据到记录行
-                if ekf:
-                    for k, v in ekf.items():
-                        if k != "timestamp":
-                            data[k] = v
                 logger.write(data)
                 sys.stdout.write(f"\r  已记录: {logger.record_count} 条  ")
                 sys.stdout.flush()
@@ -901,17 +727,6 @@ def interactive_mode(client: M4ModbusClient):
             client.stop_heartbeat()
             client.set_work_sta(False, fan_on=False)
 
-        elif parts[0] == 'wave':
-            # 波形采集
-            head_idx = 0
-            if len(parts) >= 2:
-                try:
-                    head_idx = int(parts[1]) & 0x03
-                except ValueError:
-                    print("  用法: wave [炉头号0-3] (默认0)")
-                    continue
-            client.wave_capture(head_idx=head_idx)
-
         elif parts[0] == 'log':
             # 开始记录
             if logger:
@@ -919,16 +734,13 @@ def interactive_mode(client: M4ModbusClient):
                 continue
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filepath = f"m4_data_{timestamp}.csv"
-            fieldnames = ["timestamp"] \
-                + [name for _addr, (name, _u, _s, _d) in READ_REGS.items()] \
-                + [name for _addr, (name, _u, _s, _d) in EKF_REGS.items()] \
-                + ["freq_hz", "phase_deg", "delta_ppg_signed"]
+            fieldnames = ["timestamp"] + [name for _addr, (name, _u, _s, _d) in READ_REGS.items()]
             logger = DataLogger(filepath)
             logger.open(fieldnames)
             stop_log.clear()
             log_thread = threading.Thread(target=_log_worker, daemon=True)
             log_thread.start()
-            print("  [记录] 开始后台记录 (100ms间隔, 含EKF字段)")
+            print("  [记录] 开始后台记录 (100ms间隔)")
 
         elif parts[0] == 'stop':
             # 停止记录
@@ -1136,23 +948,15 @@ def main():
             # 记录模式
             duration = args.log if args.log > 0 else 60
             csv_file = args.csv or f"m4_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            fieldnames = ["timestamp"] \
-                + [name for _addr, (name, _u, _s, _d) in READ_REGS.items()] \
-                + [name for _addr, (name, _u, _s, _d) in EKF_REGS.items()] \
-                + ["freq_hz", "phase_deg", "delta_ppg_signed"]
+            fieldnames = ["timestamp"] + [name for _addr, (name, _u, _s, _d) in READ_REGS.items()]
             logger = DataLogger(csv_file)
             logger.open(fieldnames)
-            print(f"记录 {duration} 秒, 每100ms采样 (含EKF字段)...")
+            print(f"记录 {duration} 秒, 每100ms采样...")
             t_start = time.time()
             try:
                 while time.time() - t_start < duration:
                     data = client.read_telemetry()
-                    ekf  = client.read_ekf_telemetry()
                     if data:
-                        if ekf:
-                            for k, v in ekf.items():
-                                if k != "timestamp":
-                                    data[k] = v
                         logger.write(data)
                     time.sleep(0.1)
             except KeyboardInterrupt:

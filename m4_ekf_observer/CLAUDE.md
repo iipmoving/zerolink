@@ -51,29 +51,6 @@
 - 不改现有 MODBUS 寄存器含义 (会破坏 PC 工具兼容性)
 - 新增寄存器在 0x1015+ 区域
 
-### 规则 4：新模块零耦合 (自 2026-06-01 起执行)
-
-新增或重构的单功能模块必须遵循：
-
-1. **模块内部状态 `static`** — 禁止全局变量，只通过 API 函数暴露
-2. **跨模块通信用 `__weak` 回调** — 调用方定义 `__attribute__((weak))` 默认空实现，实现方提供强覆盖。不在 `.h` 中声明回调函数
-3. **值传递优先** — 回调参数用值类型，不传指针跨越模块边界
-4. **一个 `.h` 只暴露 API** — 头文件只放结构体定义 + 公开函数声明，不放回调声明
-5. **零外部 include** — 模块的 `.h` 只能 include 标准库头文件 (`<stdint.h>` 等) 和自身的结构体定义。禁止 include 其他模块的 `.h`
-6. **接口抽象先确认** — 注册通道、跨模块结构体配对、回调签名等接口设计属于重要架构决策，必须先经用户确认再实施
-7. **解耦检查** — 每次新增/修改模块后，检查其 `#include` 列表：只能有库函数 (`<...>`) 和自身 `.h`，不得出现外部模块头文件。跨模块结构体独立声明 (同布局不同名)，配对记录在 `src/core/interface_map.h`
-
-```c
-// 正确: modbus 层定义 weak 默认 (无操作)
-__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
-
-// 正确: wave_capture.c 提供强实现覆盖 (链接器自动选择)
-unsigned char WaveCapture_OnAckWrite(void) { ... }
-
-// 错误: 在 .h 中声明回调, 让调用方 include
-uint8_t WaveCapture_OnAckWrite(void);  // ← 不要这样做
-```
-
 ---
 
 ## 三、项目规格
@@ -228,7 +205,6 @@ python m4_modbus_tool.py COM3 --power 1000 --on
 
 ## 十一、编码约定
 
-- 所有 if/else/while/for 必须加 {}，单行也不省略
 - snake_case 变量, PascalCase 函数, 4空格缩进
 - 中文注释说明复杂逻辑
 - EKF 矩阵运算显式展开
