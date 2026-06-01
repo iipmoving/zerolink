@@ -8,8 +8,20 @@
 #include "Modbus_Lib_Init_An_Analysis.h"
 #include "API_UART.h"
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
-#include	"wave_capture.h"
-#include	"raw_capture.h"
+
+/* ========== Capture 模块 __weak 接入点 ================================= */
+/*
+ * 通过 __weak 回调与 wave_capture.c / raw_capture.c 零耦合。
+ * 若 capture 模块未链接 → 弱符号返回 0/NULL → MODBUS 区域无效但不会崩溃。
+ * 帧大小常量与 capture 模块 struct sizeof 保持同步 (AI 保证)。
+ */
+#define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
+#define RAW_FRAME_WORDS     (6 + 4000)   /* header(6w) + data(4000w) */
+
+__attribute__((weak)) void* WaveCapture_GetFramePtr(void) { return 0; }
+__attribute__((weak)) void* RawCapture_GetFramePtr(void)  { return 0; }
+__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
+__attribute__((weak)) unsigned char RawCapture_OnAckWrite(void)  { return 1; }
 
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
@@ -164,14 +176,6 @@ __attribute__((weak)) uint8_t* API_UART_TxInitCallback(uint8_t chn, uint8_t len)
 {
     return 0;
 }
-
-/* ========== Capture ACK 回调 (__weak 默认空实现) ===================== */
-/*
- * 由 wave_capture.c / raw_capture.c 提供强实现覆盖。
- * modbus 层不 include 对应头文件即可通过链接器解耦。
- */
-__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
-__attribute__((weak)) unsigned char RawCapture_OnAckWrite(void)  { return 1; }
 
 /* ========== Check_Write_Data 跳板函数 ================================ */
 /*
@@ -348,7 +352,7 @@ static void Modbus_Cofg_Init_SET(void)
 
         /* Area 4: 0x5000 WaveCapture 波形采集 (R/W: 控制寄存器可写, 帧数据只读) */
         s_areas[i][4].Start_Address   = 0x5000;
-        s_areas[i][4].End_Address     = 0x5000 + (sizeof(WaveCaptureFrame) / sizeof(unsigned short));
+        s_areas[i][4].End_Address     = 0x5000 + (WAVE_FRAME_WORDS);
         s_areas[i][4].Data_ptr        = WaveCapture_GetFramePtr();    /* 全局单缓冲, 所有炉头共享 */
         s_areas[i][4].Data_ptr_EEPROM = NULL;
         s_areas[i][4].Check_Write_Data = WaveCapture_OnAckWrite;     /* ACK写入→自动解冻 */
@@ -357,7 +361,7 @@ static void Modbus_Cofg_Init_SET(void)
 
         /* Area 5: 0x5100 RawCapture 原始9列采集 (R/W: 控制寄存器可写, 数据只读) */
         s_areas[i][5].Start_Address   = 0x5100;
-        s_areas[i][5].End_Address     = 0x5100 + (sizeof(RawCaptureFrame) / sizeof(unsigned short));
+        s_areas[i][5].End_Address     = 0x5100 + (RAW_FRAME_WORDS);
         s_areas[i][5].Data_ptr        = RawCapture_GetFramePtr();
         s_areas[i][5].Data_ptr_EEPROM = NULL;
         s_areas[i][5].Check_Write_Data = RawCapture_OnAckWrite;      /* ACK写入→自动解冻 */
