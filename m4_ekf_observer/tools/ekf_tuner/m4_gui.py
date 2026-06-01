@@ -1146,9 +1146,12 @@ class M4DebugApp:
                 offset += sz
                 frame_idx += 1
 
+        # 写 ACK → MCU 解锁 WaveCapture 缓冲区
+        self.client.write_register(0x2015, 1)
+
         self._set_status(
             f"保存 {filename} — {frame_idx}帧, {total_rows}行, "
-            f"列: {','.join(csv_header)}"
+            f"列: {','.join(csv_header)}  |  ACK已发送 → 缓冲区解锁"
         )
 
     def _update_reg_display(self, data, row_dict):
