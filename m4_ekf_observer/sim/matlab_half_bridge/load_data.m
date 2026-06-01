@@ -4,15 +4,20 @@ function raw = load_data(csv_path, cal)
 %   cal      : calibration struct (含 V_SCALE, I_SCALE 等)
 %   返回 raw : struct 含 t, I, V, Vdc, CNT, CMP (4列), meta
 %
-% CSV 定义格式 (9列带表头):
-%   t_us, I_adc, V_adc, Vdc_adc, CNT, CMP_UON, CMP_UOFF, CMP_LON, CMP_LOFF
+% CSV 定义格式 (10列带表头):
+%   t_us, I_adc, V_adc, Vdc_adc, CNT, CMP_UON, CMP_UOFF, CMP_LON, CMP_LOFF, POWER
+%
+% 每帧第一行为独立参数行 (t_us..CNT 为空, CMP..POWER 有值)
+% 后续为采样行 (t_us..CNT 有值, CMP..POWER 为空)
+% 本脚本自动前向填充参数列并移除参数行
 %
 % t_us    : 时间戳 (μs)
 % I_adc   : 谐振电流 ADC 原始值
-% V_adc   : 谐振电压 ADC 原始值
-% Vdc_adc : 直流母线电压 ADC 原始值
+% V_adc   : 母线电压 ADC 原始值
+% Vdc_adc : 直流母线电压 ADC 均值 (每帧内)
 % CNT     : HRTIM 计数器同步采样值
-% CMP_UON / CMP_UOFF / CMP_LON / CMP_LOFF : 四边沿比较值
+% CMP_UON / CMP_UOFF / CMP_LON / CMP_LOFF : 四边沿比较值 (帧级参数)
+% POWER   : 当前功率参考值 (帧级参数, 仅供参考)
 
 %% 1) 读取 CSV
 if ~exist(csv_path, 'file')
@@ -34,18 +39,32 @@ fprintf('[load_data] 表头: %s\n', header_line);
 [n_rows, n_cols] = size(data);
 fprintf('[load_data] 读取 %d 行 × %d 列\n', n_rows, n_cols);
 
-%% 2) 列赋值 (按 9 列定义)
+%% 2) 列赋值 + 前向填充参数列 + 移除参数行
+% 格式: t_us(1), I_adc(2), V_adc(3), Vdc_adc(4), CNT(5),
+%        CMP_UON(6), CMP_UOFF(7), CMP_LON(8), CMP_LOFF(9), POWER(10)
+
+% 前向填充 CMP 和 POWER 列 (参数行才有值, 采样行为空→NaN)
+if n_cols >= 6
+    data(:, 6:end) = fillmissing(data(:, 6:end), 'previous');
+end
+
+% 移除参数行 (t_us 为空→NaN 的行)
+data = data(~isnan(data(:, 1)), :);
+[n_rows, n_cols] = size(data);
+fprintf('[load_data] 移除参数行后: %d 行 × %d 列\n', n_rows, n_cols);
+
 t_us    = data(:, 1);          % μs
 I_adc   = data(:, 2);
 V_adc   = data(:, 3);
-Vdc_adc = data(:, 4);          % 直流母线电压 ADC
+Vdc_adc = data(:, 4);          % 直流母线电压 ADC (帧内均值)
 CNT     = data(:, 5);
 CMP     = data(:, 6:9);        % UON, UOFF, LON, LOFF
 
-% 列数兼容: 若只有8列(无Vdc), Vdc_adc 置 NaN
-if n_cols < 9
-    warning('[load_data] 未检测到 Vdc 列 (9列), 使用 NaN');
-    Vdc_adc = NaN(n_rows, 1);
+% POWER 列 (第10列, 若存在)
+if n_cols >= 10
+    POWER = data(:, 10);
+else
+    POWER = NaN(n_rows, 1);
 end
 
 %% 3) 物理量还原
@@ -113,6 +132,7 @@ raw.V        = V;       % V
 raw.Vdc      = Vdc;     % V (直流母线电压, 含100Hz纹波)
 raw.CNT      = CNT;
 raw.CMP      = CMP;     % [UON, UOFF, LON, LOFF]
+raw.POWER    = POWER;   % 功率参考值 (仅供参考, 不参与计算)
 raw.I_adc    = I_adc;   % 保存原始值备查
 raw.V_adc    = V_adc;
 raw.Vdc_adc  = Vdc_adc;

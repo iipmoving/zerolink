@@ -1361,20 +1361,26 @@ class M4DebugApp:
                         delta += 65536
                     t_us.append(t_us[-1] + delta * dt_per_cnt)
 
+                # 参数独立一行 (帧头)
+                self._raw_csv.writerow({
+                    't_us': '', 'I_adc': '', 'V_adc': '', 'Vdc_adc': '', 'CNT': '',
+                    'CMP_UON':  cmp_[0] if len(cmp_) > 0 else '',
+                    'CMP_UOFF': cmp_[1] if len(cmp_) > 1 else '',
+                    'CMP_LON':  cmp_[2] if len(cmp_) > 2 else '',
+                    'CMP_LOFF': cmp_[3] if len(cmp_) > 3 else '',
+                    'POWER':    cmp_[4] if len(cmp_) > 4 else '',
+                })
+                # 采样行 (不含参数)
                 for si in range(n):
-                    row = {
+                    self._raw_csv.writerow({
                         't_us':     t_us[si],
                         'I_adc':    i_adc[si],
                         'V_adc':    v_adc[si],
                         'Vdc_adc':  vdc_mean,
                         'CNT':      cnt[si],
-                        'CMP_UON':  cmp_[0] if len(cmp_) > 0 else 0,
-                        'CMP_UOFF': cmp_[1] if len(cmp_) > 1 else 0,
-                        'CMP_LON':  cmp_[2] if len(cmp_) > 2 else 0,
-                        'CMP_LOFF': cmp_[3] if len(cmp_) > 3 else 0,
-                        'POWER':    cmp_[4] if len(cmp_) > 4 else 0,
-                    }
-                    self._raw_csv.writerow(row)
+                        'CMP_UON':  '', 'CMP_UOFF': '',
+                        'CMP_LON':  '', 'CMP_LOFF': '', 'POWER': '',
+                    })
 
             self._raw_file.flush()
             self._set_status(
