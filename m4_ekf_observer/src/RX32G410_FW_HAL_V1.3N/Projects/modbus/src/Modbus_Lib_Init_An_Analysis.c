@@ -205,28 +205,6 @@ static unsigned char (*const s_check_0x3000[DF_Stove_Quantity])(void) = {
     S3_Check_Write_0x3000, S4_Check_Write_0x3000
 };
 
-/* ========== WaveCapture / RawCapture ACK 解冻回调 ==================== */
-/*
- * 全局共享缓冲区 — 所有从机使用同一函数。
- * PC 写 ack=1 后，MODBUS 库先写入内存再调用此回调。
- * 检测到 ack!=0 且 status=READY 时，调用 MarkRead() 解冻帧缓冲。
- */
-static unsigned char Wave_Check_Write(void)
-{
-    if (g_wave_frame.ack && (g_wave_frame.status & WAVE_STATUS_READY)) {
-        WaveCapture_MarkRead();
-    }
-    return 1;
-}
-
-static unsigned char Raw_Check_Write(void)
-{
-    if (g_raw_frame.ack && (g_raw_frame.status & RAW_STATUS_READY)) {
-        RawCapture_MarkRead();
-    }
-    return 1;
-}
-
 /* ========== load_default_init (m4_init_config.json 默认值) =========== */
 /*
  * 上电默认值 — 与 m4_init_config.json 严格一致。
@@ -365,7 +343,7 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][4].End_Address     = 0x5000 + (sizeof(WaveCaptureFrame) / sizeof(unsigned short));
         s_areas[i][4].Data_ptr        = WaveCapture_GetFramePtr();    /* 全局单缓冲, 所有炉头共享 */
         s_areas[i][4].Data_ptr_EEPROM = NULL;
-        s_areas[i][4].Check_Write_Data = Wave_Check_Write;           /* ACK写入→自动解冻 */
+        s_areas[i][4].Check_Write_Data = WaveCapture_OnAckWrite;     /* ACK写入→自动解冻 */
         s_areas[i][4].Data_Size       = sizeof(unsigned short);
         s_areas[i][4].Data_Pyte       = 1;                           /* R/W: 主机写 ACK/ctrl, 读帧数据 */
 
@@ -374,7 +352,7 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][5].End_Address     = 0x5100 + (sizeof(RawCaptureFrame) / sizeof(unsigned short));
         s_areas[i][5].Data_ptr        = RawCapture_GetFramePtr();
         s_areas[i][5].Data_ptr_EEPROM = NULL;
-        s_areas[i][5].Check_Write_Data = Raw_Check_Write;            /* ACK写入→自动解冻 */
+        s_areas[i][5].Check_Write_Data = RawCapture_OnAckWrite;      /* ACK写入→自动解冻 */
         s_areas[i][5].Data_Size       = sizeof(unsigned short);
         s_areas[i][5].Data_Pyte       = 1;                           /* R/W: 主机写 ACK, 读帧数据 */
 

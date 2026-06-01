@@ -15,8 +15,8 @@
 #include "wave_capture.h"
 #include <string.h>
 
-/* ========== 全局帧缓冲区 (MODBUS 0x5000 直接映射) ==================== */
-WaveCaptureFrame g_wave_frame;
+/* ========== 帧缓冲区 (MODBUS 0x5000 直接映射) ======================== */
+static WaveCaptureFrame s_frame;
 
 /* ========== 内部状态 ================================================= */
 static uint16_t  s_frame_count;       /* 本批已收帧数 */
@@ -27,8 +27,8 @@ static uint8_t   s_lock;              /* 防重入锁 */
 /* ========== 初始化 =================================================== */
 void WaveCapture_Init(void)
 {
-    memset((void*)&g_wave_frame, 0, sizeof(g_wave_frame));
-    g_wave_frame.max_frames = WAVE_DEFAULT_FRAMES;
+    memset((void*)&s_frame, 0, sizeof(s_frame));
+    s_frame.max_frames = WAVE_DEFAULT_FRAMES;
 
     s_frame_count  = 0;
     s_frame_id     = 0;
@@ -39,23 +39,23 @@ void WaveCapture_Init(void)
 /* ========== 获取帧指针 (MODBUS Area 注册用) ========================== */
 void* WaveCapture_GetFramePtr(void)
 {
-    return (void*)&g_wave_frame;
+    return (void*)&s_frame;
 }
 
 /* ========== 检查帧就绪 =============================================== */
 uint8_t WaveCapture_IsReady(void)
 {
-    return (g_wave_frame.status & WAVE_STATUS_READY) ? 1 : 0;
+    return (s_frame.status & WAVE_STATUS_READY) ? 1 : 0;
 }
 
 /* ========== 确认读完 → 解冻 ========================================== */
 void WaveCapture_MarkRead(void)
 {
-    g_wave_frame.status      = 0;
-    g_wave_frame.count       = 0;
-    g_wave_frame.data_words  = 0;
-    g_wave_frame.ack         = 0;
-    g_wave_frame.frame_id    = ++s_frame_id;
+    s_frame.status      = 0;
+    s_frame.count       = 0;
+    s_frame.data_words  = 0;
+    s_frame.ack         = 0;
+    s_frame.frame_id    = ++s_frame_id;
 
     s_frame_count  = 0;
     s_write_offset = 0;
@@ -71,7 +71,7 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
     if (msg == 0) return 0;
 
     /* 帧就绪中 → 拒绝, 等 MarkRead */
-    if (g_wave_frame.status & WAVE_STATUS_READY) return 0;
+    if (s_frame.status & WAVE_STATUS_READY) return 0;
 
     /* 防重入 */
     if (s_lock) return 0;
@@ -102,15 +102,15 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
 
     /* ---- 首帧: 设置 COLLECTING 状态 ---- */
     if (s_frame_count == 0) {
-        g_wave_frame.status |= WAVE_STATUS_COLLECTING;
+        s_frame.status |= WAVE_STATUS_COLLECTING;
     }
 
     /* ---- 写入 size 前缀 ---- */
-    g_wave_frame.data[s_write_offset] = frame_words;
+    s_frame.data[s_write_offset] = frame_words;
     s_write_offset++;
 
     /* ---- 拷贝 array[0..n] 全部数据 ---- */
-    dest = (uint16_t*)&g_wave_frame.data[s_write_offset];
+    dest = (uint16_t*)&s_frame.data[s_write_offset];
     for (i = 0; i < PRINT_MESSAGE_BUFF_SIZE; i++) {
         uint16_t sz = msg->array[i].size;
         if (sz > 0 && msg->array[i].buff != 0) {
@@ -134,13 +134,22 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
     s_frame_count++;
 
     /* ---- 帧满 → 冻结 ---- */
-    if (s_frame_count >= g_wave_frame.max_frames) {
-        g_wave_frame.count      = s_frame_count;
-        g_wave_frame.data_words = s_write_offset;
-        g_wave_frame.frame_id   = s_frame_id;
-        g_wave_frame.status     = WAVE_STATUS_READY;
+    if (s_frame_count >= s_frame.max_frames) {
+        s_frame.count      = s_frame_count;
+        s_frame.data_words = s_write_offset;
+        s_frame.frame_id   = s_frame_id;
+        s_frame.status     = WAVE_STATUS_READY;
     }
 
     s_lock = 0;
+    return 1;
+}
+
+/* ========== ACK 写回调 (MODBUS Check_Write_Data) ====================== */
+uint8_t WaveCapture_OnAckWrite(void)
+{
+    if (s_frame.ack && (s_frame.status & WAVE_STATUS_READY)) {
+        WaveCapture_MarkRead();
+    }
     return 1;
 }

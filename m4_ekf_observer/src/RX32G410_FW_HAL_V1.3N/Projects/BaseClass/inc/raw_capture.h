@@ -77,4 +77,11 @@ void     RawCapture_MarkRead(void);
  */
 uint8_t  RawCapture_PushMessage(MessageDef* msg);
 
+/**
+ * @brief ACK 写回调 — 供 MODBUS Check_Write_Data 注册
+ *        检测到 host 写 ack!=0 且 status=READY 时自动解冻
+ * @return 1=允许写入
+ */
+uint8_t  RawCapture_OnAckWrite(void);
+
 #endif /* RAW_CAPTURE_H */
