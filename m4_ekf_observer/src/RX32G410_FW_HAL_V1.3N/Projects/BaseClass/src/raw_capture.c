@@ -147,7 +147,7 @@ uint8_t RawCapture_PushMessage(MessageDef* msg)
 }
 
 /* ========== ACK 写回调 (MODBUS Check_Write_Data) ====================== */
-uint8_t RawCapture_OnAckWrite(void)
+unsigned char RawCapture_OnAckWrite(void)
 {
     if (s_frame.ack && (s_frame.status & RAW_STATUS_READY)) {
         RawCapture_MarkRead();

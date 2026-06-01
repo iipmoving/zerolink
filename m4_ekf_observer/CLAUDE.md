@@ -51,6 +51,26 @@
 - 不改现有 MODBUS 寄存器含义 (会破坏 PC 工具兼容性)
 - 新增寄存器在 0x1015+ 区域
 
+### 规则 4：新模块零耦合 (自 2026-06-01 起执行)
+
+新增或重构的单功能模块必须遵循：
+
+1. **模块内部状态 `static`** — 禁止全局变量，只通过 API 函数暴露
+2. **跨模块通信用 `__weak` 回调** — 调用方定义 `__attribute__((weak))` 默认空实现，实现方提供强覆盖。不在 `.h` 中声明回调函数
+3. **值传递优先** — 回调参数用值类型，不传指针跨越模块边界
+4. **一个 `.h` 只暴露 API** — 头文件只放结构体定义 + 公开函数声明，不放回调声明
+
+```c
+// 正确: modbus 层定义 weak 默认 (无操作)
+__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
+
+// 正确: wave_capture.c 提供强实现覆盖 (链接器自动选择)
+unsigned char WaveCapture_OnAckWrite(void) { ... }
+
+// 错误: 在 .h 中声明回调, 让调用方 include
+uint8_t WaveCapture_OnAckWrite(void);  // ← 不要这样做
+```
+
 ---
 
 ## 三、项目规格

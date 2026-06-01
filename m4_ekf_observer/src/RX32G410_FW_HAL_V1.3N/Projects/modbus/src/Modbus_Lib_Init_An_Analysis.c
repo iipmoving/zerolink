@@ -165,6 +165,14 @@ __attribute__((weak)) uint8_t* API_UART_TxInitCallback(uint8_t chn, uint8_t len)
     return 0;
 }
 
+/* ========== Capture ACK 回调 (__weak 默认空实现) ===================== */
+/*
+ * 由 wave_capture.c / raw_capture.c 提供强实现覆盖。
+ * modbus 层不 include 对应头文件即可通过链接器解耦。
+ */
+__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
+__attribute__((weak)) unsigned char RawCapture_OnAckWrite(void)  { return 1; }
+
 /* ========== Check_Write_Data 跳板函数 ================================ */
 /*
  * 协议引擎调用 unsigned char (*)(void) — 无参数。
