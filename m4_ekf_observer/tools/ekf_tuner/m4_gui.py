@@ -13,6 +13,7 @@ M4 半桥电磁炉 — MODBUS 调试界面
 
 import sys
 import os
+import csv
 import json
 import time
 import tkinter as tk
@@ -276,7 +277,36 @@ class M4DebugApp:
         self._recording = False
         self._records = []   # 内存记录, 停止时批量写 CSV
         self._csv_fields = ["timestamp", "freq_hz", "phase_deg",
-                           "delta_ppg_signed", "power_actual", "power_target"]
+                           "delta_ppg_signed", "res_cur_adc",
+                           "power_actual", "power_target"]
+
+        # WaveCapture 波形批量回读
+        self._mon_wave = tk.BooleanVar(value=False)
+        self._wave_interval_ms = 2000
+        self._wave_job = None
+        self._wave_csv = None
+        self._wave_file = None
+        self._wave_batch_id = 0
+        self._wave_csv_path = ""
+        self._wave_csv_fields = [
+            "batch_id", "frame_idx", "sample_idx", "value",
+            "para0", "para1", "para2", "para3", "para4"
+        ]
+        self._mon_wave.trace_add('write', self._on_wave_toggle)
+
+        # RawCapture 原始9列数据采集
+        self._mon_raw = tk.BooleanVar(value=False)
+        self._raw_interval_ms = 2000
+        self._raw_job = None
+        self._raw_csv = None
+        self._raw_file = None
+        self._raw_batch_id = 0
+        self._raw_csv_path = ""
+        self._raw_csv_fields = [
+            "t_us", "I_adc", "V_adc", "Vdc_adc",
+            "CNT", "CMP_UON", "CMP_UOFF", "CMP_LON", "CMP_LOFF", "POWER"
+        ]
+        self._mon_raw.trace_add('write', self._on_raw_toggle)
 
         # 遥测行组件引用
         self.reg_rows = {}      # name → RegisterRow (标准)
@@ -355,7 +385,7 @@ class M4DebugApp:
         # 波特率
         tk.Label(bar, text="Baud", bg=BG2, fg=DIM,
                 font=("Consolas", 8)).pack(side=tk.LEFT)
-        self.baud_var = tk.StringVar(value="57600")
+        self.baud_var = tk.StringVar(value="115200")
         baud_cb = ttk.Combobox(bar, textvariable=self.baud_var,
                                values=["9600", "19200", "38400", "57600", "115200"],
                                width=6, font=("Consolas", 9))
@@ -420,6 +450,16 @@ class M4DebugApp:
                             selectcolor=BG, activebackground=BG2,
                             activeforeground=FG)
         cb2.pack(side=tk.RIGHT, padx=(0, 2))
+        cb3 = tk.Checkbutton(bar, text="Wave", variable=self._mon_wave,
+                            bg=BG2, fg=FG, font=("Consolas", 8),
+                            selectcolor=BG, activebackground=BG2,
+                            activeforeground=FG)
+        cb3.pack(side=tk.RIGHT, padx=(0, 2))
+        cb4 = tk.Checkbutton(bar, text="Raw", variable=self._mon_raw,
+                            bg=BG2, fg=FG, font=("Consolas", 8),
+                            selectcolor=BG, activebackground=BG2,
+                            activeforeground=FG)
+        cb4.pack(side=tk.RIGHT, padx=(0, 2))
 
     def _build_reg_panel(self, parent, title, reg_dict, prefix, side):
         """构建寄存器面板"""
@@ -541,7 +581,7 @@ class M4DebugApp:
         self.power_slider.pack(side=tk.LEFT, padx=(0, 12))
 
         # 快捷功率按钮
-        for w in [500, 1000, 1500, 2000]:
+        for w in [1000, 1500, 2000, 2200, 2400, 2600, 2800, 3000]:
             btn = tk.Button(inner, text=str(w), command=lambda v=w: self._quick_power(v),
                            bg=BORDER, fg=FG, font=("Consolas", 8),
                            activebackground=ACCENT, relief=tk.FLAT,
@@ -924,6 +964,8 @@ class M4DebugApp:
     def _disconnect(self):
         self._stop_monitor()
         self._stop_recording()
+        self._mon_wave.set(False)  # triggers _wave_stop via trace
+        self._mon_raw.set(False)   # triggers _raw_stop via trace
         if self.plotter:
             self.plotter.close()
             self.plotter = None
@@ -1064,10 +1106,10 @@ class M4DebugApp:
         if self._mon_ekf.get():
             ekf = self.client.read_ekf_telemetry()
             if ekf:
-                # 补充实际功率 (0x1006 = Practical_Power, 单位 W)
+                # 补充实际功率 (0x1006 = Practical_Power, 寄存器值需 *25 = W)
                 pwr_raw = self.client.read_registers(0x1006, 1)
                 if pwr_raw is not None:
-                    ekf["power_actual"] = pwr_raw[0]
+                    ekf["power_actual"] = pwr_raw[0] * 25
                 self._update_reg_display(ekf, self.ekf_rows)
                 self._update_ekf_computed(ekf)
 
@@ -1078,6 +1120,7 @@ class M4DebugApp:
                 "freq_hz": ekf.get("freq_hz", 0),
                 "phase_deg": ekf.get("phase_deg", 0),
                 "delta_ppg_signed": ekf.get("delta_ppg_signed", 0),
+                "res_cur_adc": ekf.get("res_cur_adc", 0),
                 "power_actual": ekf.get("power_actual", 0),
                 "power_target": self.client._heartbeat_power_w * 25,
             })
@@ -1137,7 +1180,7 @@ class M4DebugApp:
             return
         self.client.check_and_init()
         if self.power_var.get() == 0:
-            self.power_var.set(500)
+            self.power_var.set(1000)
         self.client.set_power(self.power_var.get())
         self.client.set_work_sta(True, fan_on=True)
         self.client.start_heartbeat(power_watt=self.power_var.get(), fan_on=True)
@@ -1183,6 +1226,164 @@ class M4DebugApp:
         else:
             self._set_status("记录已停止 (无数据)")
 
+    # ---- WaveCapture 波形批量回读 -------------------------------
+
+    def _on_wave_toggle(self, *_):
+        if self._mon_wave.get():
+            self._wave_start()
+        else:
+            self._wave_stop()
+
+    def _wave_start(self):
+        if not self.client:
+            return
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._wave_csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            f"wave_{ts}.csv")
+        self._wave_file = open(self._wave_csv_path, 'w', newline='',
+                               encoding='utf-8')
+        self._wave_csv = csv.DictWriter(self._wave_file,
+                                        fieldnames=self._wave_csv_fields)
+        self._wave_csv.writeheader()
+        self._wave_batch_id = 0
+        self._set_status(f"Wave 记录开始 → {os.path.basename(self._wave_csv_path)}")
+        self._wave_poll()
+
+    def _wave_stop(self):
+        if self._wave_job:
+            self.root.after_cancel(self._wave_job)
+            self._wave_job = None
+        if self._wave_file:
+            self._wave_file.close()
+            self._wave_file = None
+            self._wave_csv = None
+            self._set_status(f"Wave 记录已停止 → "
+                           f"{os.path.basename(self._wave_csv_path)}")
+
+    def _wave_poll(self):
+        if not self._mon_wave.get() or not self.client:
+            return
+
+        w = self.client.read_wave_capture()
+        if w and w['count'] > 0:
+            bid = self._wave_batch_id
+            self._wave_batch_id += 1
+
+            for fi, frame in enumerate(w['frames']):
+                data = frame['data']
+                para = frame['para']
+
+                for si, val in enumerate(data):
+                    row = {
+                        'batch_id': bid,
+                        'frame_idx': fi,
+                        'sample_idx': si,
+                        'value': val,
+                        'para0': para[0] if len(para) > 0 else 0,
+                        'para1': para[1] if len(para) > 1 else 0,
+                        'para2': para[2] if len(para) > 2 else 0,
+                        'para3': para[3] if len(para) > 3 else 0,
+                        'para4': para[4] if len(para) > 4 else 0,
+                    }
+                    self._wave_csv.writerow(row)
+
+            self._wave_file.flush()
+            self._set_status(
+                f"Wave #{bid} saved: {w['count']} frames × "
+                f"~{w.get('data_words', 0)}w "
+                f" → {os.path.basename(self._wave_csv_path)}")
+
+        self._wave_job = self.root.after(self._wave_interval_ms,
+                                         self._wave_poll)
+
+    # ---- RawCapture 原始9列数据采集 ------------------------------
+
+    def _on_raw_toggle(self, *_):
+        if self._mon_raw.get():
+            self._raw_start()
+        else:
+            self._raw_stop()
+
+    def _raw_start(self):
+        if not self.client:
+            return
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._raw_csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            f"raw_{ts}.csv")
+        self._raw_file = open(self._raw_csv_path, 'w', newline='',
+                              encoding='utf-8')
+        self._raw_csv = csv.DictWriter(self._raw_file,
+                                       fieldnames=self._raw_csv_fields)
+        self._raw_csv.writeheader()
+        self._raw_batch_id = 0
+        self._set_status(f"Raw 记录开始 → {os.path.basename(self._raw_csv_path)}")
+        self._raw_poll()
+
+    def _raw_stop(self):
+        if self._raw_job:
+            self.root.after_cancel(self._raw_job)
+            self._raw_job = None
+        if self._raw_file:
+            self._raw_file.close()
+            self._raw_file = None
+            self._raw_csv = None
+            self._set_status(f"Raw 记录已停止 → "
+                           f"{os.path.basename(self._raw_csv_path)}")
+
+    def _raw_poll(self):
+        if not self._mon_raw.get() or not self.client:
+            return
+
+        r = self.client.read_raw_capture()
+        if r and r['count'] > 0:
+            bid = self._raw_batch_id
+            self._raw_batch_id += 1
+
+            for fi, frame in enumerate(r['frames']):
+                i_adc = frame['i_adc']
+                v_adc = frame['v_adc']
+                cnt   = frame['cnt']
+                cmp_  = frame['cmp']
+                n     = frame['n']
+
+                # Vdc_adc = 母线电压均值 (此帧内)
+                vdc_mean = round(sum(v_adc) / len(v_adc)) if v_adc else 0
+
+                # t_us 从 CNT 推算 (处理 16-bit 绕回)
+                hrtim_clk_mhz = 768.0
+                dt_per_cnt = 1.0 / hrtim_clk_mhz
+                t_us = [0.0]
+                for i in range(1, n):
+                    delta = cnt[i] - cnt[i-1]
+                    if delta < 0:
+                        delta += 65536
+                    t_us.append(t_us[-1] + delta * dt_per_cnt)
+
+                for si in range(n):
+                    row = {
+                        't_us':     t_us[si],
+                        'I_adc':    i_adc[si],
+                        'V_adc':    v_adc[si],
+                        'Vdc_adc':  vdc_mean,
+                        'CNT':      cnt[si],
+                        'CMP_UON':  cmp_[0] if len(cmp_) > 0 else 0,
+                        'CMP_UOFF': cmp_[1] if len(cmp_) > 1 else 0,
+                        'CMP_LON':  cmp_[2] if len(cmp_) > 2 else 0,
+                        'CMP_LOFF': cmp_[3] if len(cmp_) > 3 else 0,
+                        'POWER':    cmp_[4] if len(cmp_) > 4 else 0,
+                    }
+                    self._raw_csv.writerow(row)
+
+            self._raw_file.flush()
+            self._set_status(
+                f"Raw #{bid} saved: {r['count']} frames × ~{n} samples "
+                f" → {os.path.basename(self._raw_csv_path)}")
+
+        self._raw_job = self.root.after(self._raw_interval_ms,
+                                        self._raw_poll)
+
     # ---- 工具方法 ----------------------------------------------
 
     def _set_status(self, msg):
@@ -1191,6 +1392,8 @@ class M4DebugApp:
     def on_close(self):
         self._stop_monitor()
         self._stop_recording()
+        self._mon_wave.set(False)  # triggers _wave_stop via trace
+        self._mon_raw.set(False)   # triggers _raw_stop via trace
         if self.plotter:
             self.plotter.close()
         if self.client:

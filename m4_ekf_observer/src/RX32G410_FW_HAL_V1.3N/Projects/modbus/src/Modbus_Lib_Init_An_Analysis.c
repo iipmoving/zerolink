@@ -8,12 +8,14 @@
 #include "Modbus_Lib_Init_An_Analysis.h"
 #include "API_UART.h"
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
+#include	"wave_capture.h"
+#include	"raw_capture.h"
 
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
 #define DF_Versions             1
 #define DF_MB_Uart_Rx_LONG      50
-#define DF_Modbus_AREA_COUNT    4   /* 每个从机的内存区域数: 0x1000, 0x2000, 0x3000, 0x1020 */
+#define DF_Modbus_AREA_COUNT    6   /* 区域数: 0x1000,0x2000,0x3000,0x1020,0x5000,0x5100 */
 
 /* MODBUS 从机地址 */
 static const unsigned char s_slave_addrs[DF_Stove_Quantity] = {0x05, 10, 15, 20};
@@ -334,6 +336,28 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][3].Check_Write_Data = NULL;
         s_areas[i][3].Data_Size       = sizeof(unsigned short);
         s_areas[i][3].Data_Pyte       = 0;
+
+
+        /* Area 4: 0x5000 WaveCapture 波形采集 (R/W: 控制寄存器可写, 帧数据只读) */
+        s_areas[i][4].Start_Address   = 0x5000;
+        s_areas[i][4].End_Address     = 0x5000 + (sizeof(WaveCaptureFrame) / sizeof(unsigned short));
+        s_areas[i][4].Data_ptr        = WaveCapture_GetFramePtr();    /* 全局单缓冲, 所有炉头共享 */
+        s_areas[i][4].Data_ptr_EEPROM = NULL;
+        s_areas[i][4].Check_Write_Data = NULL;
+        s_areas[i][4].Data_Size       = sizeof(unsigned short);
+        s_areas[i][4].Data_Pyte       = 1;                           /* R/W: 主机写 ctrl/head, 读帧数据 */
+
+        /* Area 5: 0x5100 RawCapture 原始9列采集 (R/W: 控制寄存器可写, 数据只读) */
+        s_areas[i][5].Start_Address   = 0x5100;
+        s_areas[i][5].End_Address     = 0x5100 + (sizeof(RawCaptureFrame) / sizeof(unsigned short));
+        s_areas[i][5].Data_ptr        = RawCapture_GetFramePtr();
+        s_areas[i][5].Data_ptr_EEPROM = NULL;
+        s_areas[i][5].Check_Write_Data = NULL;
+        s_areas[i][5].Data_Size       = sizeof(unsigned short);
+        s_areas[i][5].Data_Pyte       = 1;                           /* R/W: 主机写 ACK, 读帧数据 */
+
+
+
 
         /* PDU 配置 */
         s_pdu_cfg[i].Us_Cof_ARM_Num       = s_areas[i];

@@ -205,6 +205,7 @@ python m4_modbus_tool.py COM3 --power 1000 --on
 
 ## 十一、编码约定
 
+- 所有 if/else/while/for 必须加 {}，单行也不省略
 - snake_case 变量, PascalCase 函数, 4空格缩进
 - 中文注释说明复杂逻辑
 - EKF 矩阵运算显式展开
