@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MODBUS Simulator — M4 4通道加热控制</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Consolas', 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+  h1 { color: #00d4ff; margin-bottom: 4px; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+  .panel { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .panel h2 { color: #e94560; font-size: 15px; margin-bottom: 10px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .col { flex: 1; min-width: 200px; }
+  label { display: block; font-size: 12px; color: #aaa; margin-bottom: 2px; }
+  input, select { width: 100%; padding: 6px 8px; background: #0f3460; border: 1px solid #1a5276; color: #e0e0e0; border-radius: 4px; font-family: inherit; font-size: 13px; }
+  button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: bold; }
+  .btn-go { background: #00d4ff; color: #1a1a2e; }
+  .btn-stop { background: #e94560; color: #fff; }
+  .btn-step { background: #0f3460; color: #00d4ff; border: 1px solid #1a5276; }
+  .btn-step:hover { background: #1a5276; }
+  .ch-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .ch-tab { padding: 6px 14px; background: #0f3460; border: 1px solid #1a5276; color: #888; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px; }
+  .ch-tab.active { background: #16213e; color: #00d4ff; border-bottom-color: #16213e; font-weight: bold; }
+  .log-line { font-size: 12px; padding: 2px 0; border-bottom: 1px solid #0f3460; }
+  .log-line.tx { color: #00d4ff; }
+  .log-line.rx { color: #7bed9f; }
+  .log-line.info { color: #f9ca24; }
+  .log-line.err { color: #e94560; }
+  #log { max-height: 300px; overflow-y: auto; background: #0a0a1a; padding: 8px; border-radius: 4px; }
+  .reg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px; }
+  .reg-item { font-size: 11px; background: #0a0a1a; padding: 4px 6px; border-radius: 3px; }
+  .reg-item .addr { color: #888; }
+  .reg-item .val { color: #00d4ff; font-weight: bold; }
+  .status-bar { display: flex; gap: 16px; font-size: 13px; padding: 8px 0; flex-wrap: wrap; }
+  .status-bar span { color: #00d4ff; font-weight: bold; }
+  .ch-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .ch-card { background: #0a0a1a; border: 1px solid #0f3460; border-radius: 6px; padding: 10px; text-align: center; }
+  .ch-card .ch-name { font-size: 14px; font-weight: bold; color: #e94560; }
+  .ch-card .ch-val { font-size: 20px; color: #00d4ff; margin: 6px 0; }
+  .ch-card .ch-detail { font-size: 11px; color: #888; }
+  .ch-card.sel { border-color: #00d4ff; }
+</style>
+</head>
+<body>
+
+<h1>MODBUS RTU 仿真器 — 4通道半桥加热控制</h1>
+<div class="subtitle">FC03读 | FC10批写 | CRC-16 | 从机: 0x05/0x0A/0x0F/0x14 | 寄存器16位→应用层8位低字节</div>
+
+<!-- Channel summary -->
+<div class="ch-summary" id="ch_cards">
+  <div class="ch-card sel" id="card_1" onclick="selectCh(1)"><div class="ch-name">CH1 (0x05)</div><div class="ch-val">—</div><div class="ch-detail">功率 0W</div></div>
+  <div class="ch-card" id="card_2" onclick="selectCh(2)"><div class="ch-name">CH2 (0x0A)</div><div class="ch-val">—</div><div class="ch-detail">功率 0W</div></div>
+  <div class="ch-card" id="card_3" onclick="selectCh(3)"><div class="ch-name">CH3 (0x0F)</div><div class="ch-val">—</div><div class="ch-detail">功率 0W</div></div>
+  <div class="ch-card" id="card_4" onclick="selectCh(4)"><div class="ch-name">CH4 (0x14)</div><div class="ch-val">—</div><div class="ch-detail">功率 0W</div></div>
+</div>
+
+<div class="panel">
+  <h2>控制面板 — <span id="ch_label">CH1</span></h2>
+  <div class="row">
+    <div class="col">
+      <label>下发功率 (W)</label>
+      <input type="number" id="power_w" value="1000" min="0" max="3000" step="100">
+    </div>
+    <div class="col" style="display:flex;align-items:flex-end;gap:8px;">
+      <button class="btn-go" onclick="doInit()">1. 初始化</button>
+      <button class="btn-go" onclick="doPower()">2. 下发功率</button>
+      <button class="btn-go" onclick="doRead()">3. 回读</button>
+      <button class="btn-stop" onclick="doStop()">停止</button>
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <button class="btn-step" onclick="doFullCycle()">一键流程</button>
+    <button class="btn-step" onclick="doInitAll()">全部初始化</button>
+    <button class="btn-step" onclick="doTick10()">+10 tick</button>
+    <button class="btn-step" onclick="doReset()">全部重置</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="panel">
+      <h2>控制寄存器 (0x200E-0x2012)</h2>
+      <div class="reg-grid" id="regs_ctl"></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <h2>状态寄存器 (0x1000-0x1008)</h2>
+      <div class="reg-grid" id="regs_sta"></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <h2>初始化参数 (0x2000-0x2007)</h2>
+      <div class="reg-grid" id="regs_init"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>通讯日志</h2>
+  <div id="log"></div>
+</div>
+
+<script src="js/modbus_rtu.js"></script>
+<script src="js/modbus_slave.js"></script>
+<script src="js/modbus_master.js"></script>
+<script>
+// Globals — 4-channel bus
+window.MB = {
+    crc16: crc16, build_FC03: build_FC03, build_FC06: build_FC06, build_FC10: build_FC10,
+    build_FC03_response: build_FC03_response, build_FC06_response: build_FC06_response,
+    build_FC10_response: build_FC10_response, build_exception_response: build_exception_response,
+    parse_request: parse_request, parse_response: parse_response,
+    hexDump: hexDump, regBytesBE: regBytesBE, parseRegsBE: parseRegsBE,
+    MB_ERR_NONE: MB_ERR_NONE, MB_ERR_ILLEGAL_FUNC: MB_ERR_ILLEGAL_FUNC,
+    MB_ERR_ILLEGAL_ADDR: MB_ERR_ILLEGAL_ADDR, MB_ERR_ILLEGAL_VALUE: MB_ERR_ILLEGAL_VALUE,
+    MB_ERR_CRC: MB_ERR_CRC
+};
+
+var bus = new ModbusBus();
+var masters = {};
+var SLAVE_ADDRS = [0x05, 0x0A, 0x0F, 0x14];
+for (var i = 0; i < SLAVE_ADDRS.length; i++) {
+    masters[SLAVE_ADDRS[i]] = new ModbusMaster(SLAVE_ADDRS[i]);
+}
+var currentCh = 1;
+
+function currentAddr() { return SLAVE_ADDRS[currentCh - 1]; }
+function currentSlave() { return bus.slaves[currentAddr()]; }
+function currentMaster() { return masters[currentAddr()]; }
+
+function log(msg, cls) {
+    var d = document.getElementById('log');
+    var l = document.createElement('div');
+    l.className = 'log-line ' + (cls || 'info');
+    l.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+    d.appendChild(l);
+    d.scrollTop = d.scrollHeight;
+}
+
+function selectCh(n) {
+    currentCh = n;
+    document.getElementById('ch_label').textContent = 'CH' + n + ' (0x' + currentAddr().toString(16).toUpperCase() + ')';
+    for (var i = 1; i <= 4; i++) {
+        var card = document.getElementById('card_' + i);
+        card.className = 'ch-card' + (i === n ? ' sel' : '');
+    }
+    refreshUI();
+}
+
+function refreshUI() {
+    // Update channel cards
+    for (var i = 0; i < SLAVE_ADDRS.length; i++) {
+        var s = bus.slaves[SLAVE_ADDRS[i]];
+        var st = s.status_summary();
+        var card = document.getElementById('card_' + (i+1));
+        card.querySelector('.ch-val').textContent = st.init_done ? (st.heating ? 'ON ' + st.power_w + 'W' : 'IDLE') : '—';
+        card.querySelector('.ch-detail').textContent = '目标 ' + st.target_w + 'W | 风机 0x' + parseInt(st.fan,16).toString(16).toUpperCase();
+    }
+
+    // Detail view for current channel
+    var s = currentSlave();
+    var st = s.status_summary();
+
+    var labels = {0x200E:'Work_STA',0x200F:'Fan',0x2010:'Target_Pwr(8bit)',0x2011:'Int_Heat',0x2012:'Jitter(8bit)'};
+    var html = '';
+    for (var a = 0x200E; a <= 0x2012; a++) {
+        var r = s._resolve(a);
+        var v = r.area[r.offset];
+        html += '<div class="reg-item"><span class="addr">0x'+a.toString(16).toUpperCase()+' '+labels[a]+'</span><br><span class="val">0x'+v.toString(16).toUpperCase().padStart(4,'0')+' ('+v+')</span></div>';
+    }
+    document.getElementById('regs_ctl').innerHTML = html;
+
+    html = '';
+    for (var a = 0x1000; a <= 0x1008; a++) {
+        var r = s._resolve(a);
+        var v = r.area[r.offset];
+        html += '<div class="reg-item"><span class="addr">0x'+a.toString(16).toUpperCase()+'</span><br><span class="val">0x'+v.toString(16).toUpperCase().padStart(4,'0')+'</span></div>';
+    }
+    document.getElementById('regs_sta').innerHTML = html;
+
+    var ilabels = {0x2000:'ChkPanLV',0x2001:'PPG_Max',0x2002:'PanPwr',0x2003:'HVolLim',0x2004:'LoadCur',0x2005:'CurCal',0x2006:'PwrMIX',0x2007:'PwrMAX'};
+    html = '';
+    for (var a = 0x2000; a <= 0x2007; a++) {
+        var r = s._resolve(a);
+        var v = r.area[r.offset];
+        html += '<div class="reg-item"><span class="addr">0x'+a.toString(16).toUpperCase()+' '+ilabels[a]+'</span><br><span class="val">0x'+v.toString(16).toUpperCase().padStart(4,'0')+' ('+v+')</span></div>';
+    }
+    document.getElementById('regs_init').innerHTML = html;
+}
+
+function flushLog(entries) {
+    entries.forEach(function(e) {
+        log(e.label + '  TX: ' + e.tx, 'tx');
+        if (e.rx) log('  RX: ' + e.rx, 'rx');
+        if (e.err) log('  ERR: ' + e.err, 'err');
+    });
+}
+
+function doInit() {
+    var s = currentSlave(), m = currentMaster();
+    log('=== CH' + currentCh + ' INIT: FC10 zeros to 0x200E → poll SYS_STA bit7 ===', 'info');
+    var r = m.init(s, { poll_delay: 0 });
+    flushLog(m.log.slice(-10));
+    log(r.ok ? 'INIT OK — polls=' + r.poll_count + ' SYS_STA=0x' + r.sys_sta.toString(16) : 'INIT FAILED: ' + r.err, r.ok ? 'info' : 'err');
+    bus.tick();
+    refreshUI();
+}
+
+function doPower() {
+    var s = currentSlave(), m = currentMaster();
+    var w = parseInt(document.getElementById('power_w').value) || 1000;
+    log('=== CH' + currentCh + ' POWER: ' + w + 'W ===', 'info');
+    var r = m.send_power(s, { power_w: w });
+    flushLog(m.log.slice(-3));
+    log(r.ok ? 'POWER OK — jitter=' + r.jitter + ' pwr=' + r.power_w + 'W' : 'FAILED: ' + r.err, r.ok ? 'info' : 'err');
+    for (var t = 0; t < 5; t++) s.tick();
+    refreshUI();
+}
+
+function doRead() {
+    var s = currentSlave(), m = currentMaster();
+    log('=== CH' + currentCh + ' READ: FC03 9regs 0x1000 ===', 'info');
+    var r = m.read_back(s);
+    flushLog(m.log.slice(-3));
+    if (r.ok) {
+        log('READ — SYS=' + r.data.sys_sta + ' V=' + r.data.vol_ad + ' I=' + r.data.cur_ad + ' IGBT=' + r.data.igbt_ad + ' Bot=' + r.data.bot_ad + ' P=' + r.data.power_w + 'W PPG=' + r.data.ppg, 'info');
+    } else {
+        log('READ FAILED: ' + r.err, 'err');
+    }
+    refreshUI();
+}
+
+function doStop() {
+    var s = currentSlave(), m = currentMaster();
+    log('=== CH' + currentCh + ' STOP ===', 'info');
+    m.send_power(s, { on: false });
+    for (var t = 0; t < 5; t++) s.tick();
+    refreshUI();
+}
+
+function doFullCycle() {
+    var s = currentSlave(), m = currentMaster();
+    var w = parseInt(document.getElementById('power_w').value) || 1000;
+    log('=== CH' + currentCh + ' FULL CYCLE: ' + w + 'W ===', 'info');
+    var r = m.full_cycle(s, w);
+    flushLog(m.log);
+    log(r.ok ? 'OK — power=' + r.read.data.power_w + 'W' : 'FAILED', r.ok ? 'info' : 'err');
+    refreshUI();
+}
+
+function doInitAll() {
+    log('=== ALL 4 CHANNELS INIT ===', 'info');
+    for (var a = 0; a < SLAVE_ADDRS.length; a++) {
+        var addr = SLAVE_ADDRS[a];
+        var r = masters[addr].init(bus.slaves[addr], { poll_delay: 0 });
+        log('CH' + (a+1) + ': ' + (r.ok ? 'OK polls=' + r.poll_count : 'FAILED ' + r.err), r.ok ? 'info' : 'err');
+    }
+    bus.tick();
+    refreshUI();
+}
+
+function doTick10() {
+    for (var t = 0; t < 10; t++) bus.tick();
+    log('+10 ticks (100ms / CH)', 'info');
+    refreshUI();
+}
+
+function doReset() {
+    bus = new ModbusBus();
+    for (var i = 0; i < SLAVE_ADDRS.length; i++) {
+        masters[SLAVE_ADDRS[i]] = new ModbusMaster(SLAVE_ADDRS[i]);
+    }
+    document.getElementById('log').innerHTML = '';
+    log('All 4 channels reset', 'info');
+    refreshUI();
+}
+
+refreshUI();
+</script>
+</body>
+</html>

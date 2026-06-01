@@ -250,6 +250,28 @@ void HAL_UART_Debug_ISR(void)
 }
 
 /* ================================================================
+ * HAL_UART_Debug_RX_Enable —— 使能调试串口接收
+ * ================================================================ */
+void HAL_UART_Debug_RX_Enable(void)
+{
+    UART_RXCmd(DEBUG_UART, ENABLE);
+}
+
+/* ================================================================
+ * HAL_UART_Debug_GetChar —— 非阻塞读一个字节
+ *   返回: 1=读到字符(存入*ch), 0=无数据
+ * ================================================================ */
+uint8_t HAL_UART_Debug_GetChar(uint8_t *ch)
+{
+    if (UART_GetFlagStatus(DEBUG_UART, UART_Flag_RX) == SET) {
+        *ch = (uint8_t)UART_ReceiveData(DEBUG_UART);
+        UART_ClearFlag(DEBUG_UART, UART_Flag_RX);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* ================================================================
  * UART1_3_5_7816_IRQHandler —— 共享中断入口
  * ================================================================ */
 void UART1_3_5_7816_IRQHandler(void)

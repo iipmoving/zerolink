@@ -46,12 +46,9 @@ __weak void AppProtect_OnRegData(uint16_t param, void *data_ptr)
 __weak void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 
-/* ========== MODBUS功率控制寄存器(唯一知道这些地址的模块) ========== */
-#define COMM_POWER_REG_BASE      0x2000u
-#define COMM_POWER_REG_POWERSET  0u      /* 0x2000: 功率设定 = W/25 */
-#define COMM_POWER_REG_SWITCH    1u      /* 0x2001: 电源开关控制 */
-#define COMM_POWER_REG_FAN       2u      /* 0x2002: 风扇转速(预留) */
-#define COMM_POWER_REG_K_VALUE   3u      /* 0x2003: K值(预留) */
+/* ========== MODBUS实时控制寄存器(唯一知道这些地址的模块) ========== */
+#define COMM_REG_WORKSTATE       0x2014u /* 工作状态 bit0=总开关 bit1=风机 bit4=电压 */
+#define COMM_REG_TARGETPOWER     0x2016u /* 目标功率 = W */
 
 /* ========== 独立类型声明（与 DRV 层 DrvComm* 布局一致）========== */
 #define APP_COMM_SEND_BUF_SIZE  64u
@@ -206,17 +203,18 @@ void AppCommMgr_OnPowerCmd(uint16_t param, void *data_ptr)
         power_val = 0u;
     }
 
-    /* Frame 1: 功率设定 */
+    /* Frame 1: 目标功率 → 0x2016 */
     frame_len = Proto_BuildWriteSingle(slave_addr,
-                    COMM_POWER_REG_BASE + COMM_POWER_REG_POWERSET,
-                    power_val, s_tx_req.data);
+                    COMM_REG_TARGETPOWER, power_val, s_tx_req.data);
     s_tx_req.len = frame_len;
     DrvCommMgr_OnSendReq((uint16_t)cmd->head_idx, &s_tx_req);
 
-    /* Frame 2: 开关控制 */
+    /* Frame 2: 工作状态 → 0x2014
+     *   正常加热: bit0=1(总开关) | bit1=1(风机) | bit4=1(220V) = 0x13
+     *   关机: 全写0 = 0x00 */
     frame_len = Proto_BuildWriteSingle(slave_addr,
-                    COMM_POWER_REG_BASE + COMM_POWER_REG_SWITCH,
-                    (power_val > 0u) ? 0x10u : 0x01u, s_tx_req.data);
+                    COMM_REG_WORKSTATE,
+                    (power_val > 0u) ? 0x13u : 0x00u, s_tx_req.data);
     s_tx_req.len = frame_len;
     DrvCommMgr_OnSendReq((uint16_t)cmd->head_idx, &s_tx_req);
 }

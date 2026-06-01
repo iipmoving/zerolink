@@ -18,18 +18,18 @@
  * │  #   │ Caller (__weak 定义处)                │ Implementer (强符号定义处)            │ Purpose          │
  * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
  * │  0   │ Modbus_Lib_Init_An_Analysis.c:       │ wave_capture.c:                      │ MODBUS 0x5000    │
- * │      │   __weak WaveCapture_GetFramePtr()   │   void* WaveCapture_GetFramePtr()    │ 帧缓冲区指针     │
- * │      │   __weak WaveCapture_OnAckWrite()    │   uchar WaveCapture_OnAckWrite()    │ ACK 解冻回调    │
+ * │      │   Modbus_OnCaptureReg()              │   WaveCapture_Init() 内调用           │ 帧缓冲区注册     │
+ * │      │   (强符号, 接收注册信息)              │   Modbus_OnCaptureReg(0x5000, &reg)  │ (ptr+size+ack)   │
  * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
- * │  1   │ Modbus_Lib_Init_An_Analysis.c:       │ raw_capture.c:                       │ MODBUS 0x5100    │
- * │      │   __weak RawCapture_GetFramePtr()    │   void* RawCapture_GetFramePtr()     │ 帧缓冲区指针     │
- * │      │   __weak RawCapture_OnAckWrite()     │   uchar RawCapture_OnAckWrite()     │ ACK 解冻回调    │
- * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
- * │  2   │ Modbus_Lib_Init_An_Analysis.c:       │ (厂商固件)                            │ UART 回调        │
+ * │  1   │ Modbus_Lib_Init_An_Analysis.c:       │ (厂商固件)                            │ UART 回调        │
  * │      │   __weak API_UART_RxControlCallback  │   API_UART_RxControlCallback          │                  │
  * │      │   __weak API_UART_RxInitCallback     │   API_UART_RxInitCallback             │                  │
  * │      │   __weak API_UART_TxStatusCallback   │   API_UART_TxStatusCallback           │                  │
  * │      │   __weak API_UART_TxInitCallback     │   API_UART_TxInitCallback             │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │  2   │ printMessage.h:                      │ wave_capture.h:                      │ 数据帧推送       │
+ * │      │   MessageDef (发送方类型)             │   CaptureMsgDef_t (接收方类型)       │ 消息结构体配对   │
+ * │      │   MessageBuffDef                     │   CaptureMsgBuff_t                   │ 同布局不同名     │
  * └──────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┘
  *
  * ====================================================================
@@ -39,8 +39,16 @@
  * ┌─────────────────────────────────┬─────────────────────────────────┐
  * │ modbus 层 (本地常量)              │ capture 层 (struct 定义)         │
  * ├─────────────────────────────────┼─────────────────────────────────┤
+ * │ CaptureRegInfo_t                │ CaptureReg_OUT_t                │
+ * │ { frame_ptr, frame_words,       │ { frame_ptr, frame_words,       │
+ * │   on_ack }                      │   on_ack }                      │
+ * ├─────────────────────────────────┼─────────────────────────────────┤
+ * │ MessageDef / MessageBuffDef     │ CaptureMsgDef_t /               │
+ * │ (printMessage.h)                │ CaptureMsgBuff_t                │
+ * │ { array[8], paraArray,          │ (wave_capture.h)                │
+ * │   num, res1-3 }                 │ 同布局, 零 include              │
+ * ├─────────────────────────────────┼─────────────────────────────────┤
  * │ WAVE_FRAME_WORDS = 4006         │ sizeof(WaveCaptureFrame)         │
- * │ RAW_FRAME_WORDS  = 4006         │ sizeof(RawCaptureFrame)          │
  * │ 布局: header(6w) + data(4000w)  │ ack,status,id,count,dw,max+data │
  * ├─────────────────────────────────┼─────────────────────────────────┤
  * │ AI 保证: 常量与 sizeof() 一致    │                                  │

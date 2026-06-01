@@ -2709,19 +2709,23 @@ void	APP_ADC_CalculatePower(void)
 
 						
 						MessageCnt++;
-						MessageCnt=0;
+
 						if(MessageCnt>5000)
 						{
 
 
-							MessageCnt=5000;
+//							MessageCnt=5000;
 
-//							if(value<10)
+							if(MessageCnt<5000+10)
 							{
 								APP_ADC_TxaMessageOut(inputArray);//调试信息内存赋值
 					
-								MessageCnt=0;
+
 							}
+							else
+							{
+									MessageCnt=0;
+							}	
 				
 
 						}	

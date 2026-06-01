@@ -1078,7 +1078,7 @@ PowerResult CalculatePower(
 						
                     xReturn.zero_cross_high=angle/(FRE_PER_ADC/4);
 
-                    angle*=180;		//相位角（180度为单位）
+                    angle*=PHASE_DEG_BASE;		//相位角（180度为单位）
                     angle/=input->highOff-input->highOn;
                     xReturn.phase_angleUp=angle;
 

@@ -1757,3 +1757,9 @@ static uint8_t is_head_key(uint8_t key)
         || key == HMI_KEY_LEFT_P_SET_UP
         || key == HMI_KEY_RIGHT_P_SET_UP) ? 1 : 0;
 }
+
+/* ========== 对齐模块门禁: 仅 POWERED_OFF 允许进入 ========== */
+uint8_t AppSegAlign_CanEnter(void)
+{
+    return (s_global.mode == HMI_NODE_POWERED_OFF) ? 1u : 0u;
+}

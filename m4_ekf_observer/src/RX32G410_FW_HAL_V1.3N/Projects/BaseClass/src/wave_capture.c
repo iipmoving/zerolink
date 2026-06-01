@@ -8,6 +8,8 @@
                      [size0][帧0数据][size1][帧1数据]...
                      每帧前 1 word = 该帧总字数 (array + paraArray)
 
+                   通过 Modbus_OnCaptureReg() 统一注册到 modbus 层 (零 include)。
+
     Date        :  2026-06-01
     Copyright (c) Foshan XinSun Electronic Technology CO.,Ltd
 ********************************************************************************/
@@ -15,7 +17,16 @@
 #include "wave_capture.h"
 #include <string.h>
 
-/* ========== 帧缓冲区 (MODBUS 0x5000 直接映射) ======================== */
+/* ========== 跨模块注册通道 (→ modbus 层) ============================== */
+extern void Modbus_OnCaptureReg(uint16_t base_addr, void *data_ptr);
+
+typedef struct {
+    void*           frame_ptr;
+    uint16_t        frame_words;
+    unsigned char (*on_ack)(void);
+} CaptureReg_OUT_t;
+
+/* ========== 帧缓冲区 =================================================== */
 static WaveCaptureFrame s_frame;
 
 /* ========== 内部状态 ================================================= */
@@ -23,6 +34,21 @@ static uint16_t  s_frame_count;       /* 本批已收帧数 */
 static uint16_t  s_frame_id;          /* 批次ID (自增) */
 static uint16_t  s_write_offset;      /* 当前写位置 (data[] 内偏移) */
 static uint8_t   s_lock;              /* 防重入锁 */
+
+/* ========== ACK 回调 (供 modbus Check_Write_Data) ===================== */
+static unsigned char on_ack_write(void)
+{
+    if (s_frame.ack && (s_frame.status & WAVE_STATUS_READY)) {
+        s_frame.status      = 0;
+        s_frame.count       = 0;
+        s_frame.data_words  = 0;
+        s_frame.ack         = 0;
+        s_frame.frame_id    = ++s_frame_id;
+        s_frame_count  = 0;
+        s_write_offset = 0;
+    }
+    return 1;
+}
 
 /* ========== 初始化 =================================================== */
 void WaveCapture_Init(void)
@@ -34,12 +60,15 @@ void WaveCapture_Init(void)
     s_frame_id     = 0;
     s_write_offset = 0;
     s_lock         = 0;
-}
 
-/* ========== 获取帧指针 (MODBUS Area 注册用) ========================== */
-void* WaveCapture_GetFramePtr(void)
-{
-    return (void*)&s_frame;
+    /* 统一注册到 modbus 层 */
+    {
+        CaptureReg_OUT_t reg;
+        reg.frame_ptr   = (void*)&s_frame;
+        reg.frame_words = WAVE_HEADER_WORDS + WAVE_MAX_DATA_WORDS;
+        reg.on_ack      = on_ack_write;
+        Modbus_OnCaptureReg(0x5000, &reg);
+    }
 }
 
 /* ========== 检查帧就绪 =============================================== */
@@ -62,7 +91,7 @@ void WaveCapture_MarkRead(void)
 }
 
 /* ========== 推入一帧 (与 PrintMessagePush 调用方式完全一致) =========== */
-uint8_t WaveCapture_PushMessage(MessageDef* msg)
+uint8_t WaveCapture_PushMessage(CaptureMsgDef_t* msg)
 {
     uint16_t i, frame_words, capacity;
     uint16_t* dest;
@@ -79,7 +108,7 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
 
     /* ---- 计算本帧总字数: array[0..n] + paraArray ---- */
     frame_words = 0;
-    for (i = 0; i < PRINT_MESSAGE_BUFF_SIZE; i++) {
+    for (i = 0; i < CAPTURE_MSG_BUFF_SIZE; i++) {
         if (msg->array[i].size > 0 && msg->array[i].buff != 0) {
             frame_words += msg->array[i].size;
         }
@@ -111,7 +140,7 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
 
     /* ---- 拷贝 array[0..n] 全部数据 ---- */
     dest = (uint16_t*)&s_frame.data[s_write_offset];
-    for (i = 0; i < PRINT_MESSAGE_BUFF_SIZE; i++) {
+    for (i = 0; i < CAPTURE_MSG_BUFF_SIZE; i++) {
         uint16_t sz = msg->array[i].size;
         if (sz > 0 && msg->array[i].buff != 0) {
             uint16_t j;
@@ -142,14 +171,5 @@ uint8_t WaveCapture_PushMessage(MessageDef* msg)
     }
 
     s_lock = 0;
-    return 1;
-}
-
-/* ========== ACK 写回调 (MODBUS Check_Write_Data) ====================== */
-unsigned char WaveCapture_OnAckWrite(void)
-{
-    if (s_frame.ack && (s_frame.status & WAVE_STATUS_READY)) {
-        WaveCapture_MarkRead();
-    }
     return 1;
 }

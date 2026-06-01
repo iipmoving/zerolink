@@ -318,6 +318,26 @@ void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
     sync_hmi_display(disp);
 }
 
+/* ========== 对齐模式 HMI 阻塞 ========== */
+static uint8_t s_align_block_hmi;  /* 1=对齐模式激活, 抑制HMI刷新 */
+
+void DrvSegAlign_BlockHmi(uint8_t block)
+{
+    s_align_block_hmi = block;
+}
+
+/* ========== __weak: 对齐模式激活查询 (强符号在 app_seg_align.c) ========== */
+__weak uint8_t AppSegAlign_IsActive(void) { return 0u; }
+
+/* ========== 对齐模块: 单COM独立写段码 ========== */
+void DrvSegAlign_WriteCom(uint8_t com, uint8_t seg_mask)
+{
+    if (com < DISP_COM_COUNT) {
+        s_io_work[com] = seg_mask;
+        s_io_dirty = 1u;
+    }
+}
+
 /* ========== 初始化 ========== */
 void Drv_Display_Init(void)
 {
@@ -423,21 +443,24 @@ void Drv_Display_Update(void)
     if (s_update_cnt >= DISPLAY_UPDATE_PERIOD_10MS) {
         s_update_cnt = 0u;
 
-        if (s_disp_dirty != 0u) {
-            refresh_display();
+        /* 对齐模式激活时跳过 HMI 内容刷新 (对齐模块直写 IO) */
+        if (!s_align_block_hmi) {
+            if (s_disp_dirty != 0u) {
+                refresh_display();
+            }
+
+            /* SMG缓冲 → 工作缓冲(不碰扫描缓冲) */
+            s_io_work[0] = s_disp_upper[0];
+            s_io_work[1] = s_disp_upper[1];
+            s_io_work[2] = s_disp_upper[2];
+            s_io_work[3] = s_disp_upper[3];
+            s_io_work[4] = s_disp_lower[0];
+            s_io_work[5] = s_disp_lower[1];
+            s_io_work[6] = s_disp_lower[2];
+            s_io_work[7] = s_disp_lower[3];
+
+            s_io_dirty = 1u;
         }
-
-        /* SMG缓冲 → 工作缓冲(不碰扫描缓冲) */
-        s_io_work[0] = s_disp_upper[0];
-        s_io_work[1] = s_disp_upper[1];
-        s_io_work[2] = s_disp_upper[2];
-        s_io_work[3] = s_disp_upper[3];
-        s_io_work[4] = s_disp_lower[0];
-        s_io_work[5] = s_disp_lower[1];
-        s_io_work[6] = s_disp_lower[2];
-        s_io_work[7] = s_disp_lower[3];
-
-        s_io_dirty = 1u;
     }
 }
 

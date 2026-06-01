@@ -1895,7 +1895,7 @@ void	PPGgetAdcValue(uint8_t ch)
 //			PWMValue_L=0xff;		//相位比
 //		}
 
-		PWMValue_H=powerPhase;			//度数
+		PWMValue_H=powerPhase/10;			//度数
 
 //		uint16_t powervalue=getADCinputValue(AdcGroupPower1+ch);
 //		PWMValue_L=powervalue&0xff;
@@ -2523,16 +2523,18 @@ void		APP_POWER_PhaseHalfTypeSet(void)
 	uint8_t phaseType=0;
 	uint16_t duty,peroid;
 
+	
 #ifdef	DEBUG_POWER_OUT
 	powerPhase=20;
 	
 #endif
-
-	if(powerPhase<=PhaseProtectValue)
+	uint16_t 	t_phase=powerPhase/10;
+	t_phase=20;
+	if(t_phase<=PhaseProtectValue)
 	{
 		phaseType=PhaseProtect;
 	}
-	else if(powerPhase>PhaseResumeValue)
+	else if(t_phase>PhaseResumeValue)
 	{
 		phaseType=phaseCancle;
 	}
@@ -4273,9 +4275,8 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 	
 	
 
-TOPValue+=1;
 
-	// TOPValue=s_ppg_limit>>8;
+	TOPValue=s_ppg_limit>>8;
 	ActualPPG= g_power_duty>>8;	
 //	g_ppg_buf =t_corrent_ppg;	
 
@@ -6270,12 +6271,12 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
 
     ppg = API_PPG_getValue(chn);
 
-    /* 相位 (int16, 1 单位) 0~180 */
+    /* 相位 0~1800 (0.1° 单位) */
     ekf->Phase_Angle = (uint16_t)PowerMem[chn].staticReg->phaseValue;
 
-    /* 频率: f_hz = 384000000 / prioed */
+    /* 频率: f_hz = 384000000 / prioed * 2 (半桥倍频) */
     if (ppg.prioed > 0) {
-        freq_hz = 384000000UL / (uint32_t)ppg.prioed;
+        freq_hz = 384000000UL / (uint32_t)ppg.prioed * 2;
     } else {
         freq_hz = 0;
     }
@@ -6286,11 +6287,11 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
     ekf->PPG_Period = ppg.prioed;
     ekf->PPG_Duty   = ppg.duty;
 
-    /* PID 增量: 暂未暴露 */
+    /* PID 增量 */
     ekf->Delta_PPG = PidReturn[chn];
 
-    /* 谐振电流: 暂未暴露 (TODO: 从 TXA ADC 读取) */
-    ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;;//谐振电流平均值（一阶滤波后）
+    /* 谐振电流 (平均有功电流, 16位) */
+    ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;
 }
 
 //**********************************end of file********************************

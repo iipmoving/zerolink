@@ -17,6 +17,8 @@ __weak void AppHmi_OnKey(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 __weak void AppCooking_OnKey(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
+__weak void AppSegAlign_OnKey(uint16_t param, void *data_ptr)
+{ (void)param; (void)data_ptr; }
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
 #define TK_CH(n)        (1UL << (n))  /* 通道n的位掩码                         */
@@ -126,6 +128,7 @@ static void Key_PostEvent(uint8_t key_code, uint8_t key_state)
     uint16_t param = (uint16_t)key_code | ((uint16_t)key_state << 8);
     AppHmi_OnKey(param, NULL);
     AppCooking_OnKey(param, NULL);
+    AppSegAlign_OnKey(param, NULL);
 }
 
 /* ========== 处理按键释放（切键时先释放旧键） ========== */

@@ -9,25 +9,35 @@
 #include "API_UART.h"
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
 
-/* ========== Capture 模块 __weak 接入点 ================================= */
+/* ========== Capture 统一注册通道 ======================================= */
 /*
- * 通过 __weak 回调与 wave_capture.c / raw_capture.c 零耦合。
- * 若 capture 模块未链接 → 弱符号返回 0/NULL → MODBUS 区域无效但不会崩溃。
- * 帧大小常量与 capture 模块 struct sizeof 保持同步 (AI 保证)。
+ * 方法论: 跨模块通信通过统一回调，不拆分成多个零散函数。
+ * capture 模块在 Init() 中调用 Modbus_OnCaptureReg() 一次性上报:
+ *   帧缓冲区指针 + 帧容量 + ACK 处理函数
+ * modbus 层存储这些信息，配置 MODBUS 区域。
  */
-#define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
-#define RAW_FRAME_WORDS     (6 + 4000)   /* header(6w) + data(4000w) */
+typedef struct {
+    void*           frame_ptr;     /* 帧缓冲区指针 (Data_ptr) */
+    uint16_t        frame_words;   /* 帧总字数 (header + data) */
+    unsigned char (*on_ack)(void); /* ACK 写入回调 (Check_Write_Data 签名) */
+} CaptureRegInfo_t;
 
-__attribute__((weak)) void* WaveCapture_GetFramePtr(void) { return 0; }
-__attribute__((weak)) void* RawCapture_GetFramePtr(void)  { return 0; }
-__attribute__((weak)) unsigned char WaveCapture_OnAckWrite(void) { return 1; }
-__attribute__((weak)) unsigned char RawCapture_OnAckWrite(void)  { return 1; }
+/* 帧大小常量: 即使用 capture 模块未链接也能保证 MODBUS 区域有效 */
+#define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
+
+static CaptureRegInfo_t s_capture_reg;  /* WaveCapture(0x5000) 注册信息 */
+
+void Modbus_OnCaptureReg(uint16_t base_addr, void *data_ptr)
+{
+    (void)base_addr;
+    s_capture_reg = *(CaptureRegInfo_t*)data_ptr;
+}
 
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
 #define DF_Versions             1
 #define DF_MB_Uart_Rx_LONG      50
-#define DF_Modbus_AREA_COUNT    6   /* 区域数: 0x1000,0x2000,0x3000,0x1020,0x5000,0x5100 */
+#define DF_Modbus_AREA_COUNT    5   /* 区域数: 0x1000,0x2000,0x3000,0x1020,0x5000 */
 
 /* MODBUS 从机地址 */
 static const unsigned char s_slave_addrs[DF_Stove_Quantity] = {0x05, 10, 15, 20};
@@ -350,24 +360,14 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][3].Data_Pyte       = 0;
 
 
-        /* Area 4: 0x5000 WaveCapture 波形采集 (R/W: 控制寄存器可写, 帧数据只读) */
+        /* Area 4: 0x5000 WaveCapture 波形采集 (R/W: 来自注册通道) */
         s_areas[i][4].Start_Address   = 0x5000;
-        s_areas[i][4].End_Address     = 0x5000 + (WAVE_FRAME_WORDS);
-        s_areas[i][4].Data_ptr        = WaveCapture_GetFramePtr();    /* 全局单缓冲, 所有炉头共享 */
+        s_areas[i][4].End_Address     = 0x5000 + WAVE_FRAME_WORDS;
+        s_areas[i][4].Data_ptr        = s_capture_reg.frame_ptr;
         s_areas[i][4].Data_ptr_EEPROM = NULL;
-        s_areas[i][4].Check_Write_Data = WaveCapture_OnAckWrite;     /* ACK写入→自动解冻 */
+        s_areas[i][4].Check_Write_Data = s_capture_reg.on_ack;
         s_areas[i][4].Data_Size       = sizeof(unsigned short);
-        s_areas[i][4].Data_Pyte       = 1;                           /* R/W: 主机写 ACK/ctrl, 读帧数据 */
-
-        /* Area 5: 0x5100 RawCapture 原始9列采集 (R/W: 控制寄存器可写, 数据只读) */
-        s_areas[i][5].Start_Address   = 0x5100;
-        s_areas[i][5].End_Address     = 0x5100 + (RAW_FRAME_WORDS);
-        s_areas[i][5].Data_ptr        = RawCapture_GetFramePtr();
-        s_areas[i][5].Data_ptr_EEPROM = NULL;
-        s_areas[i][5].Check_Write_Data = RawCapture_OnAckWrite;      /* ACK写入→自动解冻 */
-        s_areas[i][5].Data_Size       = sizeof(unsigned short);
-        s_areas[i][5].Data_Pyte       = 1;                           /* R/W: 主机写 ACK, 读帧数据 */
-
+        s_areas[i][4].Data_Pyte       = 1;
 
 
 

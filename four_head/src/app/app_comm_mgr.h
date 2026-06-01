@@ -24,9 +24,10 @@
 #define COMM_SLAVE_ADDR_BASE     5u
 #define COMM_SLAVE_ADDR_STEP     5u
 
-/* ========== 寄存器定义 ========== */
-#define COMM_REG_STATUS          0x1000u  /* 系统状态     bit7=初始化完成 */
-#define COMM_REG_COUNT           22u      /* 每炉头寄存器数 0x1000-0x1015 */
+/* ========== 寄存器定义（与 MODBUS 协议规格书 V1.0 对齐）========== */
+#define COMM_REG_STATUS          0x1000u  /* 系统状态 bit7=初始化完成            */
+#define COMM_REG_COUNT           22u      /* 每头读取数 0x1000-0x1015            */
+/* 注: 0x1016-0x1020 规格书预留, 主机暂不读取 */
 
 /* ========== 时序参数 ========== */
 #define COMM_POLL_PERIOD_10MS    10u      /* 100ms轮询周期 = 10×10ms        */

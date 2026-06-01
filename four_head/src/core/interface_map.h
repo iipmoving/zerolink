@@ -185,6 +185,24 @@
  * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
  * │ 19   │ app_comm_mgr:                        │ proto_modbus:                        │ (raw buf)        │
  * │      │   __weak Proto_BuildWriteSingle()    │   uint16_t Proto_BuildWriteSingle()  │ uint8_t[64]      │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 20   │ drv_display:                         │ app_seg_align:                       │ (query)          │
+ * │      │   __weak AppSegAlign_IsActive()      │   uint8_t AppSegAlign_IsActive()     │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 21   │ drv_key:                             │ app_seg_align:                       │ (u16 param)      │
+ * │      │   __weak AppSegAlign_OnKey()         │   void AppSegAlign_OnKey()           │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 22   │ app_seg_align:                       │ drv_display:                         │ (per-COM)        │
+ * │      │   __weak DrvSegAlign_WriteCom()      │   void DrvSegAlign_WriteCom()        │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 23   │ app_seg_align:                       │ (storage):                           │ SegAlignMap_t*   │
+ * │      │   __weak SegAlign_OnSave()           │   void SegAlign_OnSave()             │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 24   │ app_seg_align:                       │ (storage):                           │ SegAlignMap_t*   │
+ * │      │   __weak SegAlign_OnLoad()           │   uint8_t SegAlign_OnLoad()          │                  │
+ * ├──────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┤
+ * │ 25   │ app_seg_align:                       │ drv_display:                         │ (flag)           │
+ * │      │   __weak DrvSegAlign_BlockHmi()      │   void DrvSegAlign_BlockHmi()        │                  │
  * └──────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┘
  *
  * 模块前缀缩写:

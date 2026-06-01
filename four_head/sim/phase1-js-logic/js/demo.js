@@ -318,29 +318,29 @@ function setupCanvasEvents() {
                     updateKeyInfo(control.name, keyCode, KeyEvent.KEY_EVENT_PRESS, null, isLongPressKey);
                 }
             } else {
-                // 普通按键：按下时立即发送PRESS事件
-                AppState.logicLayer.pressKey(keyCode, KeyEvent.KEY_EVENT_PRESS);
+                // 普通按键：只记录按下，不发送PRESS（避免与mouseup的SHORT重复触发）
                 log(`🔘 按键按下: ${control.name} (KeyCode=${keyCode})`, 'info');
-                
+
                 // ✅ 更新调试面板按键信息
                 if (typeof updateKeyInfo === 'function') {
                     updateKeyInfo(control.name, keyCode, KeyEvent.KEY_EVENT_PRESS, null, isLongPressKey);
                 }
-                
-                // ✅ 启动长按重复定时器（500ms后开始，每500ms一次）
+
+                // ✅ 启动长按重复定时器（1.5s后开始，每500ms一次REPEAT）
                 if (!AppState.longPressTimers) {
                     AppState.longPressTimers = {};
                 }
-                
+
                 if (AppState.longPressTimers[keyCode]) {
                     clearTimeout(AppState.longPressTimers[keyCode]);
+                    clearInterval(AppState.longPressTimers[keyCode]);
                 }
-                
+
                 AppState.longPressTimers[keyCode] = setTimeout(() => {
                     if (AppState.logicLayer && AppState.pressedKeys[control.name]) {
                         AppState.logicLayer.pressKey(keyCode, KeyEvent.KEY_EVENT_REPEAT);
                         log(`按键长按重复: ${control.name} (KeyCode=${keyCode})`, 'info');
-                        
+
                         AppState.longPressTimers[keyCode] = setInterval(() => {
                             if (AppState.logicLayer && AppState.pressedKeys[control.name]) {
                                 AppState.logicLayer.pressKey(keyCode, KeyEvent.KEY_EVENT_REPEAT);
@@ -587,6 +587,9 @@ async function startDemoWithWasm() {
         
         log('✅ WASM初始化成功', 'success');
         log('⚠️ 注意：上电后会自动进入自检流程（约3秒）', 'info');
+
+        /* 关键: 将 WASM 适配器挂到统一 logicLayer 接口, Canvas 事件通过它发按键 */
+        AppState.logicLayer = AppState.wasmAdapter;
         
         // ✅ 单向数据流：注册显示更新回调
         AppState.wasmAdapter.setDisplayUpdateCallback((seg, led) => {

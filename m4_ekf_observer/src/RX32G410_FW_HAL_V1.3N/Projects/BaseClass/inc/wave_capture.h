@@ -11,10 +11,27 @@
     Copyright (c) Foshan XinSun Electronic Technology CO.,Ltd
 ********************************************************************************/
 #ifndef WAVE_CAPTURE_H
-#define WAVE_CAPTURE_H
+//#define WAVE_CAPTURE_H
 
 #include <stdint.h>
-#include "printMessage.h"    /* MessageDef */
+
+/* ========== 独立消息结构 (与 printMessage.h 布局一致, 零 include) ======== */
+#define  CAPTURE_MSG_BUFF_SIZE   (8)
+
+typedef struct {
+    uint16_t size;
+    uint16_t res;
+    uint16_t* buff;
+} CaptureMsgBuff_t;
+
+typedef struct {
+    CaptureMsgBuff_t  array[CAPTURE_MSG_BUFF_SIZE];
+    CaptureMsgBuff_t  paraArray;
+    uint8_t  num;
+    uint8_t  res1;
+    uint8_t  res2;
+    uint8_t  res3;
+} CaptureMsgDef_t;
 
 /* ========== 常量 ===================================================== */
 
@@ -55,7 +72,6 @@ typedef struct {
 /* ========== API ===================================================== */
 
 void     WaveCapture_Init(void);
-void*    WaveCapture_GetFramePtr(void);
 uint8_t  WaveCapture_IsReady(void);
 void     WaveCapture_MarkRead(void);
 
@@ -66,6 +82,6 @@ void     WaveCapture_MarkRead(void);
  * @note   每帧独立, 大小不必相同
  *         满 max_frames 帧后自动冻结, status bit0=1
  */
-uint8_t  WaveCapture_PushMessage(MessageDef* msg);
+uint8_t  WaveCapture_PushMessage(CaptureMsgDef_t* msg);
 
 #endif /* WAVE_CAPTURE_H */

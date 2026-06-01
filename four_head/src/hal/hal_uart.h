@@ -48,6 +48,10 @@ uint8_t HAL_UART_Debug_TxBusy(void);
 /* 主循环等待段调用: 非阻塞模式安全网，阻塞模式空函数 */
 void HAL_UART_Debug_Flush(void);
 
+/* ---- 调试串口接收 (非阻塞, 供对齐模块轮询) ---- */
+void    HAL_UART_Debug_RX_Enable(void);
+uint8_t HAL_UART_Debug_GetChar(uint8_t *ch);  /* 返回1=有字符 */
+
 /* UART1_3_5_7816 共享中断入口 */
 void HAL_UART_Debug_ISR(void);
 

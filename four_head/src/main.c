@@ -25,6 +25,7 @@
 #include "app/app_power.h"
 #include "app/app_cooking.h"
 #include "app/app_hmi.h"
+#include "app/app_seg_align.h"
 
 /* __weak 定时回调: 链接器自动接线, interface_map.h 文档化 */
 __weak void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
@@ -33,6 +34,10 @@ __weak void AppHmi_OnTimer1s(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 __weak void AppCooking_OnTimer1s(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
+
+/* __weak 对齐模块桩: 不链接对齐模块时零开销 */
+__weak void AppSegAlign_Init(void) { }
+__weak void AppSegAlign_Run(void)  { }
 
 /* ========== 按键事件处理（调试用，HMI引擎接管后禁用）========== */
 #if 0
@@ -134,7 +139,7 @@ static void ExecSlot_Run(void)
     case 5u: App_Protect_Run();      break;
     case 6u: App_Cooking_Run();     break;
     case 7u: App_Hmi_Run();            break;
-    case 8u:
+    case 8u: AppSegAlign_Run();         break;
     case 9u: /* 预留 */            break;
     default: break;
     }
@@ -162,6 +167,7 @@ int main(void)
     App_Power_Init();
     App_Cooking_Init();
     App_Hmi_Init();
+    AppSegAlign_Init();
 
     s_prog_slot = 0u;
     HAL_Timer_Init();
