@@ -645,6 +645,11 @@
               <FileType>1</FileType>
               <FilePath>..\src\app\app_hmi.c</FilePath>
             </File>
+            <File>
+              <FileName>app_seg_align.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\app\app_seg_align.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
