@@ -2040,7 +2040,7 @@ void	API_ADC_DMA_RecoverFun(ADC_SELECT_ENUM ch)
 			API_DMA_RECOVER(ChDmaHrtimPotCh4, (API_DMA_RecoverDef*)(&recover));
 			
 			recover.DataLength=TxA_ADC_AdcBUFF_NUM*2;		//单缓存			双数组
-			recover.SrcAddress=API_HRTIM_GetAddressTxaCnt(PotChWork);//API_ADC_GetAddressDR(ChAdc1_Vc);
+			recover.SrcAddress=API_ADC_GetAddressDR(ChAdc1_Vc);
 			// recover.SrcAddress=API_HRTIM_GetAddressTxaCnt(PotCh1);		//	
 			recover.DstAddress=(uint32_t)TxA_ADC_AdcDmaBuff.VcAdc1;
 
