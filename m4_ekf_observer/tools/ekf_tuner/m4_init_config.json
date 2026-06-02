@@ -1,6 +1,6 @@
 {
   "_comment": "M4 init/ctrl registers — auto-saved by m4_gui.py",
-  "_updated": "2026-05-28T09:52:43.232733",
+  "_updated": "2026-06-02T14:32:23.174800",
   "registers": {
     "0x2000": 24,
     "0x2001": 144,

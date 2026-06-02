@@ -102,6 +102,8 @@ CSV_COLUMNS = [
     ("CMP_UOFF",   "CMP2"),       # C端: 上管关断比较值
     ("CMP_LON",    "CMP3"),       # C端: 下管开通比较值
     ("CMP_LOFF",   "CMP4"),       # C端: 下管关断比较值
+    ("POWER",      "POWER"),      # C端: 功率参考值
+    ("sample",     "sample"),     # GUI合成: 帧内序号 0,1,2,...
 ]
 # ============================================================
 # 主题颜色
@@ -1099,7 +1101,7 @@ class M4DebugApp:
                 # 每帧第一行: SIZE 行 (文本标记 "SIZE", MATLAB 读为 NaN 可检测)
                 size_row = ["SIZE"]
                 for csv_name, src_key in CSV_COLUMNS[1:]:  # 跳过 t_us
-                    if src_key in ("Vdc_adc",):
+                    if src_key in ("Vdc_adc", "sample"):
                         size_row.append(N)
                     else:
                         c = next((cnt for k, cnt in CAPTURE_LAYOUT if k == src_key), 1)
@@ -1129,6 +1131,8 @@ class M4DebugApp:
                             row.append(s * 0.5)
                         elif src_key == "Vdc_adc":
                             row.append(vdc_adc)
+                        elif src_key == "sample":
+                            row.append(s)
                         else:
                             vals = columns.get(src_key, [])
                             if not vals:

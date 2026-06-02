@@ -51,7 +51,7 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include	"printMessage.h"
 #include	"power_calculator.h"
-
+#include	"wave_capture.h"
 #define		FMAC_OFFSET		(FmacLeve/2+2)
 
 #define 	fmacLeveNum		FmacLeve			//根据FMAC滤波系数大小，确定缓存前置空间
@@ -2040,7 +2040,7 @@ void	API_ADC_DMA_RecoverFun(ADC_SELECT_ENUM ch)
 			API_DMA_RECOVER(ChDmaHrtimPotCh4, (API_DMA_RecoverDef*)(&recover));
 			
 			recover.DataLength=TxA_ADC_AdcBUFF_NUM*2;		//单缓存			双数组
-			recover.SrcAddress=API_ADC_GetAddressDR(ChAdc1_Vc);
+			recover.SrcAddress=	API_ADC_GetAddressDRx(ChAdc1_Vc,VoltageADC1_Group);	
 			// recover.SrcAddress=API_HRTIM_GetAddressTxaCnt(PotCh1);		//	
 			recover.DstAddress=(uint32_t)TxA_ADC_AdcDmaBuff.VcAdc1;
 
@@ -2453,7 +2453,7 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 				para[1]=inputCh->highOff;	
 				para[2]=inputCh->lowOn;
 				para[3]=inputCh->lowOff;
-				para[4]=0x10;
+				para[4]=count;
 #endif
 
 
@@ -2678,56 +2678,41 @@ void	APP_ADC_CalculatePower(void)
 						uint8_t value=result.zero_cross_high;
 						APP_ADC_DebugValueCallBack(potCh,value);
 						
-						if(potCh==PotChWork)
-						{
-							if(value<10)
-							{
-							
-							
-//								API_GPIO_WritePin(DebugB_pin,1);
-//								API_GPIO_WritePin(DebugB_pin,1);
 
-//								API_GPIO_WritePin(DebugB_pin,0);
-							
-							}	
-						}
 						
-					AdcFromApiDma20ms.Txa[potCh][count]	=result.active_current;//电流值
-					AdcFromApiDma20ms.Power[potCh][count]	=arrayPoint[potCh];//result.active_power;//功率值					
-					AdcFromApiDma20ms.ceilQ[potCh][count]=inputArray[potCh].highOff;//上管关断HRTIM值;
-					AdcFromApiDma20ms.phase[potCh][count]=result.phase_angleUp;//相位值（角度）;	//这个不要变
+						AdcFromApiDma20ms.Txa[potCh][count]	=result.active_current;//电流值
+						AdcFromApiDma20ms.Power[potCh][count]	=arrayPoint[potCh];//result.active_power;//功率值					
+						AdcFromApiDma20ms.ceilQ[potCh][count]=inputArray[potCh].highOff;//上管关断HRTIM值;
+						AdcFromApiDma20ms.phase[potCh][count]=result.phase_angleUp;//相位值（角度）;	//这个不要变
 
-					AdcFromApiDma20ms.esr[potCh][count]=result.esr;//即时功率值
+						AdcFromApiDma20ms.esr[potCh][count]=result.esr;//即时功率值
 				
-					AdcFromApiDma20ms.phaseValue[potCh][count]=result.zero_cross_high;//ppgValue->lowOn;//上管关断HRTIM值;
-					AdcFromApiDma20ms.voltage[potCh][count]=result.voltage;//即时功率值					
+						AdcFromApiDma20ms.phaseValue[potCh][count]=result.zero_cross_high;//ppgValue->lowOn;//上管关断HRTIM值;
+						AdcFromApiDma20ms.voltage[potCh][count]=result.voltage;//即时功率值					
 //					if(potCh==PotChWork&&	txaCount==TxaCount)
 				
-				
-					if(potCh==PotChWork)
-					{
-						TxaHrtimPointDef* txaHrtimPoint=(TxaHrtimPointDef*)&inputArray[potCh].start;
 
-
-
-
-								APP_ADC_TxaMessageOut(inputArray);//调试信息内存赋值
-					
-
-
-					}											
+						
+						if(potCh==PotChWork)
+						{
+							if(WaveCapture_IsReady()==0)
+							{	
+//							TxaHrtimPointDef* txaHrtimPoint=(TxaHrtimPointDef*)&inputArray[potCh].start;
+							APP_ADC_TxaMessageOut(inputArray);//调试信息内存赋值
+							}	
+						}											
 						
 						
 						
 						
-				}
+					}
 
 
 	
 
 
 					
-				}
+				}//if(inputArray[potCh].end>0&&inputArray[potCh].highOff>0)
 
 			}
 

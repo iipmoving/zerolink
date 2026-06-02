@@ -11,10 +11,10 @@ typedef struct {
 
 	
     uint16_t highOn;		    //死区后高端开通HRTIM值
-	uint16_t highOff;			//高端关闭，也就是DUTY PPG占空比 
+		uint16_t highOff;			//高端关闭，也就是DUTY PPG占空比 
 	
     uint16_t lowOn;		        //死区后低端开通
-	uint16_t lowOff;			//低端关闭，也就是prioed	PPG周期
+		uint16_t lowOff;			//低端关闭，也就是prioed	PPG周期
    
     uint16_t zero_cross_high; // 高端过零点索引
     uint16_t zero_cross_low;  // 低端过零点索引
