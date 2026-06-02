@@ -229,11 +229,39 @@ def check_include(inc_path, layer, filepath):
     return False, f"不在 {layer} 层允许列表中: {inc_path}"
 
 # ============================================================
+# extern 交叉引用检查 (.c 文件绝对禁止 extern)
+# ============================================================
+EXTERN_RE = re.compile(r'^\s*extern\s+')
+
+def check_extern(filepath, relpath):
+    """检查 .c 文件是否包含 extern 声明 (跨模块引用).
+    返回 violation list."""
+    violations = []
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            for lineno, line in enumerate(f, 1):
+                # 跳过注释行
+                stripped = line.strip()
+                if stripped.startswith('//') or stripped.startswith('/*'):
+                    continue
+                if EXTERN_RE.match(line):
+                    violations.append({
+                        'file': relpath,
+                        'line': lineno,
+                        'text': line.strip(),
+                        'desc': '.c 文件禁止 extern — 跨模块引用破坏零耦合, 改用 __weak 回调',
+                    })
+    except Exception as e:
+        pass
+    return violations
+
+# ============================================================
 # 主逻辑
 # ============================================================
 def scan_directory(claude_dir):
     """扫描 Claude 目录下所有源文件"""
     violations = []
+    extern_violations = []
     file_count = 0
 
     # 要扫描的目录
@@ -257,6 +285,10 @@ def scan_directory(claude_dir):
                     continue  # 跳过 lib/ 等外部文件
 
                 file_count += 1
+
+                # extern 检查 (仅 .c 文件)
+                if fname.endswith('.c'):
+                    extern_violations.extend(check_extern(filepath, relpath))
                 includes = parse_includes(filepath)
 
                 for inc in includes:
@@ -269,7 +301,7 @@ def scan_directory(claude_dir):
                             'desc': desc,
                         })
 
-    return file_count, violations
+    return file_count, violations, extern_violations
 
 def main():
     if len(sys.argv) < 2:
@@ -286,38 +318,48 @@ def main():
     print(f"扫描目录: {claude_dir}")
     print()
 
-    file_count, violations = scan_directory(claude_dir)
+    file_count, violations, extern_violations = scan_directory(claude_dir)
+    total = len(violations) + len(extern_violations)
 
-    if not violations:
+    if total == 0:
         print(f"[PASS] 全部通过 — 扫描 {file_count} 个文件, 0 违规")
-        print("  层依赖规则符合架构要求。")
+        print("  层依赖 + extern 规则符合架构要求。")
         sys.exit(0)
 
-    # 按层分组输出
-    by_layer = {}
-    for v in violations:
-        layer = v['layer']
-        if layer not in by_layer:
-            by_layer[layer] = []
-        by_layer[layer].append(v)
-
-    print(f"[FAIL] 发现 {len(violations)} 项违规 (共扫描 {file_count} 个文件):")
+    print(f"[FAIL] 发现 {total} 项违规 (共扫描 {file_count} 个文件):")
     print()
 
-    for layer in ['app', 'drv', 'hal', 'proto', 'core', 'cfg']:
-        if layer not in by_layer:
-            continue
-        print(f"  [{layer}/] — {len(by_layer[layer])} 项违规:")
-        for v in by_layer[layer]:
-            print(f"    {v['file']}")
-            print(f"      #include \"{v['include']}\"")
+    # 按层分组输出 include 违规
+    if violations:
+        by_layer = {}
+        for v in violations:
+            layer = v['layer']
+            if layer not in by_layer:
+                by_layer[layer] = []
+            by_layer[layer].append(v)
+
+        for layer in ['app', 'drv', 'hal', 'proto', 'core', 'cfg']:
+            if layer not in by_layer:
+                continue
+            print(f"  [{layer}/] — {len(by_layer[layer])} 项 include 违规:")
+            for v in by_layer[layer]:
+                print(f"    {v['file']}")
+                print(f"      #include \"{v['include']}\"")
+                print(f"      → {v['desc']}")
+            print()
+
+    # extern 违规
+    if extern_violations:
+        print(f"  [extern] — {len(extern_violations)} 项跨模块 extern 违规 (.c 文件绝对禁止):")
+        for v in extern_violations:
+            print(f"    {v['file']}:{v['line']}")
+            print(f"      {v['text']}")
             print(f"      → {v['desc']}")
         print()
 
     print("修复指引:")
-    print("  APP  → 移除 drv/ hal/ include, 改用消息/回调")
-    print("  DRV  → 移除 app/ include, 定义自己的类型")
-    print("  HAL  → 移除 core/ app/ drv/ proto/ include, 保持零依赖")
+    print("  include → 移除跨层引用, 改用消息/回调")
+    print("  extern  → 改用 __weak 函数 (消费者写 weak 默认, 生产者强覆盖)")
     print()
     sys.exit(1)
 
