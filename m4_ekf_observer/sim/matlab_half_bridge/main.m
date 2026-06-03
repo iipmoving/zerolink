@@ -71,7 +71,7 @@ power = calc_power(raw, waveform, timing);
 
 %% 7) 阻抗建模
 fprintf('\n--- 第5步: 负载参数估算 (无谐振电压) ---\n');
-impedance = calc_impedance(waveform, power);
+impedance = calc_impedance(waveform, power, timing);
 
 %% 8) 工频包络 (仅模式A)
 fprintf('\n--- 第6步: 工频包络分析 ---\n');

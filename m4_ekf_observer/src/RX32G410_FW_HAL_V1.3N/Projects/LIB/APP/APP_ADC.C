@@ -2716,8 +2716,33 @@ void	APP_ADC_CalculatePower(void)
 
 			}
 
-			
-	}
+
+		}
+
+		/* ---- 20ms 电参数计算 (4炉头统一) ---- */
+		{
+			uint16_t* cb[4] = {0};
+			uint16_t* hb[4] = {0};
+			uint16_t* vb[4] = {0};
+			PowerCalculatorInputDef* ib[4] = {0};
+			ElecParamsDef elec[4];
+			uint8_t nh = (PotNum < 4) ? PotNum : 4;
+
+			for (uint8_t h = 0; h < nh; h++) {
+				if (inputArray[h].end > 0 && inputArray[h].highOff > 0) {
+#ifdef TxaFmac
+					cb[h] = (uint16_t*)TxaFmacBuff[h] + fmacLeveNum/2;
+#else
+					cb[h] = (uint16_t*)TxaAdcBuff[h];
+#endif
+					hb[h] = (uint16_t*)TxaHrtimBuff[h];
+					vb[h] = (uint16_t*)TxaVcBuff[h];
+					ib[h] = &inputArray[h];
+				}
+			}
+			CalculateElecParams_20ms(cb, hb, vb, ib, elec);
+			/* elec[h].L_kalman_uH / .Q_factor / .anomaly 供后续使用 */
+		}
 
 	if(PrintMessageOut())			//输出打印信息
 	{

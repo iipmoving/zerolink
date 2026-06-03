@@ -1,0 +1,736 @@
+{
+  "files": [
+    {
+      "name": "r104850.csv",
+      "n_cycles": 9,
+      "cycles": [
+        {
+          "idx": 1,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 54.08,
+            "I_rms": 1.944,
+            "I_peak": 3.253,
+            "phi_deg": 62.74,
+            "cos_phi": 0.458,
+            "f_sw_kHz": 37.45,
+            "f_res_kHz": 17.39,
+            "D_U_pct": 38.26,
+            "DT1_us": 3.119,
+            "DT2_us": 3.151,
+            "L_uH": 93.08,
+            "Q_factor": 1.149,
+            "R_ohm": 8.853
+          }
+        },
+        {
+          "idx": 2,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 208.9,
+            "I_rms": 4.352,
+            "I_peak": 7.011,
+            "phi_deg": 61.6,
+            "cos_phi": 0.4756,
+            "f_sw_kHz": 37.43,
+            "f_res_kHz": 18.93,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.128,
+            "DT2_us": 3.097,
+            "L_uH": 78.51,
+            "Q_factor": 1.258,
+            "R_ohm": 7.426
+          }
+        },
+        {
+          "idx": 3,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 375.8,
+            "I_rms": 6.21,
+            "I_peak": 9.886,
+            "phi_deg": 61.43,
+            "cos_phi": 0.4783,
+            "f_sw_kHz": 37.43,
+            "f_res_kHz": 19.63,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.128,
+            "DT2_us": 3.097,
+            "L_uH": 73.06,
+            "Q_factor": 1.328,
+            "R_ohm": 6.783
+          }
+        },
+        {
+          "idx": 4,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 526.6,
+            "I_rms": 7.46,
+            "I_peak": 11.98,
+            "phi_deg": 57.54,
+            "cos_phi": 0.5367,
+            "f_sw_kHz": 37.34,
+            "f_res_kHz": 20.03,
+            "D_U_pct": 38.26,
+            "DT1_us": 3.128,
+            "DT2_us": 3.159,
+            "L_uH": 70.14,
+            "Q_factor": 1.184,
+            "R_ohm": 7.454
+          }
+        },
+        {
+          "idx": 5,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 609.3,
+            "I_rms": 8.219,
+            "I_peak": 13.44,
+            "phi_deg": 57.4,
+            "cos_phi": 0.5388,
+            "f_sw_kHz": 37.35,
+            "f_res_kHz": 20.35,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.134,
+            "DT2_us": 3.102,
+            "L_uH": 67.96,
+            "Q_factor": 1.211,
+            "R_ohm": 7.174
+          }
+        },
+        {
+          "idx": 6,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 542.1,
+            "I_rms": 7.661,
+            "I_peak": 11.9,
+            "phi_deg": 59.35,
+            "cos_phi": 0.5098,
+            "f_sw_kHz": 37.35,
+            "f_res_kHz": 19.89,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.134,
+            "DT2_us": 3.102,
+            "L_uH": 71.14,
+            "Q_factor": 1.254,
+            "R_ohm": 7.089
+          }
+        },
+        {
+          "idx": 7,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 351.3,
+            "I_rms": 5.873,
+            "I_peak": 9.407,
+            "phi_deg": 61.87,
+            "cos_phi": 0.4714,
+            "f_sw_kHz": 37.43,
+            "f_res_kHz": 19.54,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.128,
+            "DT2_us": 3.097,
+            "L_uH": 73.72,
+            "Q_factor": 1.343,
+            "R_ohm": 6.741
+          }
+        },
+        {
+          "idx": 8,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 45.42,
+            "I_rms": 1.719,
+            "I_peak": 2.9,
+            "phi_deg": 61.59,
+            "cos_phi": 0.4758,
+            "f_sw_kHz": 37.41,
+            "f_res_kHz": 17.13,
+            "D_U_pct": 38.26,
+            "DT1_us": 3.122,
+            "DT2_us": 3.153,
+            "L_uH": 95.87,
+            "Q_factor": 1.071,
+            "R_ohm": 9.634
+          }
+        },
+        {
+          "idx": 9,
+          "input": {
+            "highOn": 2400,
+            "highOff": 10262,
+            "lowOn": 12662,
+            "lowOff": 20524,
+            "perAdc": 384
+          },
+          "n_samples": 65,
+          "golden": {
+            "P_W": 192.8,
+            "I_rms": 4.102,
+            "I_peak": 6.633,
+            "phi_deg": 65.5,
+            "cos_phi": 0.4147,
+            "f_sw_kHz": 37.35,
+            "f_res_kHz": 18.78,
+            "D_U_pct": 38.35,
+            "DT1_us": 3.134,
+            "DT2_us": 3.102,
+            "L_uH": 79.79,
+            "Q_factor": 1.476,
+            "R_ohm": 6.377
+          }
+        }
+      ]
+    },
+    {
+      "name": "r104849.csv",
+      "n_cycles": 10,
+      "cycles": [
+        {
+          "idx": 1,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10066,
+            "lowOn": 12594,
+            "lowOff": 20132,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 527.3,
+            "I_rms": 7.518,
+            "I_peak": 11.9,
+            "phi_deg": 59.36,
+            "cos_phi": 0.5096,
+            "f_sw_kHz": 38.12,
+            "f_res_kHz": 19.96,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.298,
+            "DT2_us": 3.266,
+            "L_uH": 70.64,
+            "Q_factor": 1.218,
+            "R_ohm": 7.273
+          }
+        },
+        {
+          "idx": 2,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10066,
+            "lowOn": 12594,
+            "lowOff": 20132,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 343,
+            "I_rms": 5.9,
+            "I_peak": 9.432,
+            "phi_deg": 57.26,
+            "cos_phi": 0.5408,
+            "f_sw_kHz": 38.19,
+            "f_res_kHz": 19.64,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.292,
+            "DT2_us": 3.26,
+            "L_uH": 72.94,
+            "Q_factor": 1.088,
+            "R_ohm": 8.278
+          }
+        },
+        {
+          "idx": 3,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10066,
+            "lowOn": 12594,
+            "lowOff": 20132,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 166.9,
+            "I_rms": 3.822,
+            "I_peak": 6.179,
+            "phi_deg": 57.98,
+            "cos_phi": 0.5303,
+            "f_sw_kHz": 38.14,
+            "f_res_kHz": 18.71,
+            "D_U_pct": 37.4,
+            "DT1_us": 3.288,
+            "DT2_us": 3.32,
+            "L_uH": 80.41,
+            "Q_factor": 1.033,
+            "R_ohm": 9.153
+          }
+        },
+        {
+          "idx": 4,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10066,
+            "lowOn": 12594,
+            "lowOff": 20132,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 42.75,
+            "I_rms": 1.898,
+            "I_peak": 3.279,
+            "phi_deg": 72.38,
+            "cos_phi": 0.3028,
+            "f_sw_kHz": 38.14,
+            "D_U_pct": 37.4,
+            "DT1_us": 3.288,
+            "DT2_us": 3.32
+          }
+        },
+        {
+          "idx": 5,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 346.6,
+            "I_rms": 5.838,
+            "I_peak": 9.18,
+            "phi_deg": 61.97,
+            "cos_phi": 0.4699,
+            "f_sw_kHz": 38.1,
+            "f_res_kHz": 19.41,
+            "D_U_pct": 37.4,
+            "DT1_us": 3.292,
+            "DT2_us": 3.323,
+            "L_uH": 74.73,
+            "Q_factor": 1.292,
+            "R_ohm": 7.052
+          }
+        },
+        {
+          "idx": 6,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 461.9,
+            "I_rms": 6.966,
+            "I_peak": 10.95,
+            "phi_deg": 61.92,
+            "cos_phi": 0.4707,
+            "f_sw_kHz": 38.13,
+            "f_res_kHz": 19.74,
+            "D_U_pct": 37.4,
+            "DT1_us": 3.288,
+            "DT2_us": 3.32,
+            "L_uH": 72.21,
+            "Q_factor": 1.326,
+            "R_ohm": 6.757
+          }
+        },
+        {
+          "idx": 7,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 567.8,
+            "I_rms": 7.958,
+            "I_peak": 12.58,
+            "phi_deg": 58.55,
+            "cos_phi": 0.5218,
+            "f_sw_kHz": 38.19,
+            "f_res_kHz": 20.16,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.292,
+            "DT2_us": 3.26,
+            "L_uH": 69.23,
+            "Q_factor": 1.197,
+            "R_ohm": 7.328
+          }
+        },
+        {
+          "idx": 8,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 526.8,
+            "I_rms": 7.497,
+            "I_peak": 12.16,
+            "phi_deg": 56.08,
+            "cos_phi": 0.558,
+            "f_sw_kHz": 38.19,
+            "f_res_kHz": 20.22,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.292,
+            "DT2_us": 3.26,
+            "L_uH": 68.85,
+            "Q_factor": 1.094,
+            "R_ohm": 7.994
+          }
+        },
+        {
+          "idx": 9,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 166.3,
+            "I_rms": 3.877,
+            "I_peak": 6.28,
+            "phi_deg": 60.89,
+            "cos_phi": 0.4865,
+            "f_sw_kHz": 38.07,
+            "f_res_kHz": 18.79,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.302,
+            "DT2_us": 3.269,
+            "L_uH": 79.68,
+            "Q_factor": 1.172,
+            "R_ohm": 8.027
+          }
+        },
+        {
+          "idx": 10,
+          "input": {
+            "highOn": 2528,
+            "highOff": 10068,
+            "lowOn": 12596,
+            "lowOff": 20136,
+            "perAdc": 384
+          },
+          "n_samples": 64,
+          "golden": {
+            "P_W": 4.993,
+            "I_rms": 0.9686,
+            "I_peak": 1.715,
+            "phi_deg": 58.66,
+            "cos_phi": 0.5201,
+            "f_sw_kHz": 38.11,
+            "f_res_kHz": 25.13,
+            "D_U_pct": 37.49,
+            "DT1_us": 3.298,
+            "DT2_us": 3.266,
+            "L_uH": 44.56,
+            "Q_factor": 1.916,
+            "R_ohm": 3.672
+          }
+        }
+      ]
+    },
+    {
+      "name": "r104852.csv",
+      "n_cycles": 9,
+      "cycles": [
+        {
+          "idx": 1,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 5.341,
+            "I_rms": 0.919,
+            "I_peak": 1.538,
+            "f_sw_kHz": 36.51,
+            "D_U_pct": 39.3,
+            "DT1_us": 2.914,
+            "DT2_us": 2.945
+          }
+        },
+        {
+          "idx": 2,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 52.34,
+            "I_rms": 1.877,
+            "I_peak": 3.127,
+            "phi_deg": 76.35,
+            "cos_phi": 0.236,
+            "f_sw_kHz": 36.49,
+            "D_U_pct": 39.39,
+            "DT1_us": 2.922,
+            "DT2_us": 2.89
+          }
+        },
+        {
+          "idx": 3,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 411,
+            "I_rms": 6.418,
+            "I_peak": 10.09,
+            "phi_deg": 60.74,
+            "cos_phi": 0.4887,
+            "f_sw_kHz": 36.56,
+            "f_res_kHz": 19.52,
+            "D_U_pct": 39.39,
+            "DT1_us": 2.917,
+            "DT2_us": 2.885,
+            "L_uH": 73.86,
+            "Q_factor": 1.333,
+            "R_ohm": 6.794
+          }
+        },
+        {
+          "idx": 4,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 549.9,
+            "I_rms": 7.796,
+            "I_peak": 12.46,
+            "phi_deg": 61.48,
+            "cos_phi": 0.4774,
+            "f_sw_kHz": 36.47,
+            "f_res_kHz": 20.06,
+            "D_U_pct": 39.3,
+            "DT1_us": 2.917,
+            "DT2_us": 2.948,
+            "L_uH": 69.97,
+            "Q_factor": 1.451,
+            "R_ohm": 6.078
+          }
+        },
+        {
+          "idx": 5,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 667.1,
+            "I_rms": 8.49,
+            "I_peak": 13.32,
+            "phi_deg": 62.4,
+            "cos_phi": 0.4634,
+            "f_sw_kHz": 36.52,
+            "f_res_kHz": 20.02,
+            "D_U_pct": 39.39,
+            "DT1_us": 2.92,
+            "DT2_us": 2.888,
+            "L_uH": 70.23,
+            "Q_factor": 1.499,
+            "R_ohm": 5.895
+          }
+        },
+        {
+          "idx": 6,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 607.2,
+            "I_rms": 8.016,
+            "I_peak": 12.43,
+            "phi_deg": 62.82,
+            "cos_phi": 0.4567,
+            "f_sw_kHz": 36.52,
+            "f_res_kHz": 19.82,
+            "D_U_pct": 39.39,
+            "DT1_us": 2.92,
+            "DT2_us": 2.888,
+            "L_uH": 71.62,
+            "Q_factor": 1.499,
+            "R_ohm": 5.952
+          }
+        },
+        {
+          "idx": 7,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 416.9,
+            "I_rms": 6.325,
+            "I_peak": 10.16,
+            "phi_deg": 70.02,
+            "cos_phi": 0.3417,
+            "f_sw_kHz": 36.51,
+            "f_res_kHz": 19.69,
+            "D_U_pct": 39.3,
+            "DT1_us": 2.914,
+            "DT2_us": 2.945,
+            "L_uH": 72.61,
+            "Q_factor": 2.092,
+            "R_ohm": 4.294
+          }
+        },
+        {
+          "idx": 8,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10515,
+            "lowOn": 12755,
+            "lowOff": 21032,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 52.57,
+            "I_rms": 1.878,
+            "I_peak": 3.127,
+            "phi_deg": 72.99,
+            "cos_phi": 0.2925,
+            "f_sw_kHz": 36.49,
+            "f_res_kHz": 17.15,
+            "D_U_pct": 39.39,
+            "DT1_us": 2.922,
+            "DT2_us": 2.89,
+            "L_uH": 95.7,
+            "Q_factor": 1.972,
+            "R_ohm": 5.229
+          }
+        },
+        {
+          "idx": 9,
+          "input": {
+            "highOn": 2240,
+            "highOff": 10520,
+            "lowOn": 12760,
+            "lowOff": 21040,
+            "perAdc": 384
+          },
+          "n_samples": 66,
+          "golden": {
+            "P_W": 566.1,
+            "I_rms": 7.825,
+            "I_peak": 12.28,
+            "phi_deg": 60.42,
+            "cos_phi": 0.4936,
+            "f_sw_kHz": 36.46,
+            "f_res_kHz": 19.93,
+            "D_U_pct": 39.31,
+            "DT1_us": 2.917,
+            "DT2_us": 2.948,
+            "L_uH": 70.89,
+            "Q_factor": 1.373,
+            "R_ohm": 6.465
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,11 @@
-function impedance = calc_impedance(waveform, power)
+function impedance = calc_impedance(waveform, power, timing)
 % calc_impedance — 负载参数估算 (仅 I + Vdc, 无谐振电压)
 %
 % 无谐振电压 → 无法直接计算 |Z| = V_RMS / I_RMS
 % 改为从电流波形包络估算 RLC 参数:
 %
 % 方法:
-%   半桥输出电压基波幅值 ≈ Vdc/π (傅里叶基波, 50%占空比)
+%   半桥输出电压基波有效值: V_fund_rms = Vdc × √2/π × sin(π×D_U)
 %   阻抗模 |Z|_est ≈ V_fund_rms / I_RMS
 %   电阻 R_est ≈ P_est / I_RMS²
 %   电抗 X_est = sqrt(|Z|² - R²)
@@ -14,6 +14,7 @@ function impedance = calc_impedance(waveform, power)
 % 输入:
 %   waveform : calc_waveform 输出 (含 f_res, I_RMS)
 %   power    : calc_power 输出 (含 P, Vdc_mean)
+%   timing   : calc_timing 输出 (含 D_U_pct)
 % 输出:
 %   impedance struct (全部标注为估算)
 
@@ -22,10 +23,11 @@ I_RMS     = waveform.I_RMS_all;
 f_res     = waveform.f_res_mean_khz * 1e3;  % Hz
 P_est     = power.P;
 Vdc_mean  = power.Vdc_mean;
+D_U       = mean(timing.D_U_pct) / 100;
 
 %% 阻抗模 (从 V_fund 估算)
-% 半桥: V_fund_rms = Vdc/π  (对称50%占空比时)
-V_fund_rms = Vdc_mean / pi;
+% 半桥输出电压基波有效值: V_fund_rms = Vdc × √2/π × sin(π×D_U)
+V_fund_rms = Vdc_mean * (sqrt(2) / pi) * sin(pi * D_U);
 Z_mag_est  = V_fund_rms / (I_RMS + eps);
 
 %% 电阻 (从 P = I²R)

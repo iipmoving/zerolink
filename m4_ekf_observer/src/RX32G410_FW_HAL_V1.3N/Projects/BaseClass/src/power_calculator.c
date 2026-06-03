@@ -1,4 +1,5 @@
 #include "power_calculator.h"
+#include <math.h>
 
 #if 0
 // HRTIM时间戳数组 (uint32_t)
@@ -757,7 +758,7 @@ enum
 #define		HRTIM_BASE			
 
 #include    <stdlib.h>
-#include    "api_hrtim.h"
+//#include    "api_hrtim.h"
 
 // 在指定区间内寻找过零点
 static uint16_t FindZeroCrossing(const uint16_t* current, uint16_t start, uint16_t end) {
@@ -1101,6 +1102,404 @@ PowerResult CalculatePower(
 #endif
 		
 	return	xReturn;
+}
+
+/* ========================================================================
+ * CalculatePower_FPU — 单周期功率计算 (FPU, 1ms 快速路径)
+ *
+ * 算法: I×Vdc 直接积分, 关断点线性插值, 对称性检测.
+ *       不依赖 phi, V_fund 或 C — 仅依赖 ADC 标定.
+ *       返回扩展 PowerResult (含 float 字段).
+ * ======================================================================== */
+
+/* ---- FPU 辅助: 电流零偏估计 ---- */
+static float _EstimateIzero(const uint16_t* adc, uint16_t start, uint16_t end)
+{
+    /* 单遍扫描找最小 3 值, O(n) 无额外内存.
+       整流后电流零点 = 波形底部, 取最小 3 值均值抗噪. */
+    float m1 = 1e9f, m2 = 1e9f, m3 = 1e9f;
+    for (uint16_t i = start; i < end; i++) {
+        float v = (float)adc[i];
+        if (v < m1)      { m3 = m2; m2 = m1; m1 = v; }
+        else if (v < m2) { m3 = m2; m2 = v; }
+        else if (v < m3) { m3 = v; }
+    }
+    return (m1 + m2 + m3) / 3.0f;
+}
+
+/* ---- FPU 辅助: 谷值检测 (方向跟踪法) ---- */
+static uint16_t _FindValley_f(const uint16_t* adc, uint16_t start, uint16_t end,
+                               uint16_t* out_idx)
+{
+    uint16_t candidate = 0;
+    uint16_t direction = 0xffff;
+    float pre_val = (float)adc[start];
+    uint32_t min_sum = 0xffffffff;
+
+    for (uint16_t i = start + 1; i < end && i < start + 200; i++) {
+        float cur_val = (float)adc[i];
+        direction <<= 1;
+        if (cur_val > pre_val) direction |= 0x1;
+        else                   direction &= ~0x1;
+
+        if ((direction & 0x3) == 0x1) {
+            uint16_t pi = i - 1;
+            if (pi > start && (pi + 1) < end) {
+                uint32_t zr = (uint32_t)adc[pi - 1] + (uint32_t)adc[pi + 1];
+                uint32_t mid2 = (uint32_t)adc[pi] * 2;
+                if (mid2 <= zr && zr < min_sum) {
+                    min_sum = zr;
+                    candidate = pi;
+                }
+            }
+        }
+        pre_val = cur_val;
+    }
+
+    *out_idx = candidate;
+    return candidate;
+}
+
+/* ---- FPU 辅助: I x Vdc 积分 (关断点插值) ---- */
+static float _IntegratePwr(const uint16_t* adc_i, const uint16_t* hrtim,
+                           const uint16_t* adc_v, uint16_t start,
+                           PowerCalculatorInputDef* input, float I_zero,
+                           float* Vdc_sum, uint16_t* vdc_n)
+{
+    uint16_t i = start;
+    uint16_t end_cnt;
+    float sum = 0.0f;
+    float vsum = 0.0f;
+    uint16_t vn = 0;
+    uint16_t per = input->perAdc;
+    if (per == 0) per = 1;
+
+    if (hrtim[start] > input->highOff) {
+        end_cnt = input->lowOff;
+    } else {
+        end_cnt = input->highOff;
+    }
+
+    while (i < input->end) {
+        float I_act = ((float)adc_i[i] - I_zero) * I_SCALE;
+        float Vdc   = (float)adc_v[i] * VDC_SCALE;
+
+        float weight = 1.0f;
+        if (i + 1 < input->end) {
+            int32_t dCNT = (int32_t)hrtim[i + 1] - (int32_t)hrtim[i];
+            if (dCNT > 0 && dCNT < 10000) {
+                int32_t dist = (int32_t)end_cnt - (int32_t)hrtim[i];
+                if (dist > 0 && dist < dCNT)
+                    weight = (float)dist / (float)dCNT;
+            }
+        }
+        sum  += I_act * Vdc * weight;
+        vsum += Vdc;
+        vn++;
+
+        if (hrtim[i] >= end_cnt) break;
+        i++;
+    }
+
+    if (Vdc_sum) *Vdc_sum = vsum;
+    if (vdc_n)   *vdc_n   = vn;
+    return sum;
+}
+
+PowerResult CalculatePower_FPU(
+    uint16_t* resonant_current,
+    uint16_t* hrtim_values,
+    uint16_t* voltage_values,
+    PowerCalculatorInputDef* input
+    )
+{
+    PowerResult r;
+    memset(&r, 0, sizeof(PowerResult));
+
+    uint16_t start_i = input->start + 4;
+    uint16_t end_i   = input->end;
+    if (end_i <= start_i + 4) return r;
+
+    uint16_t per = input->perAdc;
+    if (per == 0) per = 1;
+
+    /* 1. I_zero */
+    float I_zero = _EstimateIzero(resonant_current, start_i, end_i);
+
+    /* 2. 谷值检测 */
+    uint16_t v_up = 0, v_dn = 0;
+    uint16_t co_idx = input->highOff / per + start_i;
+    if (co_idx >= end_i) co_idx = end_i - 2;
+
+    _FindValley_f(resonant_current, start_i, co_idx + 2, &v_up);
+    _FindValley_f(resonant_current, co_idx, end_i, &v_dn);
+
+    if (!v_up) v_up = start_i;
+    if (!v_dn) v_dn = co_idx + 1;
+
+    r.zero_cross_high = v_up;
+    r.zero_cross_low  = v_dn;
+
+    /* 3. I x Vdc 积分 */
+    float Vdc_s = 0.0f;
+    uint16_t vn = 0;
+    float s_up = _IntegratePwr(resonant_current, hrtim_values, voltage_values,
+                                v_up, input, I_zero, &Vdc_s, &vn);
+
+    /* 4. 对称性 */
+    int sym = ((input->highOff * 2 + 10) >= input->lowOff);
+    float s_dn = 0.0f;
+    if (!sym) {
+        s_dn = _IntegratePwr(resonant_current, hrtim_values, voltage_values,
+                              v_dn, input, I_zero, NULL, NULL);
+    }
+
+    /* 5. P_W — 归一化: 累加和 ÷ (lowOff/perAdc) 转为周期平均功率 */
+    float N_cycle = (float)input->lowOff / (float)per;
+    if (N_cycle < 1.0f) N_cycle = 1.0f;
+    float P_W;
+    if (sym)       P_W = s_up * 2.0f / N_cycle;
+    else if (s_dn) P_W = (s_up + s_dn) / N_cycle;
+    else           P_W = s_up / N_cycle;
+    if (P_W < 0.0f) P_W = 0.0f;
+
+    /* 6. Float fields */
+    r.P_W       = P_W;
+    r.Vdc_mean  = (vn > 0) ? Vdc_s / (float)vn : 0.0f;
+
+    /* 6. I_peak / I_rms — 峰值检测法 */
+    float I_peak_A = 0.0f;
+    {
+        uint16_t I_max = 0;
+        for (uint16_t k = 0; k < end_i; k++) {
+            if (resonant_current[k] < 60000 && resonant_current[k] > I_max)
+                I_max = resonant_current[k];
+        }
+        if (I_max > I_zero)
+            I_peak_A = ((float)I_max - I_zero) * I_SCALE;
+    }
+    r.I_peak = I_peak_A;
+    r.I_rms  = I_peak_A * 0.70710678f;
+
+    /* 7. phi */
+    if (v_up > start_i && hrtim_values[v_up] > input->highOn) {
+        uint32_t dist = hrtim_values[v_up] - input->highOn;
+        uint32_t T_sw = input->lowOff;
+        if (T_sw > 0) {
+            r.phi_deg = (float)dist / (float)T_sw * 360.0f;
+            if (r.phi_deg > 180.0f) r.phi_deg -= 360.0f;
+            if (r.phi_deg < -180.0f) r.phi_deg += 360.0f;
+        }
+    }
+
+    /* 8. Int fields (compat) */
+    r.active_power  = (int32_t)(P_W * 16.0f);
+    r.active_current = (int32_t)(r.I_rms * 100.0f);
+    r.voltage        = (uint16_t)(r.Vdc_mean / VDC_SCALE);
+    r.peak_current   = (uint16_t)(I_peak_A / I_SCALE + I_zero);
+    r.zero_current   = (uint16_t)I_zero;
+    if (r.I_rms > 0.001f)
+        r.esr = (uint16_t)(r.Vdc_mean / r.I_rms);
+
+    if (v_up > start_i && hrtim_values[v_up] > input->highOn) {
+        int32_t a = (int32_t)(r.phi_deg * 10.0f);
+        if (a < 0) a += 3600;
+        r.phase_angleUp = (int16_t)a;
+    }
+
+    return r;
+}
+
+/* ========================================================================
+ * Kalman 滤波器: L 平滑 + 突变检测
+ * ======================================================================== */
+
+static KalmanLState g_Kalman[4];
+
+static float _L_KalmanStep(uint8_t head, float L_meas, float I_rms)
+{
+    KalmanLState* s = &g_Kalman[head];
+    float R = KALMAN_R0 / ((I_rms > 0.1f) ? (I_rms / 10.0f) : 1.0f);
+
+    if (!s->initialized) {
+        s->x_hat    = L_meas;
+        s->P        = 1.0f;
+        s->sigma_run = 2.0f;
+        s->n_samples = 1;
+        s->initialized = 1;
+        return L_meas;
+    }
+
+    /* Predict */
+    float x_pred = s->x_hat;
+    float P_pred = s->P + KALMAN_Q;
+
+    /* Update */
+    float innov = L_meas - x_pred;
+    float K = P_pred / (P_pred + R);
+    s->x_hat = x_pred + K * innov;
+    s->P = (1.0f - K) * P_pred;
+
+    /* Running sigma */
+    if (s->n_samples < 20) {
+        s->n_samples++;
+        float alpha = 1.0f / (float)s->n_samples;
+        s->sigma_run = (1.0f - alpha) * s->sigma_run
+                     + alpha * (innov > 0 ? innov : -innov) * 1.4826f;
+    } else {
+        float alpha = 0.05f;
+        s->sigma_run = (1.0f - alpha) * s->sigma_run
+                     + alpha * (innov > 0 ? innov : -innov) * 1.4826f;
+    }
+
+    return s->x_hat;
+}
+
+static uint8_t _L_AnomalyCheck(uint8_t head, float L_meas, float I_rms)
+{
+    KalmanLState* s = &g_Kalman[head];
+    if (!s->initialized || s->sigma_run < 0.01f) return 0;
+
+    float R = KALMAN_R0 / ((I_rms > 0.1f) ? (I_rms / 10.0f) : 1.0f);
+    float innov = L_meas - s->x_hat;
+    float innov_std = sqrtf(s->P + R);
+    if (innov_std < 0.01f) return 0;
+
+    return ((innov > 0 ? innov : -innov) > KALMAN_ANOMALY_THRESH * s->sigma_run) ? 1 : 0;
+}
+
+/* ========================================================================
+ * L B-H 修正表 (I_rms 非线性补偿)
+ * ======================================================================== */
+
+static float _L_CorrectB_H(float L_raw, float I_rms)
+{
+    /* 4段线性修正系数 (来源: TEST_REPORT 电感-电流曲线) */
+    static const struct { float lo, hi, k, Iref; } bands[] = {
+        {  0.0f,  8.0f, 1.12f,  5.0f },
+        {  8.0f, 14.0f, 1.08f, 11.0f },
+        { 14.0f, 20.0f, 1.05f, 17.0f },
+        { 20.0f, 99.0f, 1.03f, 25.0f },
+    };
+    int n = sizeof(bands) / sizeof(bands[0]);
+    for (int i = 0; i < n; i++) {
+        if (I_rms >= bands[i].lo && I_rms < bands[i].hi) {
+            float ratio = I_rms / bands[i].Iref;
+            return L_raw / (1.0f + bands[i].k * (ratio - 1.0f));
+        }
+    }
+    return L_raw;
+}
+
+/* ========================================================================
+ * CalculateElecParams_20ms — 20ms 电参数计算 (4炉头统一)
+ * ======================================================================== */
+
+void CalculateElecParams_20ms(
+    uint16_t* current_buf[4],
+    uint16_t* hrtim_buf[4],
+    uint16_t* voltage_buf[4],
+    PowerCalculatorInputDef* input[4],
+    ElecParamsDef elec[4]
+    )
+{
+    for (uint8_t h = 0; h < 4; h++) {
+        ElecParamsDef* e = &elec[h];
+        memset(e, 0, sizeof(ElecParamsDef));
+
+        if (!input[h] || input[h]->end == 0 || input[h]->highOff == 0)
+            continue;
+
+        PowerCalculatorInputDef* in = input[h];
+        uint16_t* adc_i = current_buf[h];
+        uint16_t* hrtim = hrtim_buf[h];
+        uint16_t* adc_v = voltage_buf[h];
+
+        /* 调用 FPU 功率计算获取基础值 */
+        PowerResult pr = CalculatePower_FPU(adc_i, hrtim, adc_v, in);
+
+        e->P_W      = pr.P_W;
+        e->I_rms    = pr.I_rms;
+        e->I_peak   = pr.I_peak;
+        e->Vdc_mean = pr.Vdc_mean;
+        e->phi_deg  = pr.phi_deg;
+        e->valid    = (pr.I_rms > 0.001f) ? 1 : 0;
+        if (!e->valid) continue;
+
+        /* ---- f_sw (HRTIM period) ---- */
+        uint32_t period_cnt = in->lowOff;
+        if (period_cnt > 0 && in->perAdc > 0) {
+            e->f_sw_kHz = 2000.0f * (float)in->perAdc / (float)period_cnt;
+        }
+
+        /* ---- D_U, DT1, DT2 ---- */
+        uint32_t CU = in->highOn, CO = in->highOff;
+        uint32_t LN = in->lowOn,  LO = in->lowOff;
+        if (period_cnt > 0 && in->perAdc > 0) {
+            float tpc = 0.5f / (float)in->perAdc;  /* us/count */
+            e->D_U_pct = (float)(CO - CU) / (float)period_cnt * 100.0f;
+            e->DT1_us  = (float)(LN - CO) * tpc;
+            int32_t dt2 = (int32_t)CU - (int32_t)LO;
+            if (dt2 < 0) dt2 += (int32_t)period_cnt;
+            e->DT2_us  = (float)dt2 * tpc;
+        }
+
+        /* ---- cos_phi ---- */
+        e->cos_phi = cosf(e->phi_deg * 0.01745329252f);
+
+        /* ---- 阻抗 (KVL dI/dt 封闭解, dI/dt 验证) ---- */
+        /* L: Vdc/2 + V_C_peak = L × I_peak × ω_sw
+         *     V_C_peak = I_peak / (ω_sw × C)                         */
+        float C_F     = C_RES_uF * 1e-6f;
+        float omega_sw = 2.0f * 3.14159265f * e->f_sw_kHz * 1000.0f;
+        float V_C_peak = e->I_peak / (omega_sw * C_F);
+        e->L_uH = (e->Vdc_mean * 0.5f + V_C_peak) / (e->I_peak * omega_sw) * 1e6f;
+        if (e->L_uH < 0) e->L_uH = 0;
+
+        /* f_res = 1/(2π√(LC)) — 从 L 反推, 非谷值间隔 */
+        if (e->L_uH > 0.001f) {
+            e->f_res_kHz = 1.0f / (2.0f * 3.14159265f
+                * sqrtf(e->L_uH * 1e-6f * C_F)) / 1000.0f;
+        } else {
+            e->f_res_kHz = e->f_sw_kHz;
+        }
+
+        /* Q = tan(φ) / (f_sw/f_res - f_res/f_sw) */
+        {
+            float tan_phi   = tanf(e->phi_deg * 0.01745329252f);
+            float ratio     = e->f_sw_kHz / e->f_res_kHz;
+            float ratio_inv = e->f_res_kHz / e->f_sw_kHz;
+            float denom     = ratio - ratio_inv;
+            if (fabsf(denom) > 0.001f)
+                e->Q_factor = tan_phi / denom;
+            else
+                e->Q_factor = 0.0f;
+        }
+
+        /* R = ω_res × L / Q */
+        {
+            float omega_res = 2.0f * 3.14159265f * e->f_res_kHz * 1000.0f;
+            if (e->Q_factor > 0.001f)
+                e->R_ohm = omega_res * e->L_uH * 1e-6f / e->Q_factor;
+            else
+                e->R_ohm = 0.0f;
+        }
+
+        /* 阻抗 @ f_sw (工作频率, 非谐振点) */
+        {
+            float X_L_sw = omega_sw * e->L_uH * 1e-6f;
+            float X_C_sw = 1.0f / (omega_sw * C_F);
+            e->X_ohm = X_L_sw - X_C_sw;
+            e->Z_mag_ohm = sqrtf(e->R_ohm * e->R_ohm + e->X_ohm * e->X_ohm);
+        }
+
+        /* ---- L B-H 修正 ---- */
+        e->L_corr_uH = _L_CorrectB_H(e->L_uH, e->I_rms);
+
+        /* ---- Kalman ---- */
+        e->L_kalman_uH = _L_KalmanStep(h, e->L_corr_uH, e->I_rms);
+        e->anomaly = _L_AnomalyCheck(h, e->L_corr_uH, e->I_rms);
+    }
 }
 
 

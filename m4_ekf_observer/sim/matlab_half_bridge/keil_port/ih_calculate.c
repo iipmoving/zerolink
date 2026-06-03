@@ -281,42 +281,169 @@ void IH_CalcWaveform(const RawBuffer_t *raw,
 
 /* ====================== 功率 ====================== */
 
+/**
+ * @brief  有功功率 — 上下管分离积分 (复现 power_calculator.c 逻辑)
+ *
+ * 半桥拓扑: 上管导通时 Vdc → 负载, 下管导通时续流
+ * 非对称输出时上下管电流不等, 必须分别积分。
+ * 仅 D≈50% 时可取上管×2 简化。
+ *
+ * 窗口: [谷值点, 关断点] — 谷值 = 电流过零参考
+ * P_W = Vdc × (I_up_int + I_down_int) / N_total
+ */
 void IH_CalcPower(const RawBuffer_t *raw,
                   const WaveformResult_t *waveform,
                   PowerResult_t *power)
 {
     uint32_t n = raw->count;
-    if (n == 0) return;
+    if (n < 3) { memset(power, 0, sizeof(PowerResult_t)); return; }
 
-    double p_sum = 0, I2_sum = 0;
-    double Vdc_sum = 0;
-    float vdc_min = 1e9f, vdc_max = 0;
+    uint32_t CU = raw->points[0].CMP_UON;
+    uint32_t CO = raw->points[0].CMP_UOFF;
+    /* CMP_LOFF = 周期终点, 也是 HRTIM counter 最大值 */
+    uint32_t period_cnt = raw->points[0].CMP_LOFF;
+
+    /* ---- 对称检测 (同 power_calculator.c 判据) ---- */
+    bool symmetric = ((CO - CU) * 2 + 10) >= (period_cnt - CU);
+
+    /* ---- 估计电流零偏 (中位数 = 零电流 ADC 值) ---- */
+    float I_zero;
+    {
+        /* 小采样: 取中位数, 避免峰值污染 */
+        float buf[64]; uint32_t nb = (n < 64) ? n : 64;
+        uint32_t step = n / nb; if (step < 1) step = 1;
+        for (uint32_t i = 0; i < nb; i++)
+            buf[i] = raw->points[i * step].I_adc;
+        /* 冒泡排序 (nb≤64, 开销可忽略) */
+        for (uint32_t i = 0; i < nb - 1; i++)
+            for (uint32_t j = i + 1; j < nb; j++)
+                if (buf[i] > buf[j]) { float t = buf[i]; buf[i] = buf[j]; buf[j] = t; }
+        I_zero = buf[nb / 2];
+    }
+
+    /* ---- 找谷值 (谐振电流最小点 = 过零参考) ---- */
+    uint32_t valley_up   = 0;  /* 上管谷值索引 */
+    uint32_t valley_down = 0;  /* 下管谷值索引 */
+    {
+        float   min_val = 1e9f;
+        uint32_t co_idx = 0;
+        /* 定位 CO 对应的样本索引 */
+        for (uint32_t i = 0; i < n; i++) {
+            if (raw->points[i].CNT >= CO) { co_idx = i; break; }
+        }
+        if (co_idx < 2) co_idx = n / 2;  /* fallback */
+
+        /* 上管谷值: 在 [0, co_idx] 内找最小 I_adc */
+        for (uint32_t i = 1; i < co_idx && i < n - 1; i++) {
+            float v = raw->points[i].I_adc;
+            /* 局部极小 + 低于中位 */
+            if (v < raw->points[i-1].I_adc &&
+                v < raw->points[i+1].I_adc &&
+                v < I_zero * 1.2f &&
+                v < min_val) {
+                min_val = v; valley_up = i;
+            }
+        }
+        if (valley_up == 0) valley_up = 1;  /* fallback: 帧首 */
+
+        /* 下管谷值: 在 [co_idx, n-1] 内找 */
+        min_val = 1e9f;
+        for (uint32_t i = co_idx + 1; i < n - 1; i++) {
+            float v = raw->points[i].I_adc;
+            if (v < raw->points[i-1].I_adc &&
+                v < raw->points[i+1].I_adc &&
+                v < I_zero * 1.2f &&
+                v < min_val) {
+                min_val = v; valley_down = i;
+            }
+        }
+        if (valley_down == 0) valley_down = co_idx + 1;
+    }
+
+    /* ---- 积分: 上管有功段 [valley_up, CO] ---- */
+    float sum_up = 0, Vdc_sum = 0;
+    uint32_t n_up = 0;
     int vdc_n = 0;
+    float vdc_min = 1e9f, vdc_max = 0;
 
-    for (uint32_t i = 0; i < n; i++) {
-        float I_i = raw->points[i].I_adc * I_SCALE;
-        float V_i = raw->points[i].V_adc * V_SCALE;
-        float vdc = raw->points[i].Vdc_adc * VDC_SCALE;
+    for (uint32_t i = valley_up; i < n; i++) {
+        float I_act = (raw->points[i].I_adc - I_zero) * I_SCALE;
+        float vdc   = raw->points[i].Vdc_adc * VDC_SCALE;
 
-        p_sum  += (double)(I_i * V_i);
-        I2_sum += (double)(I_i * I_i);
+        /* 关断点线性插值: 最后一点按比例计入 */
+        float weight = 1.0f;
+        if (i + 1 < n && raw->points[i + 1].CNT > CO) {
+            uint32_t dCNT = raw->points[i + 1].CNT
+                          - raw->points[i].CNT;
+            if (dCNT > 0 && dCNT < 10000) {
+                float frac = (float)(CO - raw->points[i].CNT)
+                           / (float)dCNT;
+                if (frac > 0.0f && frac < 1.0f)
+                    weight = frac;
+            }
+        }
+        sum_up += I_act * vdc * weight;
+        n_up++;
 
-        if (isfinite(vdc) && vdc > 0) {
-            Vdc_sum += vdc;
+        if (raw->points[i].CNT > CO) break;
+
+        if (vdc > 0) {
+            Vdc_sum += vdc; vdc_n++;
             if (vdc < vdc_min) vdc_min = vdc;
             if (vdc > vdc_max) vdc_max = vdc;
-            vdc_n++;
         }
     }
 
+    /* ---- 积分: 下管有功段 [valley_down, period_cnt] ---- */
+    float sum_down = 0;
+    uint32_t n_down = 0;
+
+    for (uint32_t i = valley_down; i < n; i++) {
+        float I_act = (raw->points[i].I_adc - I_zero) * I_SCALE;
+        float vdc   = raw->points[i].Vdc_adc * VDC_SCALE;
+
+        /* 关断点线性插值 */
+        float weight = 1.0f;
+        if (i + 1 < n && raw->points[i + 1].CNT > period_cnt) {
+            uint32_t dCNT = raw->points[i + 1].CNT
+                          - raw->points[i].CNT;
+            if (dCNT > 0 && dCNT < 10000) {
+                float frac = (float)(period_cnt - raw->points[i].CNT)
+                           / (float)dCNT;
+                if (frac > 0.0f && frac < 1.0f)
+                    weight = frac;
+            }
+        }
+        sum_down += I_act * vdc * weight;
+        n_down++;
+
+        if (raw->points[i].CNT > period_cnt) break;
+
+        if (vdc > 0) {
+            Vdc_sum += vdc; vdc_n++;
+            if (vdc < vdc_min) vdc_min = vdc;
+            if (vdc > vdc_max) vdc_max = vdc;
+        }
+    }
+
+    /* ---- 汇总 ---- */
     float inv_n = 1.0f / n;
-    power->P_W   = (float)(p_sum * inv_n);
-    power->S_VA  = waveform->V_RMS_V * waveform->I_RMS_A;
+    if (symmetric && n_up > 0) {
+        power->P_W = sum_up * 2.0f * inv_n;
+    } else if (n_up > 0 && n_down > 0) {
+        power->P_W = (sum_up + sum_down) * inv_n;
+    } else if (n_up > 0) {
+        power->P_W = sum_up * inv_n;
+    } else {
+        power->P_W = 0;
+    }
+
+    /* 视在功率: V_rms × I_rms */
+    power->S_VA = waveform->V_RMS_V * waveform->I_RMS_A;
 
     float S = power->S_VA;
     power->PF = (S > 0.001f) ? (power->P_W / S) : 0;
-    float pf = CLAMP(power->PF, -1.0f, 1.0f);
-    power->phi_deg = RAD2DEG(acos_f(pf));
+    power->phi_deg = RAD2DEG(acosf(CLAMP(power->PF, -1.0f, 1.0f)));
 
     float tmp = S * S - power->P_W * power->P_W;
     power->Q_var = (tmp > 0) ? sqrt_f(tmp) : 0;
@@ -324,19 +451,15 @@ void IH_CalcPower(const RawBuffer_t *raw,
     float Irms = waveform->I_RMS_A;
     power->R_eq_ohm = (Irms > 0.001f) ? (power->P_W / (Irms * Irms)) : 0;
 
-    power->E_cycle_J = (float)(p_sum * inv_n * (raw->t_span_ms * 1e-3f));
+    power->E_cycle_J = power->P_W * (raw->t_span_ms * 1e-3f);
 
     if (vdc_n > 0) {
         float iv = 1.0f / vdc_n;
-        power->Vdc_mean_V   = (float)(Vdc_sum * iv);
+        power->Vdc_mean_V   = Vdc_sum * iv;
         power->Vdc_ripple_V = (vdc_max - vdc_min) * 0.5f;
         power->Vdc_ripple_pct = (power->Vdc_mean_V > 1) ?
             (power->Vdc_ripple_V / power->Vdc_mean_V) * 100.0f : 0;
-
-        const float EG = 0.85f;
-        float Idc = power->P_W / (power->Vdc_mean_V * EG + 1e-6f);
-        float Pdc = power->Vdc_mean_V * Idc;
-        power->eta_pct = (Pdc > 0.001f) ? (power->P_W / Pdc) * 100.0f : 0;
+        power->eta_pct = 0;  /* 需外部提供 Pdc 方可计算 */
         power->has_vdc = true;
     } else {
         power->Vdc_mean_V = 0; power->Vdc_ripple_V = 0;
@@ -356,7 +479,7 @@ void IH_CalcImpedance(const WaveformResult_t *wf,
 
     float pf = CLAMP(pw->PF, -1.0f, 1.0f);
     float sign = (wf->phi_deg >= 0) ? 1.0f : -1.0f;
-    float phi_d = RAD2DEG(acos_f(pf)) * sign;
+    float phi_d = RAD2DEG(acosf(pf)) * sign;
     imp->phi_deg = phi_d;
 
     float phi_r = DEG2RAD(phi_d);

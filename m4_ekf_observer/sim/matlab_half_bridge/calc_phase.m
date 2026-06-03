@@ -3,12 +3,14 @@ function phase_info = calc_phase(raw, timing)
 %
 % 原理:
 %   半桥输出电压基波 v₁(t) 在 CMP_UON (上管开通) 时刻过零↑
-%   谐振电流 i(t) = I_peak × sin(ωt - φ)
+%   谐振电流 i(t) = I_peak × sin(ωt - φ), φ>0 表示感性 (电流滞后电压)
 %   整流后 |i| 谷值 ≈ i 过零点 → ωt = φ + nπ
 %   φ = (t_valley - t_UON) / T_sw × 360°
 %
-% 输入: raw (t, I, CNT), timing (CMP_UON, T_hrtim_us, f_sw_kHz)
-% 输出: phase_info.phi_deg, .cos_phi, .v_fund_rms, .usable
+% 滤波: |φ| ≤ 90° — 感性负载下 φ 在 [0°, 90°], 超出范围的谷值来自其他半周期, 应排除
+%
+% 输入: raw (t, I, CNT), timing (CMP_UON, T_hrtim_us, f_sw_kHz, D_U_pct)
+% 输出: phase_info.phi_deg, .cos_phi, .v_fund_factor, .usable
 
 t      = raw.t;
 I      = raw.I;
@@ -69,12 +71,10 @@ phi_avg  = mean(phi_list);
 cos_phi  = cosd(phi_avg);
 
 %% 3) 从相位 + Vdc 还原谐振电压基波
-% V_fund_peak = (2/π) × Vdc  (50%占空比)
-% V_fund_RMS  = V_fund_peak / √2
-
-% 需要 Vdc 均值 (在外面提供)
+% V_fund_rms = Vdc × √2/π × sin(π×D_U)
 % 这里只计算比例因子, 实际电压在主流程中算
-v_fund_factor = sqrt(2) / pi;  % V_fund_RMS = Vdc × v_fund_factor
+D_U = timing.D_U_pct / 100;
+v_fund_factor = sqrt(2) / pi * sin(pi * D_U);
 
 %% 4) 打包
 phase_info.phi_deg      = phi_avg;
