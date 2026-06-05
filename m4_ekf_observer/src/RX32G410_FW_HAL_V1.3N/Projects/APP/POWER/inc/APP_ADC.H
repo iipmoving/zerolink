@@ -50,8 +50,54 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
+/**
+ * @file    APP_ADC.H
+ * @brief   ADC 数据采集公共接口 (待拆分)
+ * @layer   APP (FIXME: 含废弃枚举和 DRV 混合声明, 待随 .c 拆分逐步清理)
+ * @deps    <stdio.h> <stdint.h> <stdbool.h>
+ *
+ * FIXME: include guard 使用正常 #define, 拆分后的新模块应使用 //#define (L0阻断)
+ */
+
 
 	
+
+/* === INTERFACE STRUCTS (OWNER) ==================================
+ * 本模块是以下结构体的 Owner (生产者).
+ * @STRUCT 标记由 check_structs.py 解析验证.
+ *
+ * 消费者: app_power 需声明 Power_AdcOut_IN_t 副本 (AI-MANAGED 段)
+ * ================================================================ */
+
+#pragma pack(4)
+
+/* @STRUCT AdcPowerOut  owner=app_adc  suffix=OUT */
+typedef struct {
+    uint16_t power[4];         /* offset=0, size=8 */
+    void     *sync_addr;       /* offset=8, size=4 */
+    uint8_t  dma_ready;        /* offset=12, size=1 */
+} AdcPowerOut;                 /* sizeof=16 */
+
+/* @STRUCT AdcRawInput  owner=app_adc  suffix=OUT */
+typedef struct {
+    uint32_t txa_current[4];   /* offset=0, size=16, AdcGroupT1A..T4A */
+    uint32_t voltage;           /* offset=16, size=4, AdcGroupVoltage */
+    uint32_t phase[4];          /* offset=20, size=16, AdcGroupPhase1..4 */
+    uint32_t ceil_q[4];         /* offset=36, size=16, AdcGroupCeilQ1..4 */
+} AdcRawInput;                  /* sizeof=52 */
+
+/* @STRUCT APP_ADC_AWD_DNTR_DEF  owner=app_adc  suffix=OUT */
+typedef struct {
+    uint8_t  num;                  /* offset=0, size=1 */
+    uint8_t  ch;                   /* offset=1, size=1 */
+    uint16_t res;                  /* offset=2, size=2 */
+    uint32_t dntr[5];              /* offset=4, size=20 */
+} APP_ADC_AWD_DNTR_DEF;            /* sizeof=24 */
+
+#pragma pack()
+
+/* === END INTERFACE STRUCTS === */
+
 /* Exported typedef ----------------------------------------------------------*/
 enum
 {																				//ADC1 group 对应的AD采集通道号，保存数据的序号索引
@@ -115,14 +161,6 @@ enum
 
 #define		HRTIM_PER1US		0X300		//1us对应的HRTIM计数值
 #define	APP_ADC_DNTR_BUFF_MAX 5		//AWD缓存最大值
-typedef struct
-{
-	uint8_t 	num;					//产生AWD的次数
-	uint8_t   ch;
-	uint16_t 	res;
-	uint32_t	dntr[APP_ADC_DNTR_BUFF_MAX];		//dma数据指针缓存
-
-}APP_ADC_AWD_DNTR_DEF;	
 
 enum
 {
@@ -148,16 +186,6 @@ enum
 	pluseLowScr,
 	pluseEnd,
 };
-//typedef	struct{
-//{
-//	uint32_t 	Voltage;
-//	uint32_t 	Current;
-//	uint32_t	TxA;
-//	uint32_t	Igbt;
-//	uint32_t	Bottom; 	
-
-//}ADC_POT_INPUT_DEF;					//每个单炉头ADC值   
-
 
 
 
@@ -196,15 +224,15 @@ enum
 /* Exported function prototypes ----------------------------------------------*/
 //void			APP_ADC_ZERO_IrqFun(void);					//每100us进行ADC求和
 uint8_t		AdcValueFun(void);					//统一处理ADC值 1:有效值输出
-void		APP_ADC_AVG_Fun(void);			//每20ms 得到一组ADC数据
+//void		APP_ADC_AVG_Fun(void);			//每20ms 得到一组ADC数据
 //uint8_t		getIcVc20msOccur(void);
 //void		clrIcVc20msOccur(void);
-uint32_t  	getADCinputValue(uint8_t ch);
-void		APP_ADC_DMA_RecoverPan(uint8_t ch);				//恢复检锅DMA
+//uint32_t  	getADCinputValue(uint8_t ch);
+//void		APP_ADC_DMA_RecoverPan(uint8_t ch);				//恢复检锅DMA
 void		API_ADC_DMA_RecoverTxa(void);				//恢复检锅DMA
 
 
-void		APP_ADC_PanSwChange(uint32_t ch);			//切换检锅选择口
+//void		APP_ADC_PanSwChange(uint32_t ch);			//切换检锅选择口
 uint32_t 	APP_ADC_GetPowerTxa(uint8_t ch);		//得到谐振电流计算的功率值
 
 void CopyISRToRAM(void);
@@ -225,7 +253,7 @@ void	APP_ADC_SetTXAstepDmaRest(void);
 void	APP_ADC_TxaAvgReset(uint8_t ch);			//滤波初始化
 void	APP_ADC_ClearCeilQAvg(uint8_t ch);		//重置CEILQ的滤波，防止倍频切换时误判
 
-void	APP_ADC_WaitTxaCalOver(void);		//等待TXA DMA采集完成，防止与检锅冲突
+//void	APP_ADC_WaitTxaCalOver(void);		//等待TXA DMA采集完成，防止与检锅冲突
 
 uint16_t *	APP_ADC_GetHrtimSyncBuffAdr(void);		//得到多炉头同一点的HRTIM值 
 void	APP_ADC_CalculatePower(void);

@@ -21,11 +21,18 @@
 #include "data_type.h"
 
 
-/* === @STRUCT consumer types (mirror APP_ADC.H owner structs) ==========
- * Pair S6: AdcRawInput → Power_RawInput_LINK_t   (sizeof=52)
- * Pair S7: APP_ADC_AWD_DNTR_DEF → Power_AwdDntr_LINK_t (sizeof=24)
- * Pair S8: APP_ADC_DEF → Power_AdcDef_LINK_t     (_LINK = 联合管理)
- * check_structs.py validates sizeof/offset match with owner.
+/* === AI-MANAGED INTERFACE STRUCTS (CONSUMER) ======================
+ *
+ *  双向维护区 — AI 从 owner 自动同步, 禁止手动编辑
+ *
+ *  消费者: app_power
+ *  Owner:  APP_ADC.H / app_adc
+ *
+ *  check_structs.py 自动验证 sizeof/offset 与 owner 一致.
+ *  owner 字段变更后 AI 必须同步更新本段.
+ *
+ *  命名: {Module}_{OwnerStruct}_LINK_t  (_LINK = 联合管理)
+ *
  * ==================================================================== */
 
 #pragma pack(4)
@@ -46,8 +53,7 @@ typedef struct {
     uint32_t dntr[5];
 } Power_AwdDntr_LINK_t;
 
-/* @STRUCT Pair S8 owner=app_adc  suffix=LINK  source=APP_ADC_DEF
- * Power_AdcDef_LINK_t — _adc->inputValue[ch] 直接索引 */
+/* @STRUCT Pair S8 owner=app_adc  suffix=LINK  source=APP_ADC_DEF */
 typedef struct {
     uint8_t  adc20msCount;
     uint8_t  flag20ms;
@@ -57,7 +63,7 @@ typedef struct {
 } Power_AdcDef_LINK_t;
 #pragma pack()
 
-/* === END consumer types === */
+/* === END AI-MANAGED INTERFACE STRUCTS === */
 
 
 
