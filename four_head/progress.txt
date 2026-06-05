@@ -108,3 +108,25 @@
   - For projects with `base_class` instead of `drv`, the layer rules follow the m4-ekf preset pattern (base_class has no HAL dependency)
   - Template filling uses Python string replacement for placeholders like `{PROJECT_NAME}` across multiple files
 ---
+
+## 2026-06-05 - US-005
+- Implemented: Rewrote m4_ekf_observer/CLAUDE.md with full methodology binding
+- Key changes:
+  - Preserved all existing content (§一~§十一): Project identity, No-Go zones, MODBUS registers, hardware params, data flow, PC tools, known issues, coding conventions
+  - §四 expanded to full "四件套" check block: `check_deps.py --m4-ekf`, `check_weak_pairs.py --m4-ekf`, `check_structs.py --m4-ekf`, armcc
+  - §十二 方法论文档: 5-layer architecture diagram (app/proto/base_class/core/vendor), dependency whitelist table, communication selection rules, __weak mechanism, header privatization
+  - §十三 新增模块 SOP: 7-step executable checklist (determine layer → create files → write .h with //#define → write .c with 三段式 → register structs → register __weak pairs → run 四件套)
+  - §十四 模块三段式范式: 3-stage code template (input→compute→output) with lazy init, __weak input declarations, complete module.c skeleton
+  - §十五 回调插入规则表: 4-row table (input callback=standard, output callback=standard, algo subset=standard, mid-stream immediate=MUST confirm)
+  - §十六 通信选择速查表: 5-row quick reference (sync→__weak, async→Msg_Post, with project-specific examples)
+  - Style: imperative MUST language throughout new sections; no 建议/应该
+- Files changed:
+  - m4_ekf_observer/CLAUDE.md (+291 lines, -7 lines)
+- **Learnings for future iterations:**
+  - CLAUDE.md is the AI constraint file (command-level MUST rules), RESTART.md is the human entry point (project overview) — both co-exist without conflict
+  - m4_ekf_observer layer structure: app/ (business logic), base_class/ (driver-equivalent, not "drv"), proto/ (protocol codec), core/ (infrastructure), src/RX32G410/ (vendor, no-go)
+  - The --project m4-ekf auto-detection works via checking for base_class/ directory presence (vs four_head which checks for drv/)
+  - Tools path: `../methodology-seed/tools/` from m4_ekf_observer root (cross-project references use relative paths)
+  - Pre-existing code in this project uses mixed naming (camelCase in base_class, snake_case in app) — the CLAUDE.md binds new modules to methodology, doesn't demand retroactive enforcement
+- Verified: Content meets all 10 acceptance criteria; preserved all existing MODBUS tables/hardware params/No-Go rules; no conflict with RESTART.md
+---
