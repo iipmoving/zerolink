@@ -49,7 +49,7 @@
         "python tools/check_structs.py --self-test → PASS"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "was: US-001c from PRD. 两个脚本一起开发因为 check 依赖 generate"
     },
     {
