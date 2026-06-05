@@ -45,7 +45,13 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 #include	"API_gpio.h"
 #include	"API_TIM.h"
 #include		"api_dma.h"
-#include	"app_power.h"
+/* === 桥接声明 — APP_ADC 不 include app_power.h (零耦合铁律) ===
+ * PotChWork → PotCh1 (API_HRTIM.h 已定义)
+ * FIXME: 以下直接调用待创建 __weak 配对后移除 */
+#define PotChWork PotCh1
+void APP_POWERR_SetTxaAwdValue(void);
+void APP_POWER_SetTxaAwdValue(void);
+int16_t* APP_POWER_GetPanDmaBuffAddress(void);
 #include "adc_processing.h"	
 #include	"API_FMAC.H"
 
@@ -59,7 +65,7 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static  uint16_t arrayPoint[4];
 /* Private typedef -----------------------------------------------------------*/
-typedef	struct __attribute__((aligned(1)))
+typedef	struct __attribute__((aligned(32)))
 {
 	uint8_t 	adc20msCount;		//20MS 100US 次数统计
 	uint8_t 	flag20ms;				//20MS adc平均值计算完成标志
@@ -248,13 +254,9 @@ typedef struct	__attribute__((aligned(1)))
 
 
 
-APP_ADC_AWD_DNTR_DEF	APP_ADC_Dntr[2]={{0,0,0,{0},},{0,2,0,{0}}};			//ch赋初值
-
+/* DNTR data moved to app_power.c (Pair L/M/N migration) */
 
 PowerCalculatorInputDef inputArray[4];		//两组同步炉头，每组是同频率
-
-#define		APP_ADC_DNTR_T12A	APP_ADC_Dntr[DNTR_T12A]
-#define		APP_ADC_DNTR_T34A	APP_ADC_Dntr[DNTR_T34A]
 
 
 #if 0			//实例化回调函数
@@ -348,21 +350,28 @@ void	APP_ADC_DMA_RecoverHrtim(void);			//每1ms更新DMA,保证TIM3与ADC同步
 uint8_t   		APP_ADC_MesageBuff(void);
 
 
- __attribute__((weak))	void	APP_ADC_IRQ_PPGstepDecTxA(APP_ADC_AWD_DNTR_DEF* txaDntr,uint16_t* txaBuff)
-{}
-__attribute__((weak))	void	APP_ADC_IRQ_PPGstepChangeCallBack(void)	//HRTIM1 UPD更新PPG
+ /* Pair N moved to app_power.c — 整个限流子系统已迁出 */
+__attribute__((weak)) void APP_ADC_IRQ_PPGstepChangeCallBack(void) //HRTIM1 UPD更新PPG
 {}	
-__attribute__((weak))	void	APP_ADC_IRQ_PPGstepDecT12aCallBack(APP_ADC_AWD_DNTR_DEF* dntr)	//HRTIM1 CMP1 PPG减小限流操作
-{}	
-__attribute__((weak))	void	APP_ADC_IRQ_PPGstepDecT34aCallBack(APP_ADC_AWD_DNTR_DEF* dntr)	//HRTIM1 CMP1 PPG减小限流操作
-{}		
+
+
 	
-__attribute__((weak))	void	APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value)	//HRTIM1 CMP1 PPG减小限流操作
+__attribute__((weak)) void APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value) //HRTIM1 CMP1 PPG减小限流操作
 {}		
 	
 	
 	/* ====== __weak stub — 接线到 methodology ih_elec_params 算法集 ====== */
-__attribute__((weak))	 void IhElecParams_Calculate(void *in, void *out) {}	
+__attribute__((weak)) void IhElecParams_Calculate(void *in, void *out) {}
+
+	/* Pair O: __weak — APP_ADC 推送 AdcFunRam.inputValue 指针给 app_power
+	 * 推模式: 发送方直接传指针, 接收方存本地缓存, 不需要 PULL 回调 */
+__attribute__((weak)) void AppAdc_OnDataReady(void *input)
+{ (void)input; }
+
+	/* Pair D: __weak — 通知 API_ADC AWD 保护值重写 */
+__attribute__((weak)) void Adc_SetAwdValue(void) {}
+
+
 
 
 	/* ====== test: 20ms 电参数计算 (4炉头统一调用 methodology 算法) ====== */
@@ -374,7 +383,7 @@ __attribute__((weak))	 void IhElecParams_Calculate(void *in, void *out) {}
 		}
 	}	
 	
-// __attribute__((weak))		uint8_t APP_ADC_Power_ZeroIrqFun(void)
+// __weak		uint8_t APP_ADC_Power_ZeroIrqFun(void)
 // {return 0;}	
 /**
   * @brief  Initialize the GPIOx peripheral according to the specified parameters in the GPIO_Init.连带IO口号一起运算
@@ -385,7 +394,7 @@ __attribute__((weak))	 void IhElecParams_Calculate(void *in, void *out) {}
   * @retval None
   */
 	
-uint32_t 	APP_ADC_GetPowerTxa(uint8_t ch)
+uint32_t 	Adc_GetPowerTxa(uint8_t ch)
 {
 	uint32_t*  value=(uint32_t*)(&TxA_ADC_AdcDmaBuff.Avg);
 	return 	value[ch];
@@ -402,6 +411,18 @@ int16_t  icvalue[AdcAvageCount];
 int16_t*		getIcValueAdress(void)
 {
 		return	icvalue;
+}
+
+/* Pair J: STRONG — app_power 拉取 T12A DMA 缓冲指针 */
+uint16_t* Adc_GetCurrentAdc2Ptr(void)
+{
+	return (uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc2;
+}
+
+/* Pair K: STRONG — app_power 拉取 T34A DMA 缓冲指针 */
+uint16_t* Adc_GetCurrentAdc3Ptr(void)
+{
+	return (uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc3;
 }	
 
 
@@ -416,7 +437,7 @@ enum
 };	
 
 
-void	APP_ADC_TxaAvgReset(uint8_t ch)
+void	Adc_TxaAvgReset(uint8_t ch)
 {
 	AdcAverage20ms[AdcGroupT1A+ch]=0;
 }	
@@ -750,6 +771,9 @@ uint8_t 		AdcValueFun(void)					//统一处理ADC值
 
 						xReturn=1;
 	}
+	if (xReturn) {
+		AppAdc_OnDataReady(&AdcFunRam);
+	}
 	return	xReturn;
 }
 
@@ -819,7 +843,7 @@ void	APP_ADC_GET_TEMPE(void)
 	
 }	
 
-void	APP_ADC_ClearCeilQAvg(uint8_t ch)		//重置CEILQ的滤波，防止倍频切换时误判
+void	Adc_ClearCeilQAvg(uint8_t ch)		//重置CEILQ的滤波，防止倍频切换时误判
 {
 	AdcAverage20ms[AdcGroupCeilQ1+ch]=0;
 }
@@ -1135,114 +1159,8 @@ void	API_T34_EOC_IRQHandlerCallBack(void)			//T34的谐振电流回调 将ADC DM
 //		API_ADC_T34A_DISABLE_IT_EOC();
 	
 }	
-
-
-
-
-
-
-//void	API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)		//HRTIM的UPD中断回调，开停ADC T34A EOC中断
-//{
-//}
 #define		APP_ADC_TxaMax		0xa00				//谐振电流保护值 
-
-
-
-//******************************************************************
-//			step 4
-// 函数名	：void	API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)				
-// 作者		：
-// 功能		：//API_HRTIM.c的CMP1中断函数，
-// 参数		：
-// 返回值	：
-// 调用全局变量:				
-// 修改全局变量:			
-// 备注：		1\记录DMA传送结束位置
-//				2\关闭	CMP1中断，结束谐振电流值采集	
-//			
-//												
-//												
-//*****************************************************************
-//void	API_MCU_TXA_IRQHandler(void)
-void	API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)		//HRTIM的CMP1中断回调，过流检测
-{	
-//		API_TIM_TXA_STOP();
-	
-		uint8_t 	ch;
-	
-		API_HRTIM_DISABLE_IT_REST();		
-
-
-		if(APP_ADC_DNTR_T12A.num)
-		{	
-			
-			APP_ADC_IRQ_PPGstepDecTxA(&APP_ADC_DNTR_T12A,(uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc2);	//传递DNTR数据供判断
-
-		}
-
-		
-		
-		if(APP_ADC_DNTR_T34A.num)
-		{
-			APP_ADC_IRQ_PPGstepDecTxA(&APP_ADC_DNTR_T34A,(uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc3);	//传递DNTR数据供判断
-		}	
-		APP_ADC_DNTR_T12A.num=0;
-		APP_ADC_DNTR_T34A.num=0;
-
-}		
-
-
-//******************************************************************
-//			
-// 函数名	：API_T12_AWD_IRQHandlerCallBack(void);			
-// 作者		：
-// 功能		：//API_ADC.c的ADC1 AWD中断函数，
-// 参数		：
-// 返回值	：
-// 调用全局变量:				
-// 修改全局变量:			
-// 备注：		1\记录DMA转换位置，供后面取数
-//				2实际处理在HRTIM CMP1中执行，此时谐振电流以下降，
-//				
-//*****************************************************************
-
-
-
-void	API_ADC_Current1AWD_IRQHandlerCallBack(void)
-{
-		volatile	uint32_t  value;
-
-	
-		value=API_DMA_GetDmaCndtr(ChDmaCurrentAdc2);								//得到过流位置
-	
-
-		API_HRTIM_ENABLE_IT_REST();		
-		APP_ADC_DNTR_T12A.dntr[APP_ADC_DNTR_T12A.num]=value;		//过流次数
-		
-	
-		if(APP_ADC_DNTR_T12A.num<APP_ADC_DNTR_BUFF_MAX-1)
-		{	
-				APP_ADC_DNTR_T12A.num++;
-		}
-
-	
-}
-//void	API_T34_AWD_IRQHandlerCallBack(void)
-void	API_ADC_Current2AWD_IRQHandlerCallBack(void)	
-{
-		volatile	uint32_t	value;
-		value=API_DMA_GetDmaCndtr(ChDmaCurrentAdc3);
-
-		API_HRTIM_ENABLE_IT_REST();	
-		APP_ADC_DNTR_T34A.dntr[APP_ADC_DNTR_T34A.num]=value;
-
-		if(APP_ADC_DNTR_T34A.num<APP_ADC_DNTR_BUFF_MAX-1)
-		{	
-				APP_ADC_DNTR_T34A.num++;
-		}
-
-}
-
+/* Pairs L/M/N (ISR callbacks) moved to app_power.c */
 
 //---------中断回调函数-END----------------------------------
 
@@ -1884,11 +1802,7 @@ static 	uint32_t  delayCount;
 
 }	
 #endif		
-uint32_t  	getADCinputValue(uint8_t ch)
-{
-
-	return		AdcFunRam.inputValue[ch];
-}
+/* getADCinputValue — 已删除, APP_ADC 数据通过 Pair O PUSH 传递 */
 
 
 		
@@ -1946,7 +1860,7 @@ void	APP_ADC_DMA_RecoverPan(uint8_t ch)				//恢复检锅DMA
 #endif
 	
 
-uint8_t 	APP_ADC_IsTxaDmaStart(void)			//DMA TXA时不调整PPG
+uint8_t 	Adc_IsTxaDmaStart(void)			//DMA TXA时不调整PPG
 {
 	if(TxA_ADC_AdcDmaBuff.step==TXA_StepDmaStart)
 	{
@@ -2794,7 +2708,7 @@ void		APP_ADC_TxaPublicBuffInit(void)
 }	
 
 
-uint16_t *	APP_ADC_GetHrtimSyncBuffAdr(void)
+uint16_t* Adc_GetHrtimSyncBuffAdr(void)
 {	
 
 	return (uint16_t *)&TxA_ADC_AdcDmaBuff.HrtimSyncBuff[0];

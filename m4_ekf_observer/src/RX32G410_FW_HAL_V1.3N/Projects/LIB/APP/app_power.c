@@ -30,12 +30,116 @@
 #include	"API_FMAC.H"
 
 #include	"app_power.h"
-#include	"APP_ADC.H"
+//#include	"APP_ADC.H"
+
+/* === __weak stubs — APP_ADC 接口 ===============================
+ * Pair C: Adc_TxaAvgReset      — TXA 滤波重置
+ * Pair E: Adc_ClearCeilQAvg    — Q 滤波重置
+ * Pair F: Adc_GetPowerTxa      — 单通道功率查询
+ * Pair G: Adc_GetHrtimSyncBuffAdr — HRTIM 同步缓冲地址
+ * Pair H: Adc_IsTxaDmaStart    — TXA DMA 状态
+ * Pair J: Adc_GetCurrentAdc2Ptr — T12A DMA 缓冲指针
+ * Pair K: Adc_GetCurrentAdc3Ptr — T34A DMA 缓冲指针
+ * Pair B/I 已删除 (PULL 替代为 Pair O PUSH pointer)
+ * ========================================================== */
+__attribute__((weak)) uint16_t* Adc_GetCurrentAdc2Ptr(void) { return 0; }
+__attribute__((weak)) uint16_t* Adc_GetCurrentAdc3Ptr(void) { return 0; }
+/* === ADC 通道枚举 (app_power 本地副本, 索引 _adc->inputValue[]) === */
+enum {
+	AdcGroupT1A = 0,
+	AdcGroupT2A = 1,
+	AdcGroupT3A = 2,
+	AdcGroupT4A = 3,
+	AdcGroupPower1 = 4,
+	AdcGroupPower2 = 5,
+	AdcGroupPower3 = 6,
+	AdcGroupPower4 = 7,
+	AdcGroupVoltage = 8,
+	AdcGroupIgbt1 = 9,
+	AdcGroupIgbt2 = 10,
+	AdcGroupBottom1 = 11,
+	AdcGroupBottom2 = 12,
+	AdcGroupBottom3 = 13,
+	AdcGroupBottom4 = 14,
+	AdcGroupCeilQ1 = 15,
+	AdcGroupCeilQ2 = 16,
+	AdcGroupCeilQ3 = 17,
+	AdcGroupCeilQ4 = 18,
+	AdcGroupPhase1 = 19,
+	AdcGroupPhase2 = 20,
+	AdcGroupPhase3 = 21,
+	AdcGroupPhase4 = 22,
+};
+/* getADCinputValue — 已删除, 用 _adc->inputValue[ch] 直接索引 */
+
+
+
+__attribute__((weak)) uint32_t Adc_GetPowerTxa(uint8_t ch) { return 0; }
+__attribute__((weak)) uint16_t* Adc_GetHrtimSyncBuffAdr(void) { return 0; }
+__attribute__((weak)) uint8_t Adc_IsTxaDmaStart(void) { return 0; }
+__attribute__((weak)) void Adc_TxaAvgReset(uint8_t ch) {}
+__attribute__((weak)) void Adc_ClearCeilQAvg(uint8_t ch) {}
+
+/* 桥接声明 — app_power 调用 APP_ADC 函数, 待创建 __weak 对 */
+void APP_ADC_PanSwChange(uint32_t ch);
+void APP_ADC_DMA_RecoverPan(uint8_t ch);
 
 #include	"s_pid.h"
 #include 	"proto_i2c.h"	
 #include	"simulative_uart.h"
-#include	"APP_ADC.H"
+
+
+/* === 限流子系统 (从 APP_ADC.C 完整迁入, Pairs L/M/N) === */
+#define DNTR_BUFF_MAX  5
+enum { DNTR_T12A = 0, DNTR_T34A = 1 };
+
+static Power_AwdDntr_LINK_t Power_Dntr[2] = {{0,0,0,{0}}, {0,2,0,{0}}};
+#define DNTR(id)  (&Power_Dntr[(id)])
+
+/* 前置声明 — 实现在文件尾部 (Pair L/M/N 回调链: ISR → PPGstepDec) */
+void APP_ADC_IRQ_PPGstepDecTxA(Power_AwdDntr_LINK_t* txaDntr, uint16_t* txaBuff);
+
+/* Pair N: STRONG — CMP1 过流检测 ISR 回调 */
+void API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)
+{
+	API_HRTIM_DISABLE_IT_REST();
+
+	if (DNTR(DNTR_T12A)->num) {
+		APP_ADC_IRQ_PPGstepDecTxA(DNTR(DNTR_T12A),
+			Adc_GetCurrentAdc2Ptr());
+	}
+
+	if (DNTR(DNTR_T34A)->num) {
+		APP_ADC_IRQ_PPGstepDecTxA(DNTR(DNTR_T34A),
+			Adc_GetCurrentAdc3Ptr());
+	}
+	DNTR(DNTR_T12A)->num = 0;
+	DNTR(DNTR_T34A)->num = 0;
+}
+
+/* Pair L: STRONG — T12A AWD 过流中断回调 */
+void API_ADC_Current1AWD_IRQHandlerCallBack(void)
+{
+	volatile uint32_t value;
+	value = API_DMA_GetDmaCndtr(ChDmaCurrentAdc2);
+	API_HRTIM_ENABLE_IT_REST();
+	DNTR(DNTR_T12A)->dntr[DNTR(DNTR_T12A)->num] = value;
+	if (DNTR(DNTR_T12A)->num < DNTR_BUFF_MAX - 1) {
+		DNTR(DNTR_T12A)->num++;
+	}
+}
+
+/* Pair M: STRONG — T34A AWD 过流中断回调 */
+void API_ADC_Current2AWD_IRQHandlerCallBack(void)
+{
+	volatile uint32_t value;
+	value = API_DMA_GetDmaCndtr(ChDmaCurrentAdc3);
+	API_HRTIM_ENABLE_IT_REST();
+	DNTR(DNTR_T34A)->dntr[DNTR(DNTR_T34A)->num] = value;
+	if (DNTR(DNTR_T34A)->num < DNTR_BUFF_MAX - 1) {
+		DNTR(DNTR_T34A)->num++;
+	}
+}
 #include	"s_data_stack.h"
 #include    "printMessage.h"
 #include	"pluse.H"
@@ -865,7 +969,7 @@ uint8_t	APP_POWER_GetResumeFlag(void);		//得到功率切换标志
 
 uint16_t 		Pan_ADC_AdcDmaBuff[Pan_ADC_DMA_BUFF_NUM];
 uint16_t*			Pan_ADC_AdcFmacBuff;
-
+void		APP_ADC_PanSwChange(uint32_t ch);
 
 int16_t* 	APP_POWER_GetPanDmaBuffAddress(void)
 {
@@ -980,6 +1084,8 @@ void	APP_POWER_TxaStrart(void)				//20次输出一次TXA的值
 
 #endif
 
+/* Pair O: STRONG — ADC 数据就绪回调 (只搬运标志) */
+
 void	APP_PPG_SetIcVcOk(void)
 {
 			PowerMem[0].staticReg->flag.bit.IcVcAdcOk=1;		//标志在后续执行才会清除m_ic_vc_adc_ok_flag
@@ -987,6 +1093,21 @@ void	APP_PPG_SetIcVcOk(void)
 			PowerMem[2].staticReg->flag.bit.IcVcAdcOk=1;		//标志在后续执行才会清除m_ic_vc_adc_ok_flag
 			PowerMem[3].staticReg->flag.bit.IcVcAdcOk=1;
 }	
+
+
+
+/* ====== Pair O STRONG: APP_ADC → app_power 数据就绪回调 (PUSH 范式) ======
+ * 推模式: 发送方传指针, 接收方只存指针+设标志
+ * ================================================================ */
+static Power_AdcDef_LINK_t *_adc;
+
+void AppAdc_OnDataReady(void *input)
+{
+    APP_PPG_SetIcVcOk();
+    _adc = (Power_AdcDef_LINK_t*)input;
+}
+
+
 
 void	APP_POWER_CompSetValue(void)
 {
@@ -1050,12 +1171,6 @@ void	APP_POWER_CompSetValue(void)
 void			PowerTypeFun(void)	
 {
 
-	if(AdcValueFun())			//判断ICVC是否完成
-	{
-		APP_PPG_SetIcVcOk();
-//		getMaxOvpValueAdj();				//切换OVP限制值 	
-//		API_DAC_COMP_SetValueAll(0xF0);		
-	}	
 
 	
 	if(I2cSuccessCount())		//判断I2C是否成功，长时间不恢复，重置总线
@@ -1768,7 +1883,7 @@ void	APP_POWER_PotTypeCheck(void)					//检查锅具类型，确定最大PPG
 			// {
 			// 	PowerMem[nowPot].staticReg->SurgeDelay=0;
 			// 	PowerMem[nowPot].staticReg->flag.bit.PowerCycleType=0;
-			// 	APP_ADC_TxaAvgReset(nowPot);
+			// 	Adc_TxaAvgReset(nowPot);
 			// }
 
 
@@ -1870,24 +1985,24 @@ void	PPGgetAdcValue(uint8_t ch)
 
 #ifdef CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupT1A+ch);
+		CurrentValue16		=		_adc->inputValue[AdcGroupT1A+ch];
 		CurrentValue		=		CurrentValue16>>2;
 		
 #else	//CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupPower1+ch);
+		CurrentValue16		=		_adc->inputValue[AdcGroupPower1+ch];
 		CurrentValue		=		CurrentValue16>>4;		
 		
 #endif // CurrentFromTxa		
 
 
 		
-		VoltageValue		=		getADCinputValue(AdcGroupVoltage)>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-//		IGBTValue			=		getADCinputValue(AdcGroupIgbt1+ch)>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-//		BOTTOMValue			=		getADCinputValue(AdcGroupBottom1+ch)>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		APP_ADC_GetPowerTxa(PotCh1+ch);			//得到谐振电流计算的功率
-		powerPhase			=		getADCinputValue(AdcGroupPhase1+ch);
-		s_limit_Qsum		=		getADCinputValue(AdcGroupCeilQ1+ch);
+		VoltageValue		=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
+//		IGBTValue			=		_adc->inputValue[AdcGroupIgbt1+ch]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
+//		BOTTOMValue			=		_adc->inputValue[AdcGroupBottom1+ch]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
+		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh1+ch);			//得到谐振电流计算的功率
+		powerPhase			=		_adc->inputValue[AdcGroupPhase1+ch];
+		s_limit_Qsum		=		_adc->inputValue[AdcGroupCeilQ1+ch];
 		
 //		PWMValue_L=s_limit_Qsum&0xff;
 //		if(s_limit_Qsum>0xff)
@@ -1897,7 +2012,7 @@ void	PPGgetAdcValue(uint8_t ch)
 
 		PWMValue_H=powerPhase/10;			//度数
 
-//		uint16_t powervalue=getADCinputValue(AdcGroupPower1+ch);
+//		uint16_t powervalue=_adc->inputValue[AdcGroupPower1+ch];
 //		PWMValue_L=powervalue&0xff;
 //		PWMValue_H=powervalue>>8;		
 		
@@ -1919,29 +2034,29 @@ void	PPGgetAdcValue1(uint8_t ch)
 
 #ifdef CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupT1A+ch);
+		CurrentValue16		=		_adc->inputValue[AdcGroupT1A+ch];
 		CurrentValue		=		CurrentValue16>>2;
 		
 #else	//CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupPower1+ch);
+		CurrentValue16		=		_adc->inputValue[AdcGroupPower1+ch];
 		CurrentValue		=		CurrentValue16>>4;		
 		
 #endif // CurrentFromTxa		
 
 
 		
-		txaValue=getADCinputValue(AdcGroupCeilQ1+ch);
+		txaValue=_adc->inputValue[AdcGroupCeilQ1+ch];
 		s_limit_Qsum=txaValue;
 		
 		PWMValue_L=txaValue&0xff;
 		PWMValue_H=txaValue>>8;		
 		
-		VoltageValue		=		getADCinputValue(AdcGroupVoltage+ch)>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-//		IGBTValue			=		getADCinputValue(AdcGroupIgbt1+ch)>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-//		BOTTOMValue			=		getADCinputValue(AdcGroupBottom1+ch)>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		APP_ADC_GetPowerTxa(PotCh1+ch);			//得到谐振电流计算的功率
-		powerPhase			=		getADCinputValue(AdcGroupPhase1+ch);
+		VoltageValue		=		_adc->inputValue[AdcGroupVoltage+ch]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
+//		IGBTValue			=		_adc->inputValue[AdcGroupIgbt1+ch]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
+//		BOTTOMValue			=		_adc->inputValue[AdcGroupBottom1+ch]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
+		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh1+ch);			//得到谐振电流计算的功率
+		powerPhase			=		_adc->inputValue[AdcGroupPhase1+ch];
 
 
 
@@ -1950,33 +2065,33 @@ void	PPGgetAdcValue1(uint8_t ch)
 		
 		case PotCh2: 
 
-//		ResonanceCurrent16	=		getADCinputValue(AdcGroupT1A);
+//		ResonanceCurrent16	=		_adc->inputValue[AdcGroupT1A];
 
 #ifdef CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupT2A);
+		CurrentValue16		=		_adc->inputValue[AdcGroupT2A];
 		CurrentValue		=		CurrentValue16>>2;
 		
 #else	//CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupPower1);
+		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
 		CurrentValue		=		CurrentValue16>>4;		
 		
 #endif // CurrentFromTxa		
 
 
 		
-		txaValue=getADCinputValue(AdcGroupCeilQ2);
+		txaValue=_adc->inputValue[AdcGroupCeilQ2];
 		s_limit_Qsum=txaValue;
 		
 		PWMValue_L=txaValue&0xff;
 //		PWMValue_H=txaValue>>8;		
 		
-		VoltageValue		=		getADCinputValue(AdcGroupVoltage)>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		// IGBTValue			=		getADCinputValue(AdcGroupIgbt1)>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		// BOTTOMValue			=		getADCinputValue(AdcGroupBottom2)>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		APP_ADC_GetPowerTxa(PotCh2);			//得到谐振电流计算的功率
-		powerPhase			=		getADCinputValue(AdcGroupPhase2);
+		VoltageValue		=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
+		// IGBTValue			=		_adc->inputValue[AdcGroupIgbt1]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
+		// BOTTOMValue			=		_adc->inputValue[AdcGroupBottom2]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
+		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh2);			//得到谐振电流计算的功率
+		powerPhase			=		_adc->inputValue[AdcGroupPhase2];
 
 //		IGBTValue=0x20;
 //		BOTTOMValue=0x20;	
@@ -1987,29 +2102,29 @@ void	PPGgetAdcValue1(uint8_t ch)
 
 #ifdef CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupT3A);
+		CurrentValue16		=		_adc->inputValue[AdcGroupT3A];
 		CurrentValue		=		CurrentValue16>>2;
 		
 #else	//CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupPower1);
+		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
 		CurrentValue		=		CurrentValue16>>4;		
 		
 #endif // CurrentFromTxa		
 
 
 		
-		txaValue=getADCinputValue(AdcGroupCeilQ3);
+		txaValue=_adc->inputValue[AdcGroupCeilQ3];
 		s_limit_Qsum=txaValue;
 		
 		PWMValue_L=txaValue&0xff;
 		PWMValue_H=txaValue>>8;		
 		
-		VoltageValue			=		getADCinputValue(AdcGroupVoltage)>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		IGBTValue					=			getADCinputValue(AdcGroupIgbt2)>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		BOTTOMValue				=		getADCinputValue(AdcGroupBottom3)>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		APP_ADC_GetPowerTxa(PotCh3);			//得到谐振电流计算的功率
-		powerPhase			=		getADCinputValue(AdcGroupPhase3);
+		VoltageValue			=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
+		IGBTValue					=			_adc->inputValue[AdcGroupIgbt2]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
+		BOTTOMValue				=		_adc->inputValue[AdcGroupBottom3]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
+		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh3);			//得到谐振电流计算的功率
+		powerPhase			=		_adc->inputValue[AdcGroupPhase3];
 //		IGBTValue=0x20;
 //		BOTTOMValue=0x20;	
 		
@@ -2019,29 +2134,29 @@ void	PPGgetAdcValue1(uint8_t ch)
 
 #ifdef CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupT4A);
+		CurrentValue16		=		_adc->inputValue[AdcGroupT4A];
 		CurrentValue		=		CurrentValue16>>2;
 		
 #else	//CurrentFromTxa
 		
-		CurrentValue16		=		getADCinputValue(AdcGroupPower1);
+		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
 		CurrentValue		=		CurrentValue16>>4;		
 		
 #endif // CurrentFromTxa		
 
 
 		
-		txaValue=getADCinputValue(AdcGroupCeilQ4);
+		txaValue=_adc->inputValue[AdcGroupCeilQ4];
 		
 		PWMValue_L=txaValue&0xff;
 		PWMValue_H=txaValue>>8;		
 		s_limit_Qsum=txaValue;
 		
-		VoltageValue		=		getADCinputValue(AdcGroupVoltage)>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		IGBTValue			=		getADCinputValue(AdcGroupIgbt2)>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		BOTTOMValue			=		getADCinputValue(AdcGroupBottom4)>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		APP_ADC_GetPowerTxa(PotCh4);			//得到谐振电流计算的功率
-		powerPhase			=		getADCinputValue(AdcGroupPhase4);
+		VoltageValue		=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
+		IGBTValue			=		_adc->inputValue[AdcGroupIgbt2]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
+		BOTTOMValue			=		_adc->inputValue[AdcGroupBottom4]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
+		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh4);			//得到谐振电流计算的功率
+		powerPhase			=		_adc->inputValue[AdcGroupPhase4];
 //		IGBTValue=0x20;
 //		BOTTOMValue=0x20;	
 		break;				
@@ -4466,7 +4581,7 @@ void	APP_POWER_PotCheckRest(void)
 		PowerMem[i].staticReg->potPowerSave[0].count=0;
 		PowerMem[i].staticReg->potPowerSave[1].count=0;	
 		PowerMem[i].staticReg->potPowerSave[2].count=0;				
-		APP_ADC_TxaAvgReset(i);
+		Adc_TxaAvgReset(i);
 	}
 
 }
@@ -5117,7 +5232,7 @@ void PowerStepDec(AppPowerDef* powerCh)
 }
 
 
-void	APP_ADC_IRQ_PPGstepDecT12aCallBack(APP_ADC_AWD_DNTR_DEF* txa)
+void	APP_ADC_IRQ_PPGstepDecT12aCallBack(void* txa)
 {	
 
 	
@@ -5248,7 +5363,7 @@ uint8_t  APP_POWER_ZeroSync(void)
 //		peroid[2]=API_HRTIM_GetTxaCnt(PotCh3);	
 //		peroid[3]=API_HRTIM_GetTxaCnt(PotCh4);
 
-		uint16_t*  	peroid=APP_ADC_GetHrtimSyncBuffAdr();//取同一点的HRTIM值
+		uint16_t*  	peroid=Adc_GetHrtimSyncBuffAdr();//取同一点的HRTIM值
 				
 		uint16_t  peroid_temp=0;		
 				
@@ -5300,7 +5415,7 @@ uint8_t  APP_POWER_ZeroSync(void)
 				{
 					ppgChange=1;
 					PowerMem[i].staticReg->cycleRoll=1;		//倍频
-					APP_ADC_ClearCeilQAvg(i);			//滤波重置
+					Adc_ClearCeilQAvg(i);			//滤波重置
 				}
 	
 			}
@@ -5329,7 +5444,7 @@ uint8_t 		APP_POWER_GetCycleType(uint8_t change)
 		uint16_t powerCycleHalf;
 	
 
-		if(APP_ADC_IsTxaDmaStart())
+		if(Adc_IsTxaDmaStart())
 		{
 					return 0;
 		}	
@@ -5570,7 +5685,7 @@ void	APP_ADC_IRQ_PPGstepChangeCallBack(void)
 //		peroid[2]=API_HRTIM_GetTxaCnt(PotCh3);	
 //		peroid[3]=API_HRTIM_GetTxaCnt(PotCh4);
 
-		peroid=APP_ADC_GetHrtimSyncBuffAdr();//取同一点的HRTIM值
+		peroid=Adc_GetHrtimSyncBuffAdr();//取同一点的HRTIM值
 				
 				
 				
@@ -5609,7 +5724,7 @@ void	APP_ADC_IRQ_PPGstepChangeCallBack(void)
 				{
 					ppgChange=1;
 					PowerMem[i].staticReg->cycleRoll=1;		//倍频
-					APP_ADC_ClearCeilQAvg(i);			//滤波重置
+					Adc_ClearCeilQAvg(i);			//滤波重置
 				}
 	
 			}
@@ -6040,7 +6155,7 @@ uint8_t	APP_ADC_getOverAdcChannel(uint16_t* value,uint16_t ovpValue,uint8_t num)
 //*****************************************************************
 
 #define		PotAwdNum		2			//同时统计的炉头
-void	APP_ADC_IRQ_PPGstepDecTxA(APP_ADC_AWD_DNTR_DEF* txaDntr,uint16_t* txaBuff)
+void	APP_ADC_IRQ_PPGstepDecTxA(Power_AwdDntr_LINK_t* txaDntr,uint16_t* txaBuff)
 {
 	
 	

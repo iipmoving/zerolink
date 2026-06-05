@@ -21,6 +21,45 @@
 #include "data_type.h"
 
 
+/* === @STRUCT consumer types (mirror APP_ADC.H owner structs) ==========
+ * Pair S6: AdcRawInput → Power_RawInput_LINK_t   (sizeof=52)
+ * Pair S7: APP_ADC_AWD_DNTR_DEF → Power_AwdDntr_LINK_t (sizeof=24)
+ * Pair S8: APP_ADC_DEF → Power_AdcDef_LINK_t     (_LINK = 联合管理)
+ * check_structs.py validates sizeof/offset match with owner.
+ * ==================================================================== */
+
+#pragma pack(4)
+
+/* @STRUCT Pair S6 owner=app_adc  suffix=LINK  source=AdcRawInput */
+typedef struct {
+    uint32_t txa_current[4];
+    uint32_t voltage;
+    uint32_t phase[4];
+    uint32_t ceil_q[4];
+} Power_RawInput_LINK_t;
+
+/* @STRUCT Pair S7 owner=app_adc  suffix=LINK  source=APP_ADC_AWD_DNTR_DEF */
+typedef struct {
+    uint32_t num;
+    uint32_t ch;
+    uint32_t res;
+    uint32_t dntr[5];
+} Power_AwdDntr_LINK_t;
+
+/* @STRUCT Pair S8 owner=app_adc  suffix=LINK  source=APP_ADC_DEF
+ * Power_AdcDef_LINK_t — _adc->inputValue[ch] 直接索引 */
+typedef struct {
+    uint8_t  adc20msCount;
+    uint8_t  flag20ms;
+    uint8_t  adcSelect;
+    uint8_t  res;
+    uint32_t inputValue[30];   /* AdcGroupMax = 30 */
+} Power_AdcDef_LINK_t;
+#pragma pack()
+
+/* === END consumer types === */
+
+
 
 #define		FRE_10			1			//微調步進，單位Hz
 #define		FRE_20			2			//微調步進，單位Hz

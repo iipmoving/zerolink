@@ -46,19 +46,39 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
 
 ---
 
-## 二、与消息队列方案对比
+## 二、__weak 与 Msg_Post 互补关系
 
-| 方面 | 消息队列方案 | __weak 直调 |
-|------|-------------|-------------|
-| 发送代码 | `Msg_Post(ID, param, &data)` | `Receiver_OnXxx(param, &data)` |
-| 接收注册 | `Register(ID, handler)` | 强符号同名函数 |
-| 消息 ID | 需要，全局唯一 | 不需要 |
-| 跨模块 include | `msg_scheduler.h` | 无 |
-| 队列 | 环形队列 | 无，直接调 |
-| 异步性 | 消费端异步 | 同步直调 |
-| 运行时内存 | 队列缓冲+消息体 | 0 |
-| 多接收方 | 多次 Msg_Post | 多次函数调用 |
-| 独立编译 | 需 msg_scheduler.o | 零外部依赖 |
+两者**不互相替代**，按调用时机选择。
+
+| 方面 | __weak 直调 | Msg_Post 消息 |
+|------|-------------|---------------|
+| **适用** | 同时间片连续执行 | 跨时间片 / 跨进程 |
+| **时序** | 同步，调用即执行 | 异步，队列缓冲 |
+| 发送代码 | `Receiver_OnXxx(param, &data)` | `Msg_Post(ID, param, &data)` |
+| 接收注册 | 强符号同名函数 | `Register(ID, handler)` |
+| 消息 ID | 不需要 | 需要，全局唯一 |
+| 队列 | 无，直接调 | 环形队列 |
+| 运行时内存 | 0 | 队列缓冲+消息体 |
+| 独立编译 | 零外部依赖 | 需 msg_scheduler.o |
+| 多接收方 | 多个 __weak 逐一调用 | 多次 Msg_Post |
+
+### 选择规则
+
+```
+问: "这个操作必须在同一次调度槽内完成？"
+  → 是: 用 __weak 直调 ← 调用即执行，无延迟
+  → 否: 用 Msg_Post    ← 写入队列，下个时间片消费
+```
+
+### 典型分工
+
+| 场景 | 用谁 | 原因 |
+|------|------|------|
+| DRV → HAL | __weak | 同步硬件操作，需立即生效 |
+| 主模块 → 算法集 | __weak | 连续计算，无延迟 |
+| 按键 → 业务逻辑 | Msg_Post | 不在 ISR 中处理，延迟到主循环 |
+| 状态变更广播 | Msg_Post | 多模块异步感知，不需即时 |
+| 显示帧下发 | __weak 或回调指针 | COM 扫描每 1ms，不能异步排队 |
 
 ---
 
@@ -101,20 +121,45 @@ Receiver3_OnData(param, &data);
 
 ---
 
-## 四、WEAK 宏（跨编译器兼容）
+## 四、__attribute__((weak)) 统一规则（ARMCLANG V6）
 
 ```c
-/* weak_macro.h */
-#if defined(__ARMCC_VERSION)
-  #define WEAK __weak
-#elif defined(__EMSCRIPTEN__)
-  #define WEAK __attribute__((weak))
-#elif defined(__GNUC__)
-  #define WEAK __attribute__((weak))
-#else
-  #error "Unsupported compiler: define WEAK macro manually"
-#endif
+// ARMCLANG V6 (Keil V5.38+) 不识别裸 __weak
+// → 全项目统一使用 __attribute__((weak))
+
+/* 发送方 — 正确 */
+__attribute__((weak)) void Receiver_OnXxx(void *input)
+{ (void)input; }
+
+/* 接收方 — STRONG，不加任何修饰 */
+void Receiver_OnXxx(void *input)
+{
+    // ...
+}
 ```
+
+**铁律**: 本项目编译器为 ARMCLANG V6.12，一律用 `__attribute__((weak))`，禁止裸 `__weak`。
+
+**编码**: 所有源文件统一 UTF-8（无 BOM），Keil → Edit → Configuration → Editor → Encoding = UTF-8。
+
+---
+
+## 五、AI 行为规范：先反馈理解，再行动
+
+每次接到指令后：
+
+```
+1. 用自己的话重述目标 → 等用户确认
+2. 确认后再改代码
+3. 不跳步，不猜测
+```
+
+**反例**:
+- 用户说"把指针传进来" → AI 加了 data_ready、加了 power_out、套了 struct 壳 → 没确认就动手
+- 用户说"存指针" → AI 复制了一份数据到本地 struct → 没理解就执行
+
+**正例**:
+- 用户说"传 &AdcFunRam.inputValue" → AI: "收到，只传这个指针，STRONG 里只存指针+设 APP_PPG_SetIcVcOk()，不调 PULL，对吗？" → 确认 → 执行
 
 ---
 
@@ -147,3 +192,181 @@ __weak 依赖链接器在编译时解析。所有模块必须链接到同一个�
 
 ### 多接收方
 每个接收方需要独立的 __weak 空壳声明和独立的调用语句。发送方显式知道所有接收方（通过函数名），但不知道接收方是谁、做什么。
+
+---
+
+## 七、大模块调用纯算法集（不 include .h）
+
+### 7.1 问题
+
+传统做法: 大模块 `#include "algo.h"` → 调用算法函数。这引入了编译期依赖——算法集的类型定义、内部 include 全部暴露给调用方。
+
+### 7.2 解法: __weak 隔离
+
+```
+app_power.c (主模块, 调用方)
+  ├─ __weak AlgoRamp_Calculate(param)  ← 声明空壳（不 #include algo.h）
+  └─ AppPower_Run():
+        result = AlgoRamp_Calculate(...)  ← 直接调用
+
+algo_ramp.c (纯算法集, 被调用方)
+  └─ AlgoRamp_Calculate(param)      ← 强符号实现（覆盖 __weak 空壳）
+```
+
+**关键**: 调用方不 include 算法集头文件。两个 .c 之间唯一的耦合是函数名和签名——由链接器 + `interface_map.h` + `check_weak_pairs.py` 管理。
+
+### 7.3 完整示例
+
+```c
+/* ======== app_power.c (主模块) ======== */
+#include "app_power.h"   /* 只包含自己的头文件 */
+/* 不包含 algo_ramp.h */
+
+/* __weak 声明 — 替代 #include "algo_ramp.h" */
+__weak uint16_t AlgoRamp_Calculate(uint16_t target, uint16_t current,
+                                    uint16_t step_up, uint16_t step_down)
+{ return target; }  /* 空壳: 无算法集时直通 */
+
+void AppPower_Run(void)
+{
+    /* 输入段 */
+    /* 计算段 */
+    s_power = AlgoRamp_Calculate(s_target, s_current,
+                                  cfg.step_up, cfg.step_down);
+    /* 输出段 */
+}
+
+/* ======== algo_ramp.c (纯算法集) ======== */
+#include "algo_ramp.h"   /* 只包含自己的头文件 */
+
+/* 强符号 — 覆盖上层 __weak */
+uint16_t AlgoRamp_Calculate(uint16_t target, uint16_t current,
+                             uint16_t step_up, uint16_t step_down)
+{
+    if (target > current) {
+        return (target - current > step_up) ? current + step_up : target;
+    } else if (target < current) {
+        return (current - target > step_down) ? current - step_down : target;
+    }
+    return target;
+}
+```
+
+### 7.4 三层结构映射
+
+```
+主模块 (APP)      __weak 调子模块          不含 #include "algo_*.h"
+    ↓ __weak 直调
+纯算法集           强符号覆盖              不含 #include "app_*.h" / "drv_*.h"
+    ↓ (无返回值函数时 __weak 回调)
+主模块            输出回调                 不含 #include "drv_*.h"
+    ↓ (跨时间片)
+Msg_Post          异步通知                 队列缓冲
+```
+
+**每层都不 include 下一层的头文件。** 唯一交叉点是函数名——由配对表 + 工具验证。
+
+---
+
+## 八、APP 模块间数据传递标准模式（案例）
+
+### 8.1 反模式：task 层编排
+
+```c
+/* === app_task.c (调度层) — 错误做法 === */
+#include "APP_ADC.H"
+#include "app_power.h"
+
+void Task_TimeChip1(void)
+{
+    uint8_t icVcOk = AdcValueFun();    // 直接调模块 A
+    PowerTypeFun(icVcOk);              // 把 A 的结果传给 B — task 不该知道这个协议
+}
+```
+
+**问题**:
+1. task 层 `#include "APP_ADC.H"` — 跨模块 include
+2. task 层知道 APP_ADC 和 app_power 之间的握手协议（`icVcOk` 这个值）
+3. `PowerTypeFun` 用参数接收外部状态 — 输入来源不透明
+4. 新增数据传递时要在 task 层加参数 → 所有模块签名跟着变
+
+### 8.2 标准模式：__weak 输出 → STRONG 本地缓存 → 主入口消费
+
+```
+发送方 (APP_ADC)                     接收方 (app_power)
+─────────────                        ─────────────
+__weak AppAdc_OnDataReady(void) {}   static uint8_t _adc_data_ready = 0;
+                                     void AppAdc_OnDataReady(void) {
+void AdcValueFun(void) {                 _adc_data_ready = 1;  // 只搬运
+    // ... 填充数据 ...              }
+    AppAdc_OnDataReady();  ←──weak──→ 
+    return;                           void PowerTypeFun(void) {
+}                                         if (_adc_data_ready) {  // 消费
+                                              // ... 使用已准备好的数据 ...
+                                              _adc_data_ready = 0;
+                                          }
+                                      }
+```
+
+**关键原则**:
+- **发送方**: 在输出段调 `__weak`，不关心谁接收
+- **接收方 STRONG**: 只做"数据搬运"（复制值/存指针/设标志），不做业务逻辑
+- **接收方主入口**: 消费本地缓存，不从参数拿外部状态
+- **task 层**: 只按时序调用各模块入口，不传递数据
+
+### 8.3 真实案例：APP_ADC → app_power (m4_ekf_observer)
+
+**改前** (`app_task.c`):
+```c
+uint8_t icVcOk = AdcValueFun();    // task 直接调 APP_ADC
+PowerTypeFun(icVcOk);              // 参数传递握手信号
+```
+
+**改前** (`app_power.c`):
+```c
+void PowerTypeFun(uint8_t newIcVc) {
+    if (newIcVc) {
+        APP_PPG_SetIcVcOk();       // 外部状态 → 内部标志
+    }
+}
+```
+
+**改后** (`APP_ADC.C`):
+```c
+/* __weak 桩 — Pair O */
+__attribute__((weak)) void AppAdc_OnDataReady(void) {}
+
+uint8_t AdcValueFun(void) {
+    // ... 填充 g_adc_raw ...
+    if (xReturn) {
+        AppAdc_OnDataReady();      // 通知: 数据就绪 (不关心谁接收)
+    }
+    return xReturn;
+}
+```
+
+**改后** (`app_power.c`):
+```c
+static uint8_t _adc_data_ready = 0;
+
+void AppAdc_OnDataReady(void) {     // STRONG: 只设标志
+    _adc_data_ready = 1;
+}
+
+void PowerTypeFun(void) {           // 签名去参数
+    if (_adc_data_ready) {          // 消费本地缓存
+        APP_PPG_SetIcVcOk();
+        _adc_data_ready = 0;
+    }
+}
+```
+
+**改后** (`app_task.c`):
+```c
+void Task_TimeChip1(void) {
+    AdcValueFun();                 // 只按时序调用
+    PowerTypeFun();                // 无参数传递
+}
+```
+
+**效果**: 新增数据字段只需扩展 `g_adc_raw` struct + `AppAdc_OnDataReady` 签名，task 层和 `PowerTypeFun` 参数列表不受影响。

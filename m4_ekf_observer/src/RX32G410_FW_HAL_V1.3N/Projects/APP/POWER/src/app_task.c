@@ -102,6 +102,7 @@ void Task_TimeChip1(void)
 
 //	API_TIM_TGO_PPG_SINGLE_Start();
 
+ 		AdcValueFun();					//APP_ADC: 采集 ADC 数据 (Pair O 发送方)
  		PowerTypeFun();					//统一处理功率的模式，
 
 }
@@ -335,7 +336,7 @@ API_FB_Stop(PotCh2);
 
 	
 	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pullup);
-	APP_ADC_PanSwChange(0x20);
+//	APP_ADC_PanSwChange(0x20);
 
 	printf("system init over\n");
 }

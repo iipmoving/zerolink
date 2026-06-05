@@ -128,18 +128,18 @@ python tools/check_structs.py  ← 验证一致性
 
 详见 `07-struct-generation.md`。
 
-### 6.2 命名约定: _IN / _OUT 后缀
+### 6.2 命名约定: _OUT / _LINK 后缀
 
 | 后缀 | 含义 | 示例 |
 |------|------|------|
 | `_OUT` | 本模块是**生产者**，对外输出 | `StateGlobal_OUT_t` |
-| `_IN` | 本模块是**消费者**，从外部接收 | `Display_StateInput_t` |
+| `_LINK` | 本模块是**消费者**，与 owner 双向维护 | `Power_AdcDef_LINK_t` |
 | (无后缀) | 本模块**内部使用**，不跨模块 | `DisplayBuffer_t` |
 
-- Owner struct: `{StructKey}_{SUFFIX}_t`
-- Consumer struct: `{Module}_{StructKey}_IN_t`
-- 后缀描述的是**拥有者模块的视角**（我产出还是我接收）
-- 此约定写在 `code-style.md` 中
+- Owner struct: `{StructKey}_t` 或 `{StructKey}_OUT_t`
+- Consumer struct: `{Module}_{StructKey}_LINK_t`
+- `_LINK` = 联合管理，前后缀利于 Python 工具检索配对
+- 前缀 `{Module}_` 标明所属模块，后缀 `_LINK` 标记跨模块联合维护
 
 ### 6.3 与 interface_map.h 的分工
 

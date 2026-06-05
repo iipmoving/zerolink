@@ -75,7 +75,7 @@ NOTE_RE = re.compile(r'注\s*:\s*(.+?)\s*[*]/')
 
 # 搜索 WEAK 声明: WEAK void FuncName(params);
 WEAK_DECL_H_RE = re.compile(
-    r'(?:WEAK|__weak)\s+'
+    r'(?:WEAK|__weak|__attribute__\(\(weak\)\))\s+'
     r'(\w+(?:\s*\*)?)\s+'            # return type
     r'(\w+)\s*[(]'                     # function name
     r'([^)]*)[)]'                      # params
@@ -266,7 +266,12 @@ def _find_weak_in_content(filepath, func_name):
     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
 
-    weak_positions = [m.end() for m in re.finditer(r'\b(?:WEAK|__weak)\b', content)]
+    weak_positions = []
+    for m in re.finditer(r'\b(?:WEAK|__weak)\b', content):
+        weak_positions.append(m.end())
+    for m in re.finditer(r'__attribute__\(\(weak\)\)', content):
+        weak_positions.append(m.end())
+    weak_positions.sort()
 
     for wpos in weak_positions:
         window = content[wpos:wpos + 500]
@@ -519,7 +524,7 @@ def scan_orphans(source_dir, known_pairs, config):
                                         excluded = True
                                         break
                                 if not excluded:
-                                    if 'WEAK' not in line and '__weak' not in line:
+                                    if 'WEAK' not in line and '__weak' not in line and '__attribute__((weak))' not in line:
                                         found_callbacks.append(
                                             (os.path.basename(cfile), fname,
                                              sm.group(1), sm.group(3), lineno, cfile))
