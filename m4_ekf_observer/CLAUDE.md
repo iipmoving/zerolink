@@ -34,6 +34,7 @@
 - `app/pot_detect/` — 锅具检测
 - `app/var_gain_pid/` — 变增益 PID
 - `app/data_logger/` — 数据记录
+- `base_class/src/` — 基础类层（新增模块）
 - `tools/ekf_tuner/` — PC 工具
 
 详细规则见 @.claude/specs/modification-rules.md
@@ -65,15 +66,25 @@
 
 ---
 
-## 四、每次编码后检查
+## 四、每次编码后强制：四件套
+
+**以下 4 步必须全部 PASS 才能声明"完成"。任一步失败 = 不得提交。**
 
 ```bash
-# 编译验证 → 0 error, 0 warning
-armcc -c --cpu Cortex-M4 --c99 -I... <modified.c>
+# 工作目录: m4_ekf_observer/
+# 工具位于 ../methodology-seed/tools/，自动检测项目类型
 
-# 如果改了 MODBUS 寄存器或 EKF/PID:
-python tools/ekf_tuner/m4_modbus_tool.py COM3 --read
-python tools/ekf_tuner/run_ekf_tests.py
+# 1. 层依赖审计 → 必须 0 violations
+python ../methodology-seed/tools/check_deps.py . --project m4-ekf
+
+# 2. __weak 配对一致性 → 必须 0 violations
+python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf
+
+# 3. 结构体一致性 → 必须 PASS
+python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+
+# 4. 编译验证 → 必须 0 error, 0 warning
+armcc -c --cpu Cortex-M4 --c99 -I... <modified.c>
 ```
 
 ### 自检清单
@@ -214,4 +225,277 @@ python m4_modbus_tool.py COM3 --power 1000 --on
 
 ---
 
-*最后更新: 2026-05-27*
+## 十二、方法论文档：分层规则
+
+### 12.1 五层架构
+
+本项目遵循 methodology-seed 零耦合分层架构。层间隔离是绝对约束，不得妥协。
+
+```
+┌──────────────────────────────────────────────┐
+│  APP  应用层  (app/)                           │
+│  允许: include core/ proto/                    │
+│  禁止: include base_class/ src/               │
+├──────────────────────────────────────────────┤
+│  PROTO  协议层  (proto/)                       │
+│  纯函数库 — 编解码，无状态，无副作用              │
+│  禁止: include app/ base_class/ src/           │
+├──────────────────────────────────────────────┤
+│  BASE_CLASS  基础类层  (base_class/)            │
+│  允许: include src/ (vendor HAL)               │
+│  禁止: include app/                            │
+├──────────────────────────────────────────────┤
+│  CORE  核心基础设施  (core/)                     │
+│  消息调度器、时间基、基础设施                     │
+│  禁止: include app/ base_class/ proto/         │
+├──────────────────────────────────────────────┤
+│  VENDOR  原厂固件库  (src/RX32G410_FW_HAL_V1.3N/) │
+│  No-Go: 只读不写，禁止修改                       │
+└──────────────────────────────────────────────┘
+```
+
+**唯一合法的跨层调用链**: APP → __weak 直调 → BASE_CLASS → VENDOR HAL
+
+### 12.2 层依赖白名单
+
+| 层 | 目录 | 可 include | 不可 include |
+|-----|------|-----------|-------------|
+| APP | `app/` | `core/`, `proto/` | `base_class/`, `src/`, 其他 `app/` |
+| BASE_CLASS | `base_class/` | `src/` (HAL) | `app/` |
+| PROTO | `proto/` | — | `app/`, `base_class/`, `src/` |
+| CORE | `core/` | — | `app/`, `base_class/`, `proto/` |
+
+**验证机制**: `check_deps.py` 扫描所有 `#include` 语句，对照上表。违规 → 非零退出码 → §四四件套阻断提交。
+
+### 12.3 通信选择规则
+
+两种通信机制按调用时机选择，**不得互相替代**。
+
+| 机制 | 适用场景 | 调用时机 | 中间层 | 发送方代码 |
+|------|---------|---------|--------|-----------|
+| `__weak` 直调 | **同时间片**连续执行 | 同步，调用即执行 | 无（链接器接线） | `Receiver_OnXxx(param, &data)` |
+| `Msg_Post` 消息 | **跨时间片** / 异步通知 | 异步，队列缓冲 | msg_scheduler | `Msg_Post(MSG_ID, param, &data)` |
+
+**选择规则 (MUST)**: "这个操作必须在同一次控制周期内完成？" → 是: `__weak` / 否: `Msg_Post`。
+
+### 12.4 __weak 回调机制
+
+```c
+/* 发送方定义 __weak 空壳（不被覆盖时静默丢弃）*/
+__weak void Receiver_OnEvent(uint16_t param, void *data_ptr)
+{ (void)param; (void)data_ptr; }
+
+/* 发送方调用 — 立即执行，无队列，无注册 */
+Receiver_OnEvent(param, &data);
+
+/* 接收方强符号实现 — 链接器自动覆盖 __weak 空壳 */
+void Receiver_OnEvent(uint16_t param, void *data_ptr)
+{
+    /* 业务处理 */
+}
+```
+
+**配对管理**: 所有 __weak 配对记录在 `interface_map.h`，由 `check_weak_pairs.py` 验证一致性。
+
+### 12.5 头文件私有化
+
+**APP/PROTO 层的每个 .h 文件，include guard 的 `#define` 必须注释掉。**
+
+```c
+#ifndef MODULE_NAME_H
+//#define MODULE_NAME_H   // ← 注释掉, 禁用 include guard — L0 编译器阻断跨模块引用
+#endif
+```
+
+这是 L0 物理阻断 — 同一 .c 内重复包含直接编译报错。
+
+---
+
+## 十三、新增模块 SOP — 7 步可执行清单
+
+新增模块时严格按以下步骤执行，**每步确认后才进入下一步**。
+
+### Step 1: 确定模块层级
+
+问三个问题：
+- 这个模块做业务决策（状态机、逻辑路由）？→ `app/`
+- 这个模块封装硬件操作（寄存器、外设）？→ `base_class/`
+- 这个模块做协议编解码（无状态纯函数）？→ `proto/`
+- 这个模块是系统基础设施（调度、时基）？→ `core/`
+
+**MUST**: 确认层级后查 §12.2 依赖白名单，确认允许的 include 范围。
+
+### Step 2: 创建 module.h + module.c
+
+```bash
+touch app/<module>/module.h app/<module>/module.c
+```
+
+### Step 3: 编写 .h — 注释 include guard + 公共接口
+
+```c
+/* module.h — 模块职责一句话描述
+ * 层级: app | base_class | proto | core
+ * 依赖: 列出本模块依赖的其他模块（仅白名单内）
+ */
+#ifndef MODULE_NAME_H
+//#define MODULE_NAME_H   // ← APP/PROTO 层必须注释
+
+#include <stdint.h>       // 仅系统头文件用 <> angle brackets
+
+/* 公共类型定义 */
+typedef struct {
+    // ...
+} Module_Config_t;
+
+/* 公共接口 */
+void Module_Run(void);
+
+#endif /* MODULE_NAME_H */
+```
+
+### Step 4: 编写 .c — 三段式骨架
+
+按 §十四 三段式范式编写 `Module_Run()`。详见下节。
+
+### Step 5: 注册跨模块结构体 (如有)
+
+如果模块输出/输入复杂数据（非基本类型），MUST 在 `cfg/structs.json` 中注册。
+
+```bash
+# 编辑 cfg/structs.json → 添加 owner/consumer 定义
+# 生成 types.h
+python ../methodology-seed/tools/generate_structs.py . --project m4-ekf
+# 验证一致性
+python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+```
+
+### Step 6: 注册 __weak 配对到 interface_map.h
+
+如果有跨模块 __weak 回调，MUST 在 `interface_map.h` 中注册配对：
+
+```c
+/* 格式: {线ID, "方向", "发送模块", "__weak声明函数", ..., "接收模块", "接收函数", ...} */
+```
+
+### Step 7: 运行四件套验证
+
+```bash
+python ../methodology-seed/tools/check_deps.py . --project m4-ekf
+python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf
+python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+armcc -c --cpu Cortex-M4 --c99 -I... <module.c>
+```
+
+**四件套全部 PASS → 才能声明模块完成。任一步失败 → 修复后重跑全部。**
+
+---
+
+## 十四、模块三段式范式
+
+### 14.1 总览
+
+所有模块（无论大小）统一为三段式结构：**输入 → 计算 → 输出**。
+
+```c
+void Module_Run(void)
+{
+    /* ====== 输入段 — 所有外部数据入口集中在此 ====== */
+    // __weak 直调: 同时间片同步数据
+    // Msg_Post 消费: 跨时间片异步数据
+
+    /* ====== 计算段 — 纯计算，不调输入/输出通道 ====== */
+    // 核心算法、状态机、数据变换
+
+    /* ====== 输出段 — 所有结果出口集中在此 ====== */
+    // __weak 直调: 同步回调下游
+    // Msg_Post 投递: 异步通知其他模块
+}
+```
+
+### 14.2 构造：懒惰初始化
+
+```c
+void Module_Run(void)
+{
+    static uint8_t initialized = 0;
+    if (!initialized) {
+        initialized = 1;
+        /* 初始化自己的状态变量 */
+    }
+    /* ... 三段式主体 ... */
+}
+```
+
+**约束**: `main()` 不得调用 `Module_Init()`。每个模块首次进 `_Run()` 时自检 `static` 标志。
+
+### 14.3 完整模板
+
+```c
+/* === module.c === */
+#include "module.h"
+
+/* === __weak 输入回调声明 (代替 #include "other_module.h") === */
+__weak void Module_OnParam(uint16_t param, void *data_ptr)
+{ (void)param; (void)data_ptr; }
+
+/* === 内部状态 === */
+typedef struct {
+    uint16_t value;
+} Module_State_t;
+static Module_State_t s_self;
+
+/* === 公共入口 === */
+void Module_Run(void)
+{
+    static uint8_t init_done = 0;
+    if (!init_done) { init_done = 1; /* 初始化 */ }
+
+    /* ====== 输入段 ====== */
+    /* 同时间片同步输入 — __weak 被覆盖时非空调用 */
+    Module_OnParam(0, NULL);
+
+    /* ====== 计算段 ====== */
+    s_self.value += 1;
+
+    /* ====== 输出段 ====== */
+    /* 同步回调下游 — __weak 直调 */
+    Consumer_OnResult(s_self.value, NULL);
+}
+```
+
+---
+
+## 十五、回调插入规则表
+
+**MUST**: 回调只在模块的输入段或输出段插入。计算段中途插入回调必须先经用户确认。
+
+| 回调类型 | 位置 | 是否需要用户确认 | 说明 |
+|---------|------|----------------|------|
+| **输入回调** | 输入段（Module_Run 前部） | **否** — 标准做法 | 所有外部数据入口集中顶部 |
+| **输出回调** | 输出段（Module_Run 后部） | **否** — 标准做法 | 所有结果出口集中底部 |
+| **算法子集调用** (__weak) | 计算段 | **否** — 必须的依赖 | 不 include .h，链接器接线 |
+| **即时回调** | 计算段中途 | **是 — MUST 先问用户** | 表明输入规划不完整 |
+
+**即时回调管控规则**:
+- 计算段中间发现需要一个外部数据 → **MUST 先停下来问用户**，不是先加上再说
+- 如果规划到位，输入段已覆盖所有外部参数，不需中途插入
+- 如果确实需要中途回调 → MUST 先确认是否可重构到输入段
+
+---
+
+## 十六、通信选择速查表
+
+| 场景 | 机制 | 示例 |
+|------|------|------|
+| 同控制周期连续调用（上下级） | `__weak` 直调 | APP → BASE_CLASS 功率下发 |
+| 同控制周期平行模块 | `__weak` 直调 | EKF → PID 参数传递 |
+| 跨控制周期异步通知 | `Msg_Post` | 按键事件 → 状态变更 |
+| 跨控制周期延迟消费 | `Msg_Post` | EKF 结果 → MODBUS 下一帧发送 |
+| 纯算法集调用 | `__weak` 空壳覆盖 | 主模块 → 算法集 (不 include .h) |
+
+**原则**: 同步走 `__weak`，异步走 `Msg_Post`。两者不互相替代，组合使用。
+
+---
+
+*最后更新: 2026-06-05 — 方法论绑定*
