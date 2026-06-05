@@ -62,7 +62,29 @@ Create the file at the correct path:
 //#define {MODULE}_H       /* ← commented: L0 compile block on cross-module include */
 
 
-/* ---- public types (only types used by other modules) ---- */
+/* === INTERFACE STRUCTS (OWNER) ==================================
+ * 本模块是以下结构体的 Owner (生产者).
+ * @STRUCT 标记由 check_structs.py 解析验证.
+ * 消费者 AI 生成: 读取本段 → 生成副本 → 写入消费者 AI-MANAGED 段.
+ *
+ * 格式:
+ *   /* @STRUCT StructName  owner={module}  suffix=OUT */
+ *   typedef struct {
+ *       type field;  /* offset=N, size=N */
+ *   } StructName;    /* sizeof=N */
+ * ================================================================ */
+
+
+/* === AI-MANAGED: INTERFACE STRUCTS (CONSUMER) ===================
+ *
+ *  由 /new-module Step 4 Mode B 自动生成, 不手动编辑.
+ *  source= 指向 owner 结构体, check_structs.py 验证一致性.
+ *
+ *  格式:
+ *   /* @STRUCT ConsumerType_IN_t  owner={module}  suffix=IN
+ *    * source=OwnerType */
+ *   typedef struct { ... } ConsumerType_IN_t;  /* sizeof=N, source=OwnerType */
+ * ================================================================ */
 
 
 /* ---- public interface ---- */
@@ -98,12 +120,19 @@ Create `{module}.c` using the three-phase skeleton template:
 /* allowed layer includes only — see .h @deps */
 
 
-/* ============================================================
- *  __weak stubs — declare what this module NEEDS from others
- * ============================================================ */
+/* === AI-MANAGED: __weak stubs ====================================
+ *
+ *  由 /new-module Step 5 自动生成, 与 interface_map.h 配对.
+ *  不 include 提供方 .h — 链接器根据 STRONG 符号自动接线.
+ *
+ *  声明本模块 NEEDS 的外部函数 (空壳).
+ *  提供方在 interface_map.h 注册为 STRONG 符号.
+ * ================================================================ */
 
 __weak void Consumer_OnResult(uint16_t param, void *data) {}
 /* add more __weak stubs as needed */
+
+/* === END AI-MANAGED === */
 
 
 /* ============================================================
@@ -164,7 +193,10 @@ Ask: _"Does this module produce or consume any cross-module structs?"_
 
 If **NO**: Skip to step 5.
 
-If **YES**:
+If **YES**, choose mode based on project setup:
+
+### Mode A: structs.json 存在 (four_head 等 JSON 驱动项目)
+
 1. Guide the user to edit `cfg/structs.json`:
    - **Producer (owner)**: Add a new struct entry with `owner: "{module}"`, `suffix: "OUT"`, and all fields
    - **Consumer**: Add `{module}` to the existing struct's `consumers` list with the fields it needs
@@ -174,7 +206,7 @@ If **YES**:
    python ../methodology-seed/tools/generate_structs.py . --project {project}
    ```
 
-3. The generated `types.h` will appear in the module's directory — include it in the .c if needed.
+3. The generated `types.h` will appear in the module's directory.
 
 **Template for structs.json entry** (if this module is the owner):
 ```json
@@ -190,7 +222,27 @@ If **YES**:
 }
 ```
 
-**Confirm with user** before proceeding to step 5.
+### Mode B: 无 structs.json — AI 自动生成消费者副本
+
+**适用**: float 类型 / 嵌套结构体 / structs.json V1.0 不覆盖的项目。
+
+**当模块是消费者 (consumer) 时, AI 自动执行**:
+
+1. **问用户**: "需要哪些结构体？从哪个模块获取？"
+2. **读取 owner 的 .h** → 定位 `INTERFACE STRUCTS` 段 → 提取目标 `@STRUCT` 定义
+3. **生成消费者副本** 写入新模块 .h:
+   - 类型名: `{NewModule}_{StructKey}_IN_t`
+   - `source=` 指向 owner 结构体名
+   - `owner=<新模块>`, `suffix=IN`
+   - 每条字段注释 `/* offset=N, size=N */` — 与 owner 完全一致
+4. **递归处理嵌套结构体** — owner 结构体嵌套了其他结构体时, 自动生成所有层级的消费者副本
+5. **更新 `core/interface_map.h`** — 注册结构体配对
+
+**当模块是生产者 (owner) 时**:
+- 在模块 .h 的 `INTERFACE STRUCTS` 段声明 `@STRUCT`, 标注 offset/size
+- 消费者由 AI 在后续创建时按上述流程自动生成
+
+**验证**: `check_structs.py` 解析所有 `@STRUCT` 标记, 自动验证 consumer vs owner 一致性 (含嵌套结构体 source 链匹配).
 
 ---
 
@@ -208,6 +260,14 @@ If **YES**: Update `core/interface_map.h` (or project-equivalent path) with pair
 /* weak:  __weak void {Receiver}_On{Event}(uint16_t param, void *data) */
 /* strong: void {Receiver}_On{Event}(uint16_t param, void *data) in {receiver}.c */
 ```
+
+**算法集调用模式** (caller → algorithm, 通过 `void*` 解耦):
+```
+调用方: {caller}.c       WEAK void Algo_Func(void *in, void *out) {}
+提供方: {algo}.c                void Algo_Func(void *in, void *out)
+```
+- 调用方声明 `__weak` 空壳, **不 include** 算法集 .h
+- 算法集提供 STRONG 符号, `void*` 内部强制转换
 
 **Rules**:
 - One entry per __weak → strong pair
@@ -233,7 +293,7 @@ All four checks MUST pass before the module is considered complete:
 |---|-------|-------------------|
 | 1 | `check_deps.py` | No illegal cross-layer includes |
 | 2 | `check_weak_pairs.py` | All __weak have strong counterparts |
-| 3 | `check_structs.py` | types.h match structs.json |
+| 3 | `check_structs.py` | JSON 模式: types.h vs structs.json / .h 模式: consumer vs owner @STRUCT 一致性 |
 | 4 | Compile | 0 errors, 0 warnings |
 
 If any check fails, fix the violations and re-run.

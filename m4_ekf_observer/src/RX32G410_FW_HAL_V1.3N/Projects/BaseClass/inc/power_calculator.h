@@ -32,30 +32,68 @@ typedef struct {
 typedef struct {
     uint32_t voltage;
     uint32_t current;
+		uint16_t peak_current;
+		uint16_t peak_num;
 } CalculatorResultDef;
+
+
+typedef struct {
+    uint16_t highOn;
+    uint16_t highOff;
+    uint16_t lowOn;
+    uint16_t lowOff;
+}IH_HrtimState;
+
+
+typedef struct {
+	
+		IH_HrtimState	hrtim;			
+	
+		uint16_t 	peak_current;          // 峰值电流 (ADC 值)
+    uint16_t  active_current;        // 有功电流 (整数定标)
+    uint16_t 	voltage;               // 瞬时电压均值 (ADC 值)    
+		uint16_t 	zero_cross_high;       // 上管过零点索引
+
+} IH_CycleDataDef;
+
+typedef struct {
+    IH_CycleDataDef cycle[20];
+    uint8_t count;
+} IH_ElecInputDef;
+
+
 
 /* ========================== 功率计算结果 (扩展) ========================== */
 
 typedef struct {
     /* --- 原有字段 (保持兼容) --- */
-    int32_t  active_power;          // 有功功率 (整数定标)
-    int32_t  active_current;        // 有功电流 (整数定标)
-    uint16_t peak_current;          // 峰值电流 (ADC 值)
-    uint16_t zero_current;          // 过零点电流值
-    int16_t  phase_angleUp;         // 上管相位角 (度×10)
-    int16_t  phase_angleDown;       // 下管相位角 (度×10)
-    uint16_t zero_cross_high;       // 上管过零点索引
-    uint16_t zero_cross_low;        // 下管过零点索引
-    uint16_t esr;                   // 等效电阻 (整数定标)
-    uint16_t voltage;               // 瞬时电压均值 (ADC 值)
+		IH_HrtimState	hrtim;
+		uint16_t 	peak_current;          // 峰值电流 (ADC 值)
+    uint16_t  active_current;        // 有功电流 (整数定标)
+    uint16_t 	voltage;               // 瞬时电压均值 (ADC 值)    
+		uint16_t 	zero_cross_high;       // 上管过零点索引
+    uint16_t 	zero_cross_low;       	 // 下管过零点索引
+	
+	
+	
+
+    uint16_t 	zero_current;          // 过零点电流值
+    int16_t  	phase_angleUp;         // 上管相位角 (度×10)
+    int16_t  	phase_angleDown;       // 下管相位角 (度×10)
+    uint16_t 	esr;                   // 等效电阻 (整数定标)
+    int32_t  	active_power;          // 有功功率 (整数定标)
 
     /* --- 新增浮点字段 (物理单位) --- */
-    float P_W;                      // 有功功率 (W)
-    float I_rms;                    // 电流有效值 (A)
-    float I_peak;                   // 电流峰值 (A)
-    float Vdc_mean;                 // 母线电压均值 (V)
-    float phi_deg;                  // 相位角 (度)
+//    float P_W;                      // 有功功率 (W)
+//    float I_rms;                    // 电流有效值 (A)
+//    float I_peak;                   // 电流峰值 (A)
+//    float Vdc_mean;                 // 母线电压均值 (V)
+//    float phi_deg;                  // 相位角 (度)
 } PowerResult;
+
+
+
+
 
 /* ========================== 电参数 (20ms 计算) ========================== */
 

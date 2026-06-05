@@ -227,13 +227,14 @@ typedef struct	__attribute__((aligned(1)))
 	ADC_VcIcChannel_Def		VcIc[AdcAvageCount];		//adc2*199
 
 	uint16_t				Txa[4][TxaAvageCount];			//20平均谐振电流	
+	uint16_t 				voltage[4][TxaAvageCount];	
+	
 	uint16_t 				phase[4][TxaAvageCount];		//相位值
-
 	uint16_t 				phaseValue[4][TxaAvageCount];
-	uint16_t 				voltage[4][TxaAvageCount];
+
 
 	
-	uint16_t				Power[4][TxaAvageCount];			//20有效值瞬时功率	
+	uint16_t				iPeak[4][TxaAvageCount];			//峰值电流	
 	uint16_t 				ceilQ[4][TxaAvageCount];
 
 	uint16_t 				esr[4][TxaAvageCount];				//等效电阻
@@ -328,6 +329,9 @@ APP_ADC_DEF					AdcFunRam;
 //uint16_t		max1;
 //uint16_t		max2;
 
+IH_ElecInputDef		powerResult20ms[4];			//保存给20ms参数计算
+
+
 
 /* Private function prototypes -----------------------------------------------*/
 
@@ -355,6 +359,20 @@ __attribute__((weak))	void	APP_ADC_IRQ_PPGstepDecT34aCallBack(APP_ADC_AWD_DNTR_D
 	
 __attribute__((weak))	void	APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value)	//HRTIM1 CMP1 PPG减小限流操作
 {}		
+	
+	
+	/* ====== __weak stub — 接线到 methodology ih_elec_params 算法集 ====== */
+__attribute__((weak))	 void IhElecParams_Calculate(void *in, void *out) {}	
+
+
+	/* ====== test: 20ms 电参数计算 (4炉头统一调用 methodology 算法) ====== */
+	void APP_ADC_ComputeElecParams(void)
+	{
+		static uint8_t elec_buf[4][64];	/* 64B/head, IH_ElecResult=58B */
+		for (uint8_t i = 0; i < PotNum; i++) {
+			IhElecParams_Calculate(&powerResult20ms[i], elec_buf[i]);
+		}
+	}	
 	
 // __attribute__((weak))		uint8_t APP_ADC_Power_ZeroIrqFun(void)
 // {return 0;}	
@@ -2631,6 +2649,8 @@ startLoop:
 		
 	}	
 }	
+		
+
 
 void	APP_ADC_CalculatePower(void)
 {		
@@ -2668,12 +2688,13 @@ void	APP_ADC_CalculatePower(void)
 
 				
 					PowerResult	result;
+					
 					result=CalculatePower(currentAdr,hrtimAdr,voltageAdr,&inputArray[potCh]);		//计算谐振电流
 				
 					if(result.zero_cross_high)
 					{	
 						
-
+						memcpy(&powerResult20ms[potCh].cycle[count],&result,sizeof(IH_CycleDataDef));//保存数据给20ms参数计算
 						
 						uint8_t value=result.zero_cross_high;
 						APP_ADC_DebugValueCallBack(potCh,value);
@@ -2681,14 +2702,16 @@ void	APP_ADC_CalculatePower(void)
 
 						
 						AdcFromApiDma20ms.Txa[potCh][count]	=result.active_current;//电流值
-						AdcFromApiDma20ms.Power[potCh][count]	=arrayPoint[potCh];//result.active_power;//功率值					
-						AdcFromApiDma20ms.ceilQ[potCh][count]=inputArray[potCh].highOff;//上管关断HRTIM值;
+						AdcFromApiDma20ms.voltage[potCh][count]=result.voltage;//即时电压		
 						AdcFromApiDma20ms.phase[potCh][count]=result.phase_angleUp;//相位值（角度）;	//这个不要变
+						AdcFromApiDma20ms.iPeak[potCh][count]	=result.peak_current;//功率值		
 
+
+						
+						AdcFromApiDma20ms.ceilQ[potCh][count]=inputArray[potCh].highOff;//上管关断HRTIM值;
 						AdcFromApiDma20ms.esr[potCh][count]=result.esr;//即时功率值
+						AdcFromApiDma20ms.phaseValue[potCh][count]=result.zero_cross_high/(FRE_PER_ADC/4);//ppgValue->lowOn;//上管关断HRTIM值;
 				
-						AdcFromApiDma20ms.phaseValue[potCh][count]=result.zero_cross_high;//ppgValue->lowOn;//上管关断HRTIM值;
-						AdcFromApiDma20ms.voltage[potCh][count]=result.voltage;//即时功率值					
 //					if(potCh==PotChWork&&	txaCount==TxaCount)
 				
 
@@ -2712,6 +2735,7 @@ void	APP_ADC_CalculatePower(void)
 
 
 					
+					powerResult20ms[potCh].count = AdcFromApiDma20ms.count;
 				}//if(inputArray[potCh].end>0&&inputArray[potCh].highOff>0)
 
 			}
@@ -2719,7 +2743,11 @@ void	APP_ADC_CalculatePower(void)
 
 		}
 
+
+
+#if 0		
 		/* ---- 20ms 电参数计算 (4炉头统一) ---- */
+		
 		{
 			uint16_t* cb[4] = {0};
 			uint16_t* hb[4] = {0};
@@ -2743,7 +2771,7 @@ void	APP_ADC_CalculatePower(void)
 			CalculateElecParams_20ms(cb, hb, vb, ib, elec);
 			/* elec[h].L_kalman_uH / .Q_factor / .anomaly 供后续使用 */
 		}
-
+#endif
 	if(PrintMessageOut())			//输出打印信息
 	{
 
