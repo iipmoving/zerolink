@@ -8,19 +8,20 @@ Started: Fri Jun  5 08:48:38     2026
 - check_structs.py calls generate_structs.py --check as subprocess (must pass --config via tempfile)
 - SKILL.md files go under .claude/skills/<name>/SKILL.md with user-invocable: true
 - AUTO-GENERATED blocks use serial markers for diff detection
+- m4_ekf_observer has VENDOR (No-Go), BASE_CLASS (8 modules), APP (1 implemented, 3 shells)
+- New modules follow full methodology; old modules use adapter pattern for gradual transition
 
 ## 2026-06-05T14:30 - US-001
 - check_deps.py already configurable from prior work
 - Self-test 11/11 PASS. Committed.
 
 ## 2026-06-05T14:45 - US-002
-- check_weak_pairs.py rewrited by linter with multi-project support
+- check_weak_pairs.py rewritten by linter with multi-project support
 - Fixed startswith bug in normalize_params
-- Self-test against four_head found 22 violations (informational)
 - Committed.
 
 ## 2026-06-05T15:00 - US-003
-- generate_structs.py: full implementation with owner/consumer structs, padding, deprecated, serial, AUTO-GENERATED blocks
+- generate_structs.py: owner/consumer structs, padding, deprecated, serial, AUTO-GENERATED blocks
 - check_structs.py: 6-stage validation (schema, serial, deprecated, whitelist, modules, generate --check)
 - Both self-tests 11/11 PASS
 - Fixed: run_generate_check subprocess config passing via tempfile
@@ -33,3 +34,24 @@ Started: Fri Jun  5 08:48:38     2026
 ## 2026-06-05T15:30 - US-005
 - Created m4_ekf_observer/CLAUDE.md with full methodology binding
 - Committed.
+
+## 2026-06-05T16:00 - US-006
+- Created /check SKILL (cluster-level + m4_ekf_observer project-level)
+- 4-step sequential audit: deps → weak_pairs → structs → compile
+- Full report format with [PASS]/[FAIL]/[SKIP] + file:line locations
+- Committed.
+
+## 2026-06-05T16:20 - US-007
+- Created /new-module SKILL (cluster-level + m4_ekf_observer project-level)
+- 6-step wizard: identity → .h → .c (three-phase) → structs.json → interface_map.h → /check
+- Each step confirms before proceeding
+- Committed.
+
+## 2026-06-05T16:40 - US-008
+- Created m4_ekf_observer/docs/migration-plan.md
+- Module inventory with P0/P1/P2/NEVER classification
+- Per-module checklists, dual-track adapter strategy, non-migration list
+- First-launch infrastructure checklist (structs.json, deps_config.json, interface_map.h)
+- Committed.
+
+## COMPLETE — All 8 stories pass

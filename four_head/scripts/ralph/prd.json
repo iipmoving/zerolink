@@ -105,7 +105,7 @@
         "安装到 m4_ekf_observer/.claude/skills/（项目级）"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "was: US-004 from PRD. 工具链 (US-001~003) 必须先完成"
     },
     {
@@ -124,7 +124,7 @@
         "安装到 m4_ekf_observer/.claude/skills/（项目级）"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "was: US-005 from PRD. 依赖 CLAUDE.md (US-005) 中的层定义"
     },
     {
@@ -140,7 +140,7 @@
         "不迁移清单：src/RX32G410_FW_HAL_V1.3N/, 原厂固件库"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "was: US-006 from PRD. 独立文档，不阻塞其他 US"
     }
   ]
