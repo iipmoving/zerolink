@@ -1,0 +1,110 @@
+## Codebase Patterns
+- methodology-seed/tools/ is the canonical home for all cross-project tooling
+- Tools use --config deps_config.json for project-specific overrides
+- Built-in presets map to known project structures: four_head (app/drv/hal/proto/core/cfg), m4-ekf (app/base_class/proto/core)
+- Layer rules: `allowed` and `forbidden` patterns match against normalized include paths
+- Tools accept any project_dir, not hardcoded Claude/ paths
+- Generated types.h files use AUTO-GENERATED markers (`/* === AUTO-GENERATED from structs.json serial=N === */` to `/* === END AUTO-GENERATED === */`); hand-written content outside markers is preserved
+- Consumer struct names are PascalCased from module name: `display_module` → `DisplayModule_StateGlobal_IN_t`
+- --check mode compares only the struct definition content (inside AUTO-GENERATED markers), not the outer header with timestamps
+- check_structs.py subprocess-calls generate_structs.py --check for diff verification
+
+## 2026-06-05 - US-001
+- Implemented: Rewrote methodology-seed/tools/check_deps.py as multi-project configurable tool
+- Key changes:
+  - Added --config deps_config.json support for custom layer rules
+  - Added built-in presets for four_head and m4-ekf projects
+  - Removed hardcoded Claude/ directory dependency; classify_file now uses config's layer_dirs
+  - Added --self-test mode with 11 validation tests (JSON parse, classify, violation checks, extern detection)
+  - Added --print-template to output deps_config.json template
+  - Added extern violation checking from four_head version
+  - Auto-detection: checks for drv/ dir → four_head, base_class/ dir → m4-ekf
+- Files changed:
+  - methodology-seed/tools/check_deps.py (rewritten from ~325 lines to ~558 lines)
+- **Learnings for future iterations:**
+  - The classify_file function no longer checks for "Claude/" prefix; instead layers are identified by being at top-level (idx==0) in the path relative to project_dir
+  - m4-ekf uses "base_class" as its driver-equivalent layer, not "drv"
+  - The < (angle bracket) pattern in allowed rules matches system headers like <stdint.h>
+  - PowerShell sandbox blocked execution during this story; verify --self-test actually runs in an unblocked environment
+---
+
+## 2026-06-05 - US-002
+- Implemented: Rewrote methodology-seed/tools/check_weak_pairs.py as multi-project configurable tool
+- Key changes:
+  - Added `--config` JSON config file support (also reads `weak_pairs` section from deps_config.json)
+  - Added built-in presets for four_head and m4-ekf with project-specific `interface_map`, `scan_dirs`, `public_api_excludes`, `callback_name_pattern`
+  - Added `--print-template` to output JSON config template
+  - Added `--self-test` with 11 validation tests (presets, JSON roundtrip, normalize_params, compare_signatures, parse, WEAK regex, config load, strong/weak detection)
+  - Made `public_api_excludes` patterns configurable per project (removed hardcoded engine_/_OnTick/_OnInit/_Inject patterns)
+  - Made `callback_name_pattern` configurable (default: `^\w+_On\w+$`)
+  - Added `resolve_config()` with auto-detection (drv/ → four_head, base_class/ → m4-ekf)
+  - Fixed `normalize_params` to handle `*param` pointer-attached parameter names correctly
+  - Fixed `_find_strong_in_content` to use line-based matching with negative lookahead (replaced broken lookbehind)
+  - CLI matches check_deps.py pattern: `<project_dir> [--project <name>] [--config <file>]`
+- Files changed:
+  - methodology-seed/tools/check_weak_pairs.py (rewritten, ~590 lines)
+- Verified: --self-test 11/11 PASS, four_head auto-detection works (finds 22 orphans), m4-ekf graceful fallback (no interface_map.h → 0 violations)
+- **Learnings for future iterations:**
+  - Python negative lookbehind with `\s` is fixed-width in CPython's `re`, but the real issue was match position shift: at position past "WEAK " the lookbehind sees "EAK " not "WEAK ". Use `re.MULTILINE` with `^(?!\s*(?:WEAK|__weak|extern|typedef)\b)` instead.
+  - When normalizing C parameter types, `void *data_ptr` splits to `['void', '*data_ptr']` — `*data_ptr` starts with `*` (not ends with it), so the `endswith('*')` check misses it. Must merge `*`-prefixed tokens into the preceding type token first.
+  - The pair tuple from `parse_interface_map` has 11 fields: indices 4=func_name, 8=receiver_func_name (not 9).
+  - Note: `-X utf8` flag must be passed to Python on Chinese Windows for correct Unicode handling in regex literals.
+---
+
+## 2026-06-05 - US-003
+- Implemented: Created generate_structs.py and check_structs.py for cross-module struct code generation
+- Key changes:
+  - `generate_structs.py` (~620 lines): JSON-to-types.h generator
+    - Reads `cfg/structs.json` (single source of truth)
+    - Generates owner struct (all fields, `{StructKey}_{suffix}_t`) and consumer structs (field subset + auto-padding, `{PascalModule}_{StructKey}_IN_t`)
+    - Consumer structs use `__pad_N` arrays to maintain `offsetof()` compatibility with owner
+    - AUTO-GENERATED header with embedded serial for drift detection
+    - Merges with existing types.h: preserves hand-written content outside AUTO-GENERATED markers
+    - `--check` mode: compares generated struct content against actual files (ignores timestamp in outer header)
+    - `--source` for custom structs.json path, `--struct` for single-struct generation
+    - `--print-structs-template` outputs a structs.json template
+    - CLI: `<project_dir> [--project <name>] [--config <file>] [--source <json>] [--check] [--struct <name>]`
+  - `check_structs.py` (~420 lines): pre-commit consistency verifier
+    - 6-stage check: (1) JSON schema validation, (2) serial monotonicity, (3) deprecated field references, (4) type whitelist, (5) module existence, (6) generate_structs.py --check subprocess
+    - `--skip-generate-check` flag for offline use
+    - Calls generate_structs.py --check as subprocess for diff verification
+    - Full 11-test --self-test suite
+  - Built-in presets: four_head (src/app, src/drv, src/proto, src/core, src/cfg, .) and m4-ekf (app, base_class, proto, core, .)
+  - Type whitelist: uint8_t, uint16_t, uint32_t, int8_t, int16_t, int32_t, char (float requires explicit approval)
+  - Type size table hardcoded for embedded C compatibility
+- Files changed:
+  - methodology-seed/tools/generate_structs.py (new, ~650 lines)
+  - methodology-seed/tools/check_structs.py (new, ~420 lines)
+- Verified: --self-test 11/11 PASS for both tools; integration test: generate→check PASS, JSON-modify→check FAIL (with proper diff output)
+- **Learnings for future iterations:**
+  - --check mode must compare only struct definitions, not the full file — the AUTO-GENERATED outer header contains a generation timestamp that changes every run
+  - Consumer struct names are PascalCased from the module name (snake_case → PascalCase), e.g., `display_module` → `DisplayModule_`
+  - The `serial` field in structs.json is embedded in generated files' AUTO-GENERATED markers: `/* === AUTO-GENERATED from structs.json serial=N === */`
+  - PowerShell `Set-Content -Encoding utf8` adds a BOM that breaks `json.load()`; use `[System.IO.File]::WriteAllText` with `new($false)` for BOM-less UTF-8
+  - Default module directory creation: searches `module_search_paths`, creates under first valid path, falls back to project root
+  - generate_structs.py and check_structs.py are in methodology-seed/tools/ — they are copied to projects, not run from methodology-seed
+---
+
+## 2026-06-05 - US-004
+- Implemented: Created /init-project SKILL for interactive project bootstrap
+- Key deliverables:
+  - `.claude/skills/init-project/SKILL.md` (~280 lines): complete 8-step interactive wizard
+  - Step 1: 5 interactive questions (project name, dir, MCU, compiler, layer names)
+  - Step 2: auto-creates directory structure (app/ drv/ hal/ proto/ core/ cfg/ src/ tools/ docs/ .claude/specs/adr/)
+  - Step 3: copies and fills 7 templates from methodology-seed/templates/ (CLAUDE.md, 4 specs, structs.json, interface_map.h)
+  - Step 4: copies 4 tools from methodology-seed/tools/ (check_deps, check_weak_pairs, generate_structs, check_structs)
+  - Step 5: generates deps_config.json with merged config (layer rules + weak_pairs + structs)
+  - Step 6: generates dual pre-commit hooks (.ps1 for Windows + .sh for Unix)
+  - Step 7: runs --self-test to verify toolchain
+  - Step 8: prints completion summary with next steps
+- Files changed:
+  - `.claude/skills/init-project/SKILL.md` (new, ~280 lines)
+  - `prd.json` (US-004 passes: true)
+- **Learnings for future iterations:**
+  - Claude Code SKILLs are markdown instruction files with YAML frontmatter (name, description, user-invocable) — not executable scripts
+  - The skill path `.claude/skills/<name>/SKILL.md` is auto-discovered by the CLI from the project directory
+  - Pre-commit hooks use `.ps1` for Windows (pwsh) and `.sh` for Unix; they live in `.git/hooks/`
+  - deps_config.json is the unified config that feeds all 4 tools — structure: {rules, weak_pairs, structs}
+  - For projects with `base_class` instead of `drv`, the layer rules follow the m4-ekf preset pattern (base_class has no HAL dependency)
+  - Template filling uses Python string replacement for placeholders like `{PROJECT_NAME}` across multiple files
+---
