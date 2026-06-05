@@ -60,13 +60,13 @@ BUILTIN_PRESETS = {
 
 PAIR_START_RE = re.compile(r'/[*]\s*Pair\s+(\S+)\s*:\s*(.+?)\s*[*]/')
 SENDER_RE = re.compile(
-    r'发送方\s*:\s*(\S+\.c)\s+WEAK\s+'
+    r'发送方\s*:\s*(\S+\.[cC])\s+WEAK\s+'
     r'(\w+(?:\s*\*)?)\s+'           # return type
     r'(\w+)\s*[(]'                    # function name
     r'([^)]*)[)]\s*[{]'               # params
 )
 RECEIVER_RE = re.compile(
-    r'接收方\s*:\s*(\S+\.c)\s+'
+    r'接收方\s*:\s*(\S+\.[cC])\s+'
     r'(\w+(?:\s*\*)?)\s+'            # return type
     r'(\w+)\s*[(]'                     # function name
     r'([^)]*)[)]'                      # params

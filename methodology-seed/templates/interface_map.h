@@ -34,18 +34,20 @@
 /* ================================================================
  * 二、__weak 通道注册表
  *
- * 格式:
- *   Pair {ID}: {发送模块} → {接收模块}
- *   发送方: {file}.c  WEAK {return_type} {函数名}({参数列表}) {}
- *   接收方: {file}.c  {return_type} {函数名}({参数列表})
- *   触发: {什么时候调用}
+ * 格式 (必须精确匹配 check_weak_pairs.py 解析器):
+ *
+ *   /* Pair {ID}: {description} */       ← */ 必须在同一行!
+ *    * 发送方: {file}.c  WEAK {ret} {func}({params}) {}
+ *    * 接收方: {file}.c  {ret} {func}({params})
+ *
+ *   - 发送方和接收方之间不能有空行 (空行=解析停止)
+ *   - 文件名大小写需匹配实际文件 (.C or .c)
+ *   - 函数签名必须与实际代码一致
  * ================================================================ */
 
-/*
- * Pair {A}: {sender} → {receiver}
+/* Pair A: {sender} → {receiver} */
  * 发送方: {sender_file}.c  WEAK void {Receiver}_On{Event}(uint16_t param, void *data_ptr) {}
- * 接收方: {receiver_file}.c void {Receiver}_On{Event}(uint16_t param, void *data_ptr)
- * 触发: {触发条件说明}
- */
+ * 接收方: {receiver_file}.c  void {Receiver}_On{Event}(uint16_t param, void *data_ptr)
+ * 注: {触发条件说明}
 
 #endif /* INTERFACE_MAP_H */
