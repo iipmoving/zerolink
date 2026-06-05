@@ -1,0 +1,147 @@
+{
+  "project": "方法论工作流固化",
+  "branchName": "ralph/methodology-workflow",
+  "description": "将 methodology-seed 零耦合方法论从参考文档升级为 AI 自动约束系统——改造可配置工具链、创建 /init-project /check /new-module 三个 SKILL、为 m4_ekf_observer 编写绑定方法论的 CLAUDE.md",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "改造 check_deps.py 为多项目可配置",
+      "description": "As a developer, I need check_deps.py to work across different projects (four_head, m4_ekf_observer) with configurable layer rules.",
+      "acceptanceCriteria": [
+        "从 methodology-seed/tools/check_deps.py 改为 --config deps_config.json 模式",
+        "内置 four_head (app/drv/hal/proto/core/cfg) 和 m4_ekf_observer (app/base_class/proto/core/vendor) 两套默认规则",
+        "移除硬编码的 Claude/ 目录依赖，支持任意 project_dir",
+        "--self-test 验证 JSON 解析 + 工具链可用",
+        "--print-template 输出默认规则 JSON 模板",
+        "python tools/check_deps.py --self-test → PASS"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "was: US-001a from PRD"
+    },
+    {
+      "id": "US-002",
+      "title": "复制并适配 check_weak_pairs.py 到 methodology-seed",
+      "description": "As a developer, I need check_weak_pairs.py to validate __weak pair consistency against interface_map.h, with project-configurable paths.",
+      "acceptanceCriteria": [
+        "从 four_head/tools/ 复制 check_weak_pairs.py 到 methodology-seed/tools/",
+        "剥离 four_head 项目特定的路径假设",
+        "支持 --config 读取项目配置（interface_map.h 路径、src 路径）",
+        "检测孤儿 WEAK（声明但无强符号）和孤儿强符号（无人调用的实现）",
+        "--self-test 通过"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "was: US-001b from PRD"
+    },
+    {
+      "id": "US-003",
+      "title": "创建 generate_structs.py 和 check_structs.py",
+      "description": "As a developer, I need generate_structs.py and check_structs.py to exist — they are referenced in methodology docs but not yet implemented.",
+      "acceptanceCriteria": [
+        "generate_structs.py 从 cfg/structs.json 生成各模块 types.h",
+        "支持 owner struct (全字段) 和 consumer struct (字段子集 + padding)",
+        "生成文件带 AUTO-GENERATED 标记和 serial 比对",
+        "check_structs.py 调用 generate_structs.py --check → diff → 不一致即阻断",
+        "deprecated 字段机制：consumer 引用 deprecated 字段 → 报错",
+        "serial 单调递增检查",
+        "python tools/generate_structs.py --check → PASS",
+        "python tools/check_structs.py --self-test → PASS"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "was: US-001c from PRD. 两个脚本一起开发因为 check 依赖 generate. fix: run_generate_check 子进程传 --config"
+    },
+    {
+      "id": "US-004",
+      "title": "创建 /init-project SKILL — 项目立项自动初始化",
+      "description": "As a developer, I want a SKILL that bootstraps a new embedded project with full methodology bindings: folder structure, tools, CLAUDE.md, structs.json, interface_map.h, pre-commit hook.",
+      "acceptanceCriteria": [
+        "SKILL 位于 .claude/skills/init-project/SKILL.md, user-invocable: true",
+        "交互式引导：1) 项目名 2) MCU 型号 3) 编译器 4) 层目录名（可自定义）",
+        "自动创建目录结构：app/ drv/ hal/ proto/ core/ cfg/ tools/ docs/ .claude/",
+        "从 methodology-seed/templates/ 复制填写：CLAUDE.md, structs.json, interface_map.h, tech-stack.md, code-style.md",
+        "从 methodology-seed/tools/ 复制 check_deps.py + check_weak_pairs.py + generate_structs.py + check_structs.py",
+        "生成 deps_config.json（层规则配置）",
+        "生成 .git/hooks/pre-commit（Windows .ps1 + Unix .sh 双版本）",
+        "运行 --self-test 验证工具链可用",
+        "SKILL 完成后项目可立即开始按方法论编码"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "用户新增需求。必须在工具链 (US-001~003) 完成后执行"
+    },
+    {
+      "id": "US-005",
+      "title": "编写 m4_ekf_observer/CLAUDE.md — 方法论绑定",
+      "description": "As a developer, I need m4_ekf_observer/CLAUDE.md rewritten to bind the methodology into AI's automatic behavior — not just listing rules, but command-level instructions for every action.",
+      "acceptanceCriteria": [
+        "保留现有内容（MODBUS 寄存器表、硬件参数、No-Go 区域）",
+        "新增 §方法论文档：分层规则 + 选择规则表",
+        "新增 §每次编码后强制：四件套 Bash 命令（check_deps.py --m4-ekf, check_weak_pairs.py, check_structs.py, armcc）",
+        "新增 §新增模块 SOP：7 步可执行清单",
+        "新增 §回调插入规则表（输入/输出/算法子集=标准, 中途即时回调=必须确认）",
+        "新增 §模块三段式范式代码模板",
+        "新增 §通信选择速查表（同步→weak, 异步→Msg_Post）",
+        "风格：命令式 MUST，不写建议/应该",
+        "与 methodology-seed 规则一致",
+        "与现有 RESTART.md 不冲突（RESTART 是入口，CLAUDE.md 是约束）"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "was: US-002 from PRD"
+    },
+    {
+      "id": "US-006",
+      "title": "创建 /check SKILL — 一键四件套检查",
+      "description": "As a developer, I want a /check command that runs all four checks and reports pass/fail with violation locations.",
+      "acceptanceCriteria": [
+        "SKILL 位于 .claude/skills/check/SKILL.md, user-invocable: true",
+        "描述含触发词: check, 检查, 验证, audit, verify",
+        "逐步执行 check_deps.py → check_weak_pairs.py → check_structs.py → 编译检查",
+        "每步输出 [PASS] or [FAIL] + 失败时文件:行号",
+        "全部通过时打印 0 violations 总结",
+        "第一步失败不阻止后续步骤（全量报告）",
+        "安装到 m4_ekf_observer/.claude/skills/（项目级）"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "was: US-004 from PRD. 工具链 (US-001~003) 必须先完成"
+    },
+    {
+      "id": "US-007",
+      "title": "创建 /new-module SKILL — 交互式模块创建向导",
+      "description": "As a developer, I want a /new-module wizard that guides me through creating a module following the methodology SOP step by step.",
+      "acceptanceCriteria": [
+        "SKILL 位于 .claude/skills/new-module/SKILL.md, user-invocable: true",
+        "步骤 1: 问模块名+层级 → 确认层白名单",
+        "步骤 2: 生成 .h（注释 #define include guard, 模块职责注释, 公共接口）",
+        "步骤 3: 生成 .c（三段式骨架: 输入段+计算段+输出段, __weak 空壳模板）",
+        "步骤 4: 如有跨模块结构体 → 引导编辑 cfg/structs.json → 运行 generate_structs.py",
+        "步骤 5: 注册 __weak 配对到 interface_map.h",
+        "步骤 6: 运行 /check 验证全部通过",
+        "每步确认后才进入下一步",
+        "安装到 m4_ekf_observer/.claude/skills/（项目级）"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "was: US-005 from PRD. 依赖 CLAUDE.md (US-005) 中的层定义"
+    },
+    {
+      "id": "US-008",
+      "title": "编写 m4_ekf_observer 渐进迁移方案",
+      "description": "As a developer, I need a migration plan that prioritizes new modules for full methodology adoption while allowing old modules to transition gradually.",
+      "acceptanceCriteria": [
+        "文档位于 m4_ekf_observer/docs/migration-plan.md",
+        "现有模块清单 + 层归属分类（app/ekf, app/pot_detect, app/var_gain_pid, base_class, proto）",
+        "迁移优先级：P0=当前开发中的新模块, P1=边界模块（与其他模块交互多）, P2=内部模块, NEVER=vendor",
+        "每模块的迁移检查清单（include 违规列表 / __weak 替换点 / structs.json 注册项）",
+        "双轨策略：新 __weak 通道与旧消息队列通道可在迁移期间并存",
+        "不迁移清单：src/RX32G410_FW_HAL_V1.3N/, 原厂固件库"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "was: US-006 from PRD. 独立文档，不阻塞其他 US"
+    }
+  ]
+}

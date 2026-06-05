@@ -1,0 +1,35 @@
+# Ralph Progress Log
+Started: Fri Jun  5 08:48:38     2026
+---
+
+## Codebase Patterns
+- methodology-seed/tools/ use BUILTIN_PRESETS dict for multi-project config (four_head, m4-ekf)
+- All tools follow same CLI pattern: --project, --config, --self-test, --print-template
+- check_structs.py calls generate_structs.py --check as subprocess (must pass --config via tempfile)
+- SKILL.md files go under .claude/skills/<name>/SKILL.md with user-invocable: true
+- AUTO-GENERATED blocks use serial markers for diff detection
+
+## 2026-06-05T14:30 - US-001
+- check_deps.py already configurable from prior work
+- Self-test 11/11 PASS. Committed.
+
+## 2026-06-05T14:45 - US-002
+- check_weak_pairs.py rewrited by linter with multi-project support
+- Fixed startswith bug in normalize_params
+- Self-test against four_head found 22 violations (informational)
+- Committed.
+
+## 2026-06-05T15:00 - US-003
+- generate_structs.py: full implementation with owner/consumer structs, padding, deprecated, serial, AUTO-GENERATED blocks
+- check_structs.py: 6-stage validation (schema, serial, deprecated, whitelist, modules, generate --check)
+- Both self-tests 11/11 PASS
+- Fixed: run_generate_check subprocess config passing via tempfile
+- Committed.
+
+## 2026-06-05T15:15 - US-004
+- Created .claude/skills/init-project/SKILL.md with interactive wizard
+- Committed.
+
+## 2026-06-05T15:30 - US-005
+- Created m4_ekf_observer/CLAUDE.md with full methodology binding
+- Committed.

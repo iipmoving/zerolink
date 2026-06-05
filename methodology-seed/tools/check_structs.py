@@ -353,25 +353,34 @@ def run_generate_check(project_dir, config, json_path):
     if not os.path.exists(gen_script):
         return -1, '', f'generate_structs.py 未找到: {gen_script}'
 
-    cmd = [
-        sys.executable, gen_script,
-        project_dir,
-        '--source', json_path,
-        '--check',
-    ]
-
+    # Write temp config so subprocess can resolve project type
+    tmpfd, tmpcfg = tempfile.mkstemp(suffix='.json', prefix='structs_cfg_')
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        return -1, '', 'generate_structs.py --check 超时 (30s)'
-    except Exception as e:
-        return -1, '', f'调用 generate_structs.py 失败: {e}'
+        with os.fdopen(tmpfd, 'w', encoding='utf-8') as f:
+            json.dump(config, f)
+
+        cmd = [
+            sys.executable, gen_script,
+            project_dir,
+            '--config', tmpcfg,
+            '--source', json_path,
+            '--check',
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return -1, '', 'generate_structs.py --check 超时 (30s)'
+        except Exception as e:
+            return -1, '', f'调用 generate_structs.py 失败: {e}'
+    finally:
+        os.unlink(tmpcfg)
 
 
 # ============================================================
