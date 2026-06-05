@@ -68,7 +68,7 @@
         "SKILL 完成后项目可立即开始按方法论编码"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "用户新增需求。必须在工具链 (US-001~003) 完成后执行"
     },
     {
