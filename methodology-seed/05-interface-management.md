@@ -150,3 +150,70 @@ python tools/check_structs.py  ← 验证一致性
 | `interface_map.h` | __weak 函数配对 + 签名 | AI 手动维护 |
 
 三者都不参与编译，都是被工具验证的对象。结构体变更改 JSON，通道变更改 `interface_map.h`，互不干扰。
+
+### 6.4 AI-MANAGED 段标记规范
+
+**跨模块结构体必须在 `.h` 文件中用明确的起止标记围起来。** 两个角色各有自己的段格式。
+
+#### Owner 段 (生产者 .h)
+
+```c
+/* === INTERFACE STRUCTS (OWNER) ==================================
+ * 本模块是以下结构体的 Owner (生产者).
+ * @STRUCT 标记由 check_structs.py 解析验证.
+ *
+ * 消费者: {module_b} — 声明 {ModuleB}_{StructName}_LINK_t 副本
+ * ================================================================ */
+
+#pragma pack(4)
+
+/* @STRUCT StructName  owner=this_module  suffix=OUT */
+typedef struct {
+    uint32_t field_a;              /* offset=0, size=4 */
+    uint16_t field_b;              /* offset=4, size=2 */
+} StructName;                      /* sizeof=N */
+
+#pragma pack()
+
+/* === END INTERFACE STRUCTS === */
+```
+
+#### Consumer 段 (消费者 .h)
+
+```c
+/* === AI-MANAGED INTERFACE STRUCTS (CONSUMER) ======================
+ *
+ *  双向维护区 — AI 从 owner 自动同步, 禁止手动编辑
+ *
+ *  消费者: this_module
+ *  Owner:  owner_module
+ *
+ *  check_structs.py 自动验证 sizeof/offset 与 owner 一致.
+ *  owner 字段变更后 AI 必须同步更新本段.
+ *
+ *  命名: {Module}_{OwnerStruct}_LINK_t  (_LINK = 联合管理)
+ *
+ * ==================================================================== */
+
+#pragma pack(4)
+
+/* @STRUCT Pair S{N} owner=owner_module  suffix=LINK  source=OwnerStruct */
+typedef struct {
+    /* 字段布局与 owner 完全一致 */
+} Module_OwnerStruct_LINK_t;
+
+#pragma pack()
+
+/* === END AI-MANAGED INTERFACE STRUCTS === */
+```
+
+#### 铁律
+
+| 规则 | 说明 |
+|------|------|
+| 起止标志必须存在 | 工具通过 `AI-MANAGED` / `INTERFACE STRUCTS` 关键字定位段边界 |
+| 段内只放跨模块结构体 | 内部私有 struct 放段外 |
+| `#pragma pack(4)` 包裹 | 保证 ARM 32-bit 对齐，sizeof/offsetof 一致 |
+| `@STRUCT` 标签 | 每结构体一行，check_structs.py 解析 owner/consumer 配对 |
+| `offset/sizeof` 注释 | 每个字段标注 `/* offset=N, size=N */`，人眼可验 |
+| 禁止手动编辑 consumer 段 | AI 负责从 owner 同步，Python 工具阻断不一致 |
