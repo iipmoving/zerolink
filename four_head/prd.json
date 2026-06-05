@@ -88,7 +88,7 @@
         "与现有 RESTART.md 不冲突（RESTART 是入口，CLAUDE.md 是约束）"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "was: US-002 from PRD"
     },
     {
