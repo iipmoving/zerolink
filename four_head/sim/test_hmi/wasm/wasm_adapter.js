@@ -15,20 +15,21 @@ const ZONE_NODE_C2JS   = ['idle', 'selecting', 'cooking'];
 const SEG_MODE_C2JS    = ['power', 'dash', 'off', 'ascii', 'timer_setting'];
 
 /* key name → KeyCode_t enum value */
+/* 键码映射 — 与 src/drv/drv_key.h 和 src/app/app_hmi.h 的 HMIKeyCode_t 一致 */
 const KEY_CODE = {
-    POWER: 4,  /* KEY_ONOFF */
-    TIMER: 5,  /* KEY_TIME_SET */
-    PAUSE: 6,  /* KEY_STOP */
-    CHILD_LOCK: 8,  /* KEY_LOCK */
-    HEAD_1: 15,  /* KEY_LEFT_P_SET_UP */
-    HEAD_2: 14,  /* KEY_RIGHT_P_SET_UP */
-    HEAD_3: 13,  /* KEY_LEFT_P_SET */
-    HEAD_4: 12,  /* KEY_RIGHT_P_SET */
-    ZONE: 9,   /* KEY_BIND */
-    MINUS: 2,  /* KEY_SUB */
-    PLUS: 3,   /* KEY_ADD */
-    '0': 22, '1': 23, '2': 24, '3': 25, '4': 26,
-    '5': 27, '6': 28, '7': 29, '8': 30, '9': 31
+    POWER: 1,       /* KEY_ONOFF / HMI_KEY_ONOFF */
+    MINUS: 2,       /* KEY_SUB / HMI_KEY_SUB */
+    PLUS: 3,        /* KEY_ADD / HMI_KEY_ADD */
+    TIMER: 5,       /* KEY_TIME_SET / HMI_KEY_TIME_SET */
+    PAUSE: 4,       /* KEY_STOP / HMI_KEY_STOP */
+    ZONE: 7,        /* KEY_BIND / HMI_KEY_BIND */
+    CHILD_LOCK: 7,  /* KEY_LOCK / HMI_KEY_LOCK */
+    HEAD_4: 8,      /* KEY_RIGHT_P_SET / HMI_KEY_RIGHT_P_SET */
+    HEAD_3: 9,      /* KEY_LEFT_P_SET / HMI_KEY_LEFT_P_SET */
+    HEAD_2: 10,     /* KEY_RIGHT_P_SET_UP / HMI_KEY_RIGHT_P_SET_UP */
+    HEAD_1: 11,     /* KEY_LEFT_P_SET_UP / HMI_KEY_LEFT_P_SET_UP */
+    '0': 12, '1': 13, '2': 14, '3': 15, '4': 16,
+    '5': 17, '6': 18, '7': 19, '8': 20, '9': 21
 };
 
 /* event: 'tap'→0x10, 'long'→0x02 */
