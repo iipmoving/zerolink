@@ -12,6 +12,9 @@
 /* 模块 GetIO 声明（由 MODULE_EXPORT 生成，在各自 .c 中定义）*/
 void AppPower_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
 void AppHmi_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+void AppCommMgr_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+void AppProtect_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+void AppSegAlign_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
 
 /* DRV 层强符号（v1.0 桥接，migrate 后移除）*/
 void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
@@ -43,6 +46,15 @@ void Switcher_Init(void)
     Switcher_Register(pWork);
 
     AppHmi_GetIO(&pIn, &pOut, &pWork);
+    Switcher_Register(pWork);
+
+    AppCommMgr_GetIO(&pIn, &pOut, &pWork);
+    Switcher_Register(pWork);
+
+    AppProtect_GetIO(&pIn, &pOut, &pWork);
+    Switcher_Register(pWork);
+
+    AppSegAlign_GetIO(&pIn, &pOut, &pWork);
     Switcher_Register(pWork);
 }
 

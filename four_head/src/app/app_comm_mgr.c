@@ -14,9 +14,23 @@
  *   2. 通讯数据集中缓存 (s_heads[].regs) — 其他模块不存通讯状态
  *   3. 协议可替换 — 换协议只需换 proto 模块的强符号实现
  */
+#include "core/std_module.h"
 #include "app_comm_mgr.h"
 #include <string.h>
 #include <stddef.h>
+
+/* ---- 数据结构 ---- */
+typedef struct {
+    uint8_t  data_ready;   /* 收到新数据 */
+    uint8_t  tx_done;      /* 发送完成 */
+    uint8_t  power_cmd;    /* 功率命令 */
+} InData_t;
+typedef struct { uint8_t dummy; } OutData_t;
+
+static InData_t  s_in;
+static OutData_t s_out;
+
+MODULE_SKELETON();
 
 /* ========== 协议层抽象 ========== */
 #define PROTO_PARSE_OK         0      /* 解析成功 (与 PROTO_PARSE_OK 对齐) */
@@ -220,7 +234,7 @@ void AppCommMgr_OnPowerCmd(uint16_t param, void *data_ptr)
 }
 
 /* ========== 初始化 ========== */
-void App_CommMgr_Init(void)
+static void Init(void)
 {
     uint8_t i;
 
@@ -234,6 +248,13 @@ void App_CommMgr_Init(void)
     s_cur_head   = 0u;
     s_poll_state = COMM_S_IDLE;
     s_tick_10ms  = 0u;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
+}
+
+static void ProcessInput(void)
+{
+    /* 当前逻辑在 App_CommMgr_Run 中处理 */
 }
 
 /* ========== 每10ms槽位调用 ========== */
@@ -270,3 +291,9 @@ void App_CommMgr_Run(void)
         }
     }
 }
+
+/* v2.0 桥接 */
+void App_CommMgr_Init(void) { Constructor(); }
+
+/* ---- 导出 ---- */
+MODULE_EXPORT(AppCommMgr);

@@ -20,11 +20,18 @@
  *   上4位 = 按键码(hex)
  *   下4位 = 按键类型字符串
  */
+#include "core/std_module.h"
 #include "drv_display.h"
 #include "../hal/hal_smg.h"
 #include "../hal/hal_display.h"
 #include <string.h>
 #include <stddef.h>
+
+typedef struct { uint8_t dummy; } In_t;
+typedef struct { uint8_t dummy; } Out_t;
+static In_t  s_in;
+static Out_t s_out;
+MODULE_SKELETON();
 
 /* 独立声明的显示帧类型 — 与 APP 层 HmiDisplayCache_t 布局一致，
  * 通过 MSG_DISPLAY_REFRESH 的 void* 传递。
@@ -338,8 +345,10 @@ void DrvSegAlign_WriteCom(uint8_t com, uint8_t seg_mask)
     }
 }
 
+static void ProcessInput(void) {}
+
 /* ========== 初始化 ========== */
-void Drv_Display_Init(void)
+static void Init(void)
 {
     /* 初始化SMG库: 2组独立显示(上下各4位数码管) */
     HAL_SMG_Init();
@@ -368,6 +377,8 @@ void Drv_Display_Init(void)
     /* 启动画面: 全显测试 (写工作缓冲并提交) */
     memset(s_io_work, 0xFF, sizeof(s_io_work));
     s_io_dirty = 1u;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
 /* ========== 500ms 闪烁同步（内部）========== */
@@ -483,3 +494,6 @@ void Drv_Display_Scan(void)
         s_scan_com = 0u;
     }
 }
+
+void Drv_Display_Init(void) { Constructor(); }
+MODULE_EXPORT(DrvDisplay);

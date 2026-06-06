@@ -19,9 +19,16 @@
  *   - ENTER键长按3秒: 强制退出(不保存)
  */
 
+#include "core/std_module.h"
 #include "app_seg_align.h"
 #include <string.h>
 #include <stddef.h>
+
+typedef struct { uint8_t dummy; } InData_t;
+typedef struct { uint8_t dummy; } OutData_t;
+static InData_t  s_in;
+static OutData_t s_out;
+MODULE_SKELETON();
 
 /* ================================================================
  * 串口函数 __weak 桩 — 不直接 include hal_uart.h
@@ -361,8 +368,10 @@ uint8_t AppSegAlign_IsActive(void)
     return s_active;
 }
 
-/* ========== 公开: AppSegAlign_Init ========== */
-void AppSegAlign_Init(void)
+static void ProcessInput(void) {}
+
+/* ========== Init ========== */
+static void Init(void)
 {
     uint8_t i;
 
@@ -404,9 +413,12 @@ void AppSegAlign_Init(void)
 
     /* 强制进入: 立即显示第一个测试图案 */
     refresh_alignment_display();
+
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
-/* ========== 公开: AppSegAlign_Run (每10ms调用) ========== */
+void AppSegAlign_Init(void) { Constructor(); }
 void AppSegAlign_Run(void)
 {
 #if SEG_ALIGN_SERIAL_ENABLE
@@ -513,3 +525,5 @@ void AppSegAlign_OnKey(uint16_t param, void *data_ptr)
 #endif
     }
 }
+
+MODULE_EXPORT(AppSegAlign);

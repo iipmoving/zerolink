@@ -15,8 +15,15 @@
  *   每10ms调用一次(槽位5), 内部100ms节拍检测各炉头
  *   收到 AppProtect_OnRegData 时更新寄存器缓存
  */
+#include "core/std_module.h"
 #include "app_protect.h"
 #include <stddef.h>
+
+typedef struct { uint8_t dummy; } InData_t;
+typedef struct { uint8_t dummy; } OutData_t;
+static InData_t  s_in;
+static OutData_t s_out;
+MODULE_SKELETON();
 
 /* 独立声明 — 与 app_comm_mgr.h 的 RegData_t 布局一致 (AI保证) */
 #define PROT_REG_COUNT          22u
@@ -244,8 +251,10 @@ void AppProtect_OnRegData(uint16_t param, void *data_ptr)
     ctx->data_age  = 0u;  /* 数据刷新,重置超时计数 */
 }
 
+static void ProcessInput(void) {}
+
 /* ========== 初始化 ========== */
-void App_Protect_Init(void)
+static void Init(void)
 {
     uint8_t i;
 
@@ -259,6 +268,8 @@ void App_Protect_Init(void)
         s_ctx[i].data_age       = 0xFFu;
     }
     s_tick_10ms = 0u;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
 /* ========== 每10ms槽位调用 ========== */
@@ -296,3 +307,6 @@ void App_Protect_Run(void)
         }
     }
 }
+
+void App_Protect_Init(void) { Constructor(); }
+MODULE_EXPORT(AppProtect);

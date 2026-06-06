@@ -15,9 +15,16 @@
  *   每音符: [频率索引, 开启ms, 关闭ms]
  *   包络: PE4电源引脚控制音符开关
  */
+#include "core/std_module.h"
 #include "drv_buzzer.h"
 #include "../hal/hal_buzzer.h"
 #include <stddef.h>
+
+typedef struct { uint8_t dummy; } InData_t;
+typedef struct { uint8_t dummy; } OutData_t;
+static InData_t  s_in;
+static OutData_t s_out;
+MODULE_SKELETON();
 
 /* ========== 音阶频率表（PWM中断频率 = 2×输出音频频率） ========== */
 /* 这些PWM值与APB0时钟频率无关，因为TIM_Preload中的分子分母同时缩放 */
@@ -367,7 +374,9 @@ void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
     }
 }
 
-void Drv_Buzzer_Init(void)
+static void ProcessInput(void) {}
+
+static void Init(void)
 {
     s_tick_10ms    = 0u;
     s_my_time_on   = 0u;
@@ -381,6 +390,8 @@ void Drv_Buzzer_Init(void)
     s_jiange_hc    = 0u;
     s_on_delay     = 0u;
     s_off_flag     = 0u;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
 void Drv_Buzzer_Select(uint8_t out_sel, uint8_t mode)
@@ -416,3 +427,6 @@ void Drv_Buzzer_Timer_1ms(void)
     /* 美声蜂鸣器: 每1ms处理 */
     Buzz_Dispose_MY();
 }
+
+void Drv_Buzzer_Init(void) { Constructor(); }
+MODULE_EXPORT(DrvBuzzer);
