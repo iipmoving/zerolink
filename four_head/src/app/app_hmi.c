@@ -62,9 +62,10 @@ __attribute__((weak)) void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 
 #ifdef HMI_DEBUG_KEYS
-/* 调试模式需要直接控制显示硬件 — 仅本地 extern 声明，不 include DRV 头文件 */
-extern void Drv_Display_SetRawLEDs(uint8_t io8, uint8_t io9, uint8_t io10);
-extern void Drv_Display_ShowRawSMG(const char *upper, const char *lower);
+__attribute__((weak)) void Drv_Display_SetRawLEDs(uint8_t io8, uint8_t io9, uint8_t io10)
+{ (void)io8; (void)io9; (void)io10; }
+__attribute__((weak)) void Drv_Display_ShowRawSMG(const char *upper, const char *lower)
+{ (void)upper; (void)lower; }
 #endif
 
 /* ===== 调试模式: 定义后屏蔽所有HMI逻辑, 仅显示键码+状态 ===== */
@@ -1838,3 +1839,45 @@ uint8_t AppSegAlign_CanEnter(void)
 {
     return (s_global.mode == HMI_NODE_POWERED_OFF) ? 1u : 0u;
 }
+
+/* =================================================================
+ * WASM 测试导出 — 仅 WASM_BUILD 生效
+ * ================================================================= */
+#ifdef WASM_BUILD
+#include <stdint.h>
+uint8_t  wasm_get_global_mode(void)        { return s_global.mode; }
+uint8_t  wasm_is_child_lock(void)          { return s_global.child_lock; }
+uint8_t  wasm_is_paused(void)              { return s_global.paused; }
+int8_t   wasm_get_hot_head(void)           { return s_hot_head; }
+uint8_t  wasm_get_stack_depth(void)        { return s_stack_count; }
+int8_t   wasm_get_stack_at(uint8_t p)      { return (p < 4) ? s_select_stack[p] : -1; }
+uint8_t  wasm_get_zone_node(uint8_t i)     { return (i < 4) ? s_heads[i].node : 0; }
+uint8_t  wasm_get_zone_power(uint8_t i)    { return (i < 4) ? s_heads[i].power_level : 0; }
+uint8_t  wasm_get_zone_boost(uint8_t i)    { return (i < 4) ? s_heads[i].boost_active : 0; }
+uint8_t  wasm_get_zone_timer_setting(uint8_t i) { return (i < 4) ? s_heads[i].timer_setting : 0; }
+uint8_t  wasm_get_zone_timer_active(uint8_t i)  { return (i < 4) ? s_heads[i].timer_active : 0; }
+uint8_t  wasm_get_zone_timer_value(uint8_t i)   { return (i < 4) ? s_heads[i].timer_value : 0; }
+char     wasm_get_seg_char(uint8_t i)      { return (i < 8) ? s_display.seg_chars[i] : ' '; }
+uint8_t  wasm_get_seg_blink(uint8_t i)     { return (i < 4) ? s_display.seg_blink[i] : 0; }
+uint8_t  wasm_get_seg_mode(void)           { return s_display.seg_mode; }
+uint8_t  wasm_get_led_power(void)          { return s_display.leds_power; }
+uint8_t  wasm_get_led_timer(void)          { return s_display.leds_timer; }
+uint8_t  wasm_get_led_pause(void)          { return s_display.leds_pause; }
+uint8_t  wasm_get_led_child_lock(void)     { return s_display.leds_child_lock; }
+uint8_t  wasm_get_led_head_select(uint8_t i) { return (i < 4) ? s_display.leds_head_select[i] : 0; }
+uint8_t  wasm_get_led_power_level(uint8_t i) { return (i < 10) ? s_display.leds_power_level[i] : 0; }
+
+/* 强制超时 — 测试用，直接操作内部状态 */
+void wasm_force_select_confirm(uint8_t idx) { confirm_select((int8_t)idx); }
+void wasm_force_boost_exit(uint8_t idx)     { exit_boost((int8_t)idx); }
+void wasm_force_timer_expire(uint8_t idx) {
+    if (idx < 4) {
+        s_heads[idx].timer_value = 0;
+        s_heads[idx].timer_active = 0;
+        if (s_heads[idx].timer_setting) {
+            s_heads[idx].timer_setting = 0;
+            s_heads[idx].select_ticks = 0;
+        }
+    }
+}
+#endif /* WASM_BUILD */
