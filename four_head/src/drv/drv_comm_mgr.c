@@ -12,16 +12,21 @@
  * 依赖: drv_comm_mgr.h + drv_comm.h + msg_scheduler.h + msg_def.h
  * 层级: DRV
  */
+#include "core/std_module.h"
 #include "drv_comm_mgr.h"
 #include "drv_comm.h"
 #include <string.h>
 #include <stddef.h>
 
-/* __weak 回调: 发送给 APP 层, 链接器自动接线, interface_map.h 文档化 */
-__weak void AppCommMgr_OnTxDone(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__weak void AppCommMgr_OnDataUpdate(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
+/* APP 层强符号声明 */
+void AppCommMgr_OnTxDone(uint16_t param, void *data_ptr);
+void AppCommMgr_OnDataUpdate(uint16_t param, void *data_ptr);
+
+typedef struct { uint8_t dummy; } InData_t;
+typedef struct { uint8_t dummy; } OutData_t;
+static InData_t  s_in;
+static OutData_t s_out;
+MODULE_SKELETON();
 
 /* ---- 独立声明: 与 APP 层 CommSendReq_t 布局一致 ---- */
 #define DRV_COMM_SEND_BUF_SIZE  64u
@@ -64,8 +69,10 @@ void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
     Drv_Comm_Send(req->data, req->len);
 }
 
+static void ProcessInput(void) {}
+
 /* ---- 初始化 ---- */
-void Drv_CommMgr_Init(void)
+static void Init(void)
 {
     s_pending_valid = 0u;
     s_tx_done_flag  = 0u;
@@ -73,6 +80,8 @@ void Drv_CommMgr_Init(void)
     memset(&s_rx_data,     0, sizeof(s_rx_data));
 
     Drv_Comm_Init();
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
 /* ---- 每10ms槽位调用 ---- */
@@ -107,3 +116,6 @@ void Drv_CommMgr_Update(void)
         }
     }
 }
+
+void Drv_CommMgr_Init(void) { Constructor(); }
+MODULE_EXPORT(DrvCommMgr);

@@ -8,17 +8,21 @@
  * 组合键: 相邻功率焊盘同时触摸(如TK12+TK13→KEY_POWER_1)
  * 键码映射: 提取自参考程序 Key_Driver.c
  */
+#include "core/std_module.h"
 #include "drv_key.h"
 #include "../hal/hal_key.h"
 #include <stddef.h>
 
-/* __weak 回调: 多接收方广播, 链接器自动接线, interface_map.h 文档化 */
-__weak void AppHmi_OnKey(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__weak void AppCooking_OnKey(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__weak void AppSegAlign_OnKey(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
+/* ---- 数据结构 ---- */
+typedef struct { uint8_t dummy; } InData_t;
+typedef struct {
+    uint8_t  has_key;
+    uint8_t  key_code;
+    uint8_t  key_state;
+} OutData_t;
+static InData_t  s_in;
+static OutData_t s_out;
+MODULE_SKELETON();
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
 #define TK_CH(n)        (1UL << (n))  /* 通道n的位掩码                         */
@@ -110,8 +114,10 @@ static uint8_t Key_Lookup(uint32_t phy_mask)
     return (uint8_t)KEY_NONE;
 }
 
+static void ProcessInput(void) {}
+
 /* ========== 初始化 ========== */
-void Drv_Key_Init(void)
+static void Init(void)
 {
     HAL_Key_Init();
     s_debounce_mask = 0u;
@@ -120,15 +126,22 @@ void Drv_Key_Init(void)
     s_hold_cnt      = 0u;
     s_long_sent     = 0u;
     s_release_cnt   = 0u;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
+void Drv_Key_Init(void) { Constructor(); }
+MODULE_EXPORT(DrvKey);
 
 /* ========== 按键事件发送 ========== */
 static void Key_PostEvent(uint8_t key_code, uint8_t key_state)
 {
-    uint16_t param = (uint16_t)key_code | ((uint16_t)key_state << 8);
-    AppHmi_OnKey(param, NULL);
-    AppCooking_OnKey(param, NULL);
-    AppSegAlign_OnKey(param, NULL);
+    /* v2.0: 写 g_output */
+    s_out.has_key   = 1;
+    s_out.key_code  = key_code;
+    s_out.key_state = key_state;
+    g_output.info.status |= ST_OUT;
+    if (_onOutput) _onOutput(&g_output);
+    g_output.info.status &= ~ST_OUT;
 }
 
 /* ========== 处理按键释放（切键时先释放旧键） ========== */
