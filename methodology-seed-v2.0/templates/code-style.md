@@ -7,7 +7,7 @@
 - **函数**: PascalCase + 模块前缀（`Drv_Key_Init`, `App_Hmi_Init`）
 - **宏/常量**: UPPER_SNAKE_CASE（`SLOT_DEPTH`, `MAX_HANDLERS`）
 - **类型定义**: PascalCase + `_t` 后缀（`KeyCode_t`, `Msg_t`）
-- **结构体后缀**: `_IN` = 本模块接收, `_OUT` = 本模块输出, 无后缀 = 内部私有（`StateGlobal_OUT_t`, `Display_StateInput_t`, `DisplayBuffer_t`）
+- **结构体后缀**: `_IN` = 本模块接收 (v1.x, 已废弃), `_OUT` = 本模块输出, 无后缀 = 内部私有。v2.1 使用 `Para_Grp_t` 统一包装, 不再使用 `_IN`/`_LINK` 后缀（`StateGlobal_OUT_t`, `PowerInData_t`, `PowerOutData_t`）
 - **枚举值**: UPPER_SNAKE_CASE 或 PascalCase + 模块前缀
 - **文件**: 小写 + 下划线（`drv_key.c`, `app_hmi.c`, `hal_comm.c`）
 

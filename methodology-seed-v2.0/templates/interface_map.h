@@ -1,4 +1,4 @@
-/* interface_map.h — __weak 回调配对文档 (v2.0 零依赖架构)
+/* interface_map.h — __weak 回调配对文档 (v2.1 零依赖架构)
  *
  * 本文件是 __weak 配对的唯一真相源 (single source of truth)。
  * 每对包含: 发送方(WEAK空壳) → 接收方(强符号实现)

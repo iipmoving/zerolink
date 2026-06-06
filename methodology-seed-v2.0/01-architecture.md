@@ -118,10 +118,10 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 发送方: Msg_Post(MSG_KEY_EVENT, param, &data)  — 写入环形队列
 接收方: MsgScheduler_Register(MSG_KEY_EVENT, handler)  — 下个时间片消费
 
-/* 结构化数据路由 — 数据交换机 */
-发送方: ModuleA_DoWork() → g_out.status |= 0x02        — 输出就绪
-中间层: Switcher 检测 bit1 → 搬运 Output_t → Input_t   — 指针/值拷贝
-接收方: ModuleB_DoWork() → 检查 g_in.status bit1 → 消费 — 下个调度槽
+/* 结构化数据路由 — 数据交换机 (v2.1: __weak 链自动路由) */
+发送方: ModuleA_DoWork() → ProcessInput → g_output.info.status |= ST_OUT → DoWork 自动调 _onOutput
+中间层: __weak {ModuleA}_OnOutput → linker 解析到 consumer STRONG → memcpy(g_input.para, ...)
+接收方: ModuleB_DoWork() → ProcessInput 检查 g_input.info.status & ST_NEW → 消费
 ```
 
 **选择规则（两层）**:
@@ -133,7 +133,7 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 
 2. 传递的是事件通知还是结构化数据块？
    → 事件通知: Msg_Post        ← 写入队列，下个时间片消费
-   → 结构化数据块: 数据交换机    ← Switcher 指针搬运，模块不需要 _LINK_t 副本
+   → 结构化数据块: 数据交换机    ← __weak 链路由 + Switcher 顺序调用，Para_Grp_t 统一参数组
 ```
 
 **约束机制**: L0 — 强符号自动覆盖弱符号（链接器保证），函数名不匹配则链接失败。L1 — `check_weak_pairs.py` 验证 `interface_map.h` 记录的配对是否在代码中存在、签名一致。数据交换机侧：`check_include.py` 阻断非 Switcher 文件的全路径 `_io.h` 引用。
@@ -144,6 +144,30 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 
 一致性由 `generate_structs.py` 从 `cfg/structs.json` 自动生成保证。`check_structs.py` 验证生成文件未被手动修改。AI 只需编辑 JSON，不手动维护结构体副本。
 
+#### 3.1 32 位对齐与 res[] 填充（通用规则）
+
+**所有跨模块结构体必须 32 位对齐，sizeof 为 4 的倍数。** 不限于数据交换机——`Msg_t`、`__weak` 回调参数 struct、`structs.json` 定义的 struct 均适用。
+
+```c
+#pragma pack(4)
+
+typedef struct {
+    uint8_t  status;        // 状态字节
+    uint8_t  res[3];        // 32位对齐填充 — sizeof 到此为 4
+    uint16_t value;         // 2字节
+    uint8_t  flag;          // 1字节
+    uint8_t  res2[1];       // 补齐到 4 字节边界 — 总 sizeof = 8
+} ModuleX_Data_t;           // sizeof 必须为 4 的倍数
+
+#pragma pack()
+```
+
+**规则**:
+- `#pragma pack(4)` 包裹所有跨模块 struct 定义
+- 结构体成员总字节数向上取整到 4 的倍数，不足用 `uint8_t res[N]` 填充
+- `check_structs.py` 会验证 owner/consumer 的 sizeof 一致，对齐不一致会被检出
+- `_io.h` 中的 Input_t/Output_t 同样遵守此规则（status 字节后的 `res[3]` 即是对齐填充）
+
 ### 铁律四：AI 管理 __weak 配对 [L1: check_weak_pairs.py + L3: 文档]
 
 谁发谁收、函数签名——全部记录在 `interface_map.h`，由 AI 维护。模块不知道谁在收它的调用。链接器自动接线。
@@ -152,10 +176,11 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 
 ### 铁律五：统一命名约定 [L3: 文档]
 
-`{ModulePrefix}_On{Event}(uint16_t param, void *data_ptr)`
-`_IN` = 模块接收, `_OUT` = 模块输出, 无后缀 = 内部私有
+所有顶层标识符（类型、函数、变量、常量、文件）必须带模块前缀。详见 §四 命名约定。
 
-**约束机制**: L3 — 命名是约定，编译器不检查语义。违规不影响编译但会降低可读性。这是少数只能靠文档支撑的规则。
+`{ModulePrefix}_{Name}_t` / `{ModulePrefix}_{Action}()` / `g_{name}` / `MODULE_{NAME}`
+
+**约束机制**: L3 — 命名是约定，编译器不检查语义。违规不影响编译但会降低可读性。可通过 `check_weak_pairs.py` 间接验证 __weak 函数名配对。
 
 ### 铁律六：每个模块可独立编译测试 [L2: 生成器 + L1: check_deps.py]
 
@@ -206,26 +231,93 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 
 ## 四、命名约定
 
-### 函数: `{PREFIX}_On{EVENT}`
+**核心原则**: 所有顶层标识符（类型、函数、变量、常量）必须带模块前缀。模块前缀 = 模块名转 PascalCase（如 `app_power` → `AppPower`，`drv_key` → `DrvKey`）。全局符号通过前缀一眼识别归属，避免命名冲突。
 
-| 部分 | 说明 | 示例 |
-|------|------|------|
-| PREFIX | 接收方模块前缀 | AppHmi, DrvDisplay, AppPower |
-| EVENT | 事件名 | Key, Timer100ms, PowerCtrl |
-
-### 类型命名
+### 4.1 结构体/类型: `{ModulePrefix}_{DescriptiveName}_t`
 
 ```
-APP 层:  Hmi* (如 HmiDisplayCache_t)
-DRV 层:  Drv* 或领域名 (如 DisplayFrame_t)
+格式: {ModulePrefix}_{DescriptiveName}_t
+
+示例:
+  AppPower_Status_t          — app_power 模块的状态结构体
+  DrvDisplay_Frame_t         — drv_display 模块的帧结构体
+  IhElecParams_CycleDataDef  — ih_elec_params 模块的周期数据定义
+  Adc_Output_t               — app_adc 模块的输出槽（数据交换机）
+  Power_Input_t              — app_power 模块的输入槽（数据交换机）
+
+后缀:
+  _t        — 通用结构体类型
+  _IN_t     — 数据交换机输入槽（本模块消费）
+  _OUT_t    — 数据交换机输出槽（本模块产出）
+  _LINK_t   — [v1.0 遗留] consumer 副本，v2.0 数据交换机已消除此模式
 ```
 
-### 文件命名
+### 4.2 函数: `{ModulePrefix}_{Action}(...)`
+
+```
+格式: {ModulePrefix}_{Action}(参数)
+
+示例:
+  AppPower_DoWork(void)                — 模块主入口（数据交换机）
+  AppPower_GetIO(Para_Grp_t **, Para_Grp_t **, void (**)(void)) — 暴露输入/输出槽 + DoWork 函数指针 (MODULE_EXPORT 生成)
+  DrvKey_Init(void)                    — 初始化
+  DrvDisplay_Commit(Frame_t*)          — 提交显示帧
+  HalGpio_SetPin(uint8_t pin)          — HAL 层设引脚
+
+__weak 回调（§铁律二）使用 _On{Event} 子格式:
+  AppPower_OnAdcData(void *pData)      — 接收 ADC 数据
+  DrvKey_OnKeyEvent(uint16_t param)    — 接收按键事件
+```
+
+### 4.3 变量: `g_{descriptive_name}` 或 `s_{descriptive_name}`
+
+```
+格式: {scope_prefix}_{snake_case_name}
+
+  g_  — 文件级全局变量（file-scope static 或 extern）
+  s_  — 函数级静态变量（static local）
+
+示例:
+  static AppPower_Input_t  g_in;       — 模块输入槽（全局）
+  static AppPower_Output_t g_out;      — 模块输出槽（全局）
+  static uint8_t s_initialized = 0;    — 懒惰初始化标志（函数内 static）
+
+禁止: 无前缀的全局变量名（如 power, status, temp）——无法识别归属
+```
+
+### 4.4 常量/宏: `MODULE_NAME_{DESCRIPTIVE}`
+
+```
+格式: {UPPER_MODULE_NAME}_{UPPER_DESCRIPTIVE}
+
+示例:
+  APP_POWER_MAX_PWM          — app_power 模块的最大 PWM 值
+  DRV_KEY_DEBOUNCE_MS        — drv_key 模块的去抖时间
+  HAL_GPIO_PIN_COUNT         — hal_gpio 模块的引脚数
+  MSG_SLOT_DEPTH             — msg_scheduler 模块的队列深度
+
+禁止: 无模块前缀的裸常量（如 MAX_PWM, DEBOUNCE_MS）——无法识别归属
+```
+
+### 4.5 文件命名
 
 ```
 小写 + 下划线: drv_key.c, app_hmi.h, msg_scheduler.c
-模块前缀: 文件名体现所属层 (app_ / drv_ / hal_ / proto_)
+模块前缀: 文件名体现所属层 (app_ / drv_ / hal_ / proto_ / core_)
+_io.h 后缀: 数据交换机公开接口 (app_power_io.h, app_adc_io.h)
 ```
+
+### 4.6 命名速查
+
+| 元素 | 格式 | 示例 |
+|------|------|------|
+| 结构体 | `{Module}_{Name}_t` | `AppPower_Status_t` |
+| 函数 | `{Module}_{Action}()` | `AppPower_DoWork()` |
+| __weak 回调 | `{Module}_On{Event}()` | `AppPower_OnAdcData()` |
+| 全局变量 | `g_{name}` | `g_in`, `g_power_cache` |
+| 静态变量 | `s_{name}` | `s_initialized` |
+| 常量/宏 | `MODULE_{NAME}` | `APP_POWER_MAX_PWM` |
+| 文件 | `layer_module.c/.h` | `app_power.c`, `app_power_io.h` |
 
 ---
 
@@ -306,32 +398,48 @@ Module_Run()                    ← 主循环/调度槽直接调用
 Module_DoWork()                 ← Switcher 每周期调用
   ├─ [构造] 自检 g_in.status bit0=0 → _Constructor() → 置 bit0
   │
-  ├─ [输入] 消费 g_in 字段        ← Switcher 在上游已填入
-  │    检查 g_in.status bit1   ← 有新输入才继续, 否则 return
-  │    读取 g_in 字段           ← 搬到本地或直接用
-  │    g_in.status &= ~0x02   ← 消费完毕, 自清
+  ├─ [输入] 消费 g_in 字段        ← consumer STRONG 回调已 memcpy + 置 ST_NEW
+  │    检查 g_in.status & ST_NEW ← 有新输入才继续, 否则 return
+  │    消费 g_in 字段             ← 读取/搬运后 g_in.status &= ~ST_NEW
   │
   ├─ [计算] 核心逻辑              ← 纯计算, 不调输入/输出通道
   │
-  └─ [输出] 更新 g_out 字段       ← Switcher 在后续会取走
-       g_out.status |= 0x02    ← "有新输出"
-       (g_out.status &= ~0x02 已在进入时完成)
+  └─ [输出] 更新 g_out 字段       ← 写 g_out.para 后 g_output.status |= ST_OUT
+       DoWork 检测 ST_OUT → 调 _onOutput (自动, 模块无感知)
+
+
+/* 形式 C: std_module.h 宏骨架 (v2.1 推荐, 详见 09-std-module.md) */
+MODULE_SKELETON()               ← 展开 g_input/g_output/Constructor/DoWork
+  │
+  ├─ Init()                     ← 初始化绑定 g_input.para / g_output.para
+  │
+  ├─ ProcessInput()             ← 每帧被 DoWork 调用
+  │    ├─ [输入] 检查 g_input.info.status & ST_NEW → 消费 → &= ~ST_NEW
+  │    ├─ [计算] 纯逻辑
+  │    └─ [输出] 写 g_output.para → g_output.info.status |= ST_OUT
+  │
+  ├─ DoWork 检查 ST_OUT → 调 _onOutput(&g_output)
+  │    └─ _onOutput → consumer 的 STRONG {Module}_OnOutput() → memcpy 数据
+  │
+  └─ MODULE_EXPORT({Module})    ← GetIO + __weak OnOutput + constructor 注册
 ```
 
 **关键区别**:
 
-| | 形式 A (__weak) | 形式 B (Switcher) |
-|---|---|---|
-| 入口函数 | `Module_Run()` | `Module_DoWork()` |
-| 输入来源 | __weak 强符号 / Msg_Post | `g_in` 字段 (Switcher 预填) |
-| 输出去向 | __weak 回调 / Msg_Post | `g_out` 字段 (Switcher 取走) |
-| 输入有效性 | 被调 = 有效 | 检查 `g_in.status & 0x02` |
-| 类型可见性 | void* 解耦 (调用方不知道类型) | 类型化 struct (Switcher 持有所有 _io.h) |
-| 头文件 | `module.h` (private, `//#define`) | `_io.h` (public, `#define` 保留) + 可选 `module.h` |
+| | 形式 A (__weak) | 形式 B (Switcher v2.0) | 形式 C (std_module.h v2.1) |
+|---|---|---|---|
+| 入口函数 | `Module_Run()` | `Module_DoWork()` | `MODULE_SKELETON()` 展开 `DoWork()` |
+| 输入来源 | __weak 强符号 | `g_in` 字段 (Switcher copy) | consumer STRONG 回调 `memcpy` 到 `g_input.para` |
+| 输出去向 | __weak 回调 | `g_out` 字段 (Switcher copy) | `_onOutput` 函数指针 → consumer STRONG |
+| 数据搬运 | 无 (直接调) | Switcher 做 copy | consumer 自己做 `memcpy` |
+| 参数槽 | 无 | 自定义 Input_t/Output_t | 统一 `Para_Grp_t { info + void* para }` |
+| 构造机制 | `static uint8_t _init` | `g_in.status & 0x01` | `g_init_done` + `Constructor()` |
+| 头文件 | `module.h` (`//#define`) | `_io.h` (`#define`) + 可选 `module.h` | `std_module.h` + `_io.h` (`#define`) 可选 |
+| 推荐度 | 遗留 | 可用 | **v2.1 推荐** |
 
 ### 7.2 构造：懒惰初始化
 
-两种形式的构造机制不同但等价：
+三种形式的构造机制不同但等价：
 
 **形式 A (__weak 模块)**: `static` 局部变量自检。
 
@@ -347,16 +455,30 @@ void Module_Run(void)
 }
 ```
 
-**形式 B (Switcher 模块)**: `g_in.status bit0` 自检。Switcher_Init() 上电清零所有模块 status = 0，模块首次 DoWork 时检测 bit0=0 → 调 _Constructor() → 置 bit0。不需要外部 Init 函数。
+**形式 B (Switcher v2.0)**: `g_in.status bit0` 自检。
 
 ```c
 void Module_DoWork(void)
 {
-    if (!(g_in.status & 0x01)) {       /* Switcher 上电清零, 首次进入触发 */
-        _Constructor();                 /* static 函数, 初始化 g_in/g_out */
-        g_in.status |= 0x01;           /* 标记已构造 */
+    if (!(g_in.status & 0x01)) {
+        _Constructor();
+        g_in.status |= 0x01;
     }
     /* ... 三段式主体 ... */
+}
+```
+
+**形式 C (std_module.h v2.1)**: `MODULE_SKELETON()` 展开的 `Constructor()` 自动处理 — `memset` + 调 `Init()` + 置 `ST_INIT`。模块只需实现 `Init()` 绑定 `g_input.para` / `g_output.para`。
+
+```c
+MODULE_SKELETON();    /* Constructor 已包含 */
+
+static void Init(void)
+{
+    memset(&s_in,  0, sizeof(s_in));
+    memset(&s_out, 0, sizeof(s_out));
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 ```
 
@@ -431,23 +553,24 @@ uint16_t AlgoRamp_Calculate(uint16_t target, uint16_t current, void *cfg)
 ### 7.5 模块大小与范式适用
 
 ```
-主进程大模块 (APP层, ~200-500行)
-  ├─ Module_Run()           ← 三段式入口: 输入→计算→输出 (形式 A)
+std_module.h 宏骨架模块 (推荐, ~50-300行)
+  ├─ MODULE_SKELETON()      ← 展开 Constructor + DoWork (形式 C)
+  ├─ Init()                 ← 绑定 g_input.para / g_output.para
+  ├─ ProcessInput()         ← 三段式: 输入→计算→输出
+  ├─ MODULE_EXPORT({Name})  ← GetIO + __weak OnOutput + constructor
+  └─ {Producer}_OnOutput()  ← 每个数据源一个 STRONG 强符号
+
+主进程大模块 (APP层, ~200-500行, 形式 A 遗留)
+  ├─ Module_Run()           ← 三段式入口: 输入→计算→输出
   ├─ Module_OnXxx() 强符号  ← 输入回调 (被外部 __weak 调)
   └─ __weak Algo_Run()      ← 调子模块的空壳声明
-
-数据交换机模块 (APP层, ~100-300行)
-  ├─ Module_DoWork()        ← 三段式入口: 输入→计算→输出 (形式 B)
-  ├─ Module_GetIO()         ← 暴露 g_in/g_out 指针给 Switcher
-  ├─ _io.h                  ← 公开接口: Input_t, Output_t, GetIO(), DoWork()
-  └─ module.h (可选)         ← 私有配置常量, //#define 注释
 
 纯算法集 (无层归属, ~50-150行)
   ├─ Algo_Run(param)        ← 强符号覆盖上层的 __weak
   └─ 纯函数: 不调 I/O, 不访问全局, 不 include 业务层
 ```
 
-三者结构相同（输入→计算→输出），区别在输入来源/输出去向。
+三者结构相同（输入→计算→输出），区别在输入来源/输出去向。**新模块优先使用形式 C。**
 
 ### 7.6 通信选择速查
 
