@@ -46,28 +46,36 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
 
 ---
 
-## 二、__weak 与 Msg_Post 互补关系
+## 二、__weak / Msg_Post / 数据交换机 三种通信机制
 
-两者**不互相替代**，按调用时机选择。
+三者**不互相替代**，按调用时机和数据类型选择。
 
-| 方面 | __weak 直调 | Msg_Post 消息 |
-|------|-------------|---------------|
-| **适用** | 同时间片连续执行 | 跨时间片 / 跨进程 |
-| **时序** | 同步，调用即执行 | 异步，队列缓冲 |
-| 发送代码 | `Receiver_OnXxx(param, &data)` | `Msg_Post(ID, param, &data)` |
-| 接收注册 | 强符号同名函数 | `Register(ID, handler)` |
-| 消息 ID | 不需要 | 需要，全局唯一 |
-| 队列 | 无，直接调 | 环形队列 |
-| 运行时内存 | 0 | 队列缓冲+消息体 |
-| 独立编译 | 零外部依赖 | 需 msg_scheduler.o |
-| 多接收方 | 多个 __weak 逐一调用 | 多次 Msg_Post |
+| 方面 | __weak 直调 | Msg_Post 消息 | 数据交换机 |
+|------|-------------|---------------|-----------|
+| **适用** | 同时间片连续执行 | 跨时间片 / 跨进程 | 周期性结构化数据路由 |
+| **时序** | 同步，调用即执行 | 异步，队列缓冲 | 调度槽内顺序执行 |
+| 发送代码 | `Receiver_OnXxx(param, &data)` | `Msg_Post(ID, param, &data)` | Switcher 读 Output_t → 填 Input_t |
+| 接收注册 | 强符号同名函数 | `Register(ID, handler)` | `GetIO()` 暴露输入槽 + `DoWork()` |
+| 消息 ID | 不需要 | 需要，全局唯一 | 不需要 |
+| 队列 | 无，直接调 | 环形队列 | 无，指针搬运 |
+| 运行时内存 | 0 | 队列缓冲+消息体 | 每个模块一对 Input_t/Output_t |
+| 独立编译 | 零外部依赖 | 需 msg_scheduler.o | 需 Switcher (唯一中间层) |
+| 多接收方 | 多个 __weak 逐一调用 | 多次 Msg_Post | Switcher 分发给多个 Input_t |
+| 模块间互知 | 发送方知道函数名 | 发送方知道消息 ID | 模块间零互知，只看自己的槽 |
 
 ### 选择规则
 
 ```
 问: "这个操作必须在同一次调度槽内完成？"
-  → 是: 用 __weak 直调 ← 调用即执行，无延迟
-  → 否: 用 Msg_Post    ← 写入队列，下个时间片消费
+  → 是: __weak 直调 ← 调用即执行，无延迟
+  → 否:
+    问: "传递的是事件通知还是结构化数据块？"
+      → 事件通知: Msg_Post        ← 写入队列，下个时间片消费
+      → 结构化数据块: 数据交换机    ← Switcher 指针搬运，模块不需要 consumer struct 副本
+
+数据交换机的核心价值: 消除 consumer struct 副本 (_LINK_t)，
+数据路由集中在 Switcher，owner 字段变更只改接线不改 N 个 consumer。
+详见 08-data-switcher.md。
 ```
 
 ### 典型分工
@@ -76,9 +84,11 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
 |------|------|------|
 | DRV → HAL | __weak | 同步硬件操作，需立即生效 |
 | 主模块 → 算法集 | __weak | 连续计算，无延迟 |
+| ISR → 业务模块 | __weak | 延迟敏感，不走中间层 |
 | 按键 → 业务逻辑 | Msg_Post | 不在 ISR 中处理，延迟到主循环 |
 | 状态变更广播 | Msg_Post | 多模块异步感知，不需即时 |
 | 显示帧下发 | __weak 或回调指针 | COM 扫描每 1ms，不能异步排队 |
+| 周期性数据路由 (ADC→Power 等) | 数据交换机 | 结构化数据块，模块不需要 _LINK_t 副本 |
 
 ---
 

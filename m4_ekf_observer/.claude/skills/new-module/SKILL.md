@@ -1,14 +1,15 @@
 ---
 name: new-module
-description: "Interactive wizard to create a new module following the zero-coupling methodology. Guides through layer selection, header generation, three-phase implementation, struct registration, and weak pair setup. Triggers on: new module, add module, create module, new-module, 新增模块, 新建模块, 添加模块."
+description: "Interactive wizard to create a new module following the zero-coupling methodology v2.0 with Data Switcher. Guides through layer selection, header generation (including _io.h for Switcher), three-phase implementation, struct registration, and weak pair setup. Triggers on: new module, add module, create module, new-module, 新增模块, 新建模块, 添加模块."
 user-invocable: true
 ---
 
-# /new-module — 交互式模块创建向导 (m4_ekf_observer)
+# /new-module — 交互式模块创建向导 (m4_ekf_observer v2.0)
 
-Creates a new C module following the zero-coupling methodology SOP.
+Creates a new C module following the zero-coupling methodology SOP with Data Switcher support.
 
 **Project**: m4_ekf_observer (RX32G410, Cortex-M4F, armcc)
+**Methodology**: v2.0 — Data Switcher 中间层架构
 **Layers**: `app` | `base_class` | `proto` | `core`
 
 ---
@@ -20,6 +21,9 @@ Ask:
 ```
 1. Module name? (snake_case, e.g., "pot_detect", "power_ramp")
 2. Layer? (app | base_class | proto | core)
+3. Is this module a Producer for Data Switcher? (y/n)
+   - Producer: 输出数据供其他模块消费，需要创建 {module}_io.h
+   - Consumer: 消费其他模块数据，通过 Switcher 获取输入
 ```
 
 Show layer rules:
@@ -33,7 +37,7 @@ Show layer rules:
 
 ---
 
-## Step 2: Generate .h
+## Step 2: Generate Module Header ({layer}/{module}.h)
 
 Create `{layer}/{module}.h`:
 
@@ -46,13 +50,11 @@ Create `{layer}/{module}.h`:
  */
 
 #ifndef {MODULE}_H
-//#define {MODULE}_H       /* L0 compiler block */
-
+//#define {MODULE}_H       /* L0 compiler block — 禁止跨模块 include */
 
 /* === INTERFACE STRUCTS (OWNER) ==================================
  * 本模块是以下结构体的 Owner (生产者).
  * @STRUCT 标记由 check_structs.py 解析验证.
- * 消费者 AI 生成: 读取本段 → 生成副本 → 写入消费者 AI-MANAGED 段.
  *
  * 格式:
  *   /* @STRUCT StructName  owner={module}  suffix=OUT */
@@ -79,9 +81,57 @@ void {Module}_Run(void);
 
 ---
 
-## Step 3: Generate .c
+## Step 3: Generate _io.h for Producers (v2.0 Switcher Interface)
 
-Create `{layer}/{module}.c` with three-phase skeleton:
+**Only if user answered "y" to Step 1 Q3 (Is this a Producer):**
+
+Create `include/{module}_io.h`:
+
+```c
+/**
+ * @file    {module}_io.h
+ * @brief   {module} Data Switcher IO interface
+ * @layer   {layer} (Data Switcher IO)
+ *
+ * 本文件定义 {module} 模块对外暴露的输出接口.
+ * 仅 data_switcher.c 可用全路径 include 本文件.
+ *
+ * 协议 (详见 methodology-seed-v2.0/08-data-switcher.md):
+ *   status bit0=保留, bit1=新数据就绪 (本模块设, Switcher 清)
+ *   DoWork 进入时先清 bit1, 有新产出时置位
+ *   Switcher 检测 bit1 → 搬运字段到 consumer Input_t → 清 bit1
+ */
+
+#ifndef {MODULE}_IO_H
+#define {MODULE}_IO_H       /* ← 保留: _io.h 是公开接口, 两个合法 include 方 */
+
+#include <stdint.h>
+
+#pragma pack(4)
+
+/* === OUTPUT STRUCT (OWNER) ====================================== */
+typedef struct {
+    uint8_t  status;        /* bit0=保留, bit1=新数据就绪 (本模块设, Switcher 清) */
+    uint8_t  res[3];        /* 32位对齐 */
+    /* TODO: Add your output fields here */
+} {Module}_Output_t;
+
+#pragma pack()
+
+/* ---- public interface ---- */
+
+void {module}_GetIO({Module}_Output_t **ppOut);
+void {module}_DoWork(void);
+
+
+#endif /* {MODULE}_IO_H */
+```
+
+---
+
+## Step 4: Generate .c with Three-Phase Skeleton (v2.0 Standard)
+
+Create `{layer}/{module}.c`:
 
 ```c
 /**
@@ -92,100 +142,145 @@ Create `{layer}/{module}.c` with three-phase skeleton:
 
 #include "{module}.h"
 
-/* === AI-MANAGED: __weak stubs (what this module NEEDS) ===========
- *
- *  由 /new-module Step 5 自动生成, 与 interface_map.h 配对.
- *  不 include 提供方 .h — 链接器根据 STRONG 符号自动接线.
- * ================================================================ */
+/* === LOCAL STATE ================================================= */
+static {Module}_State_t s_self;
 
-__weak void Consumer_OnResult(uint16_t param, void *data) {}
+/* === OUTPUT BUFFER (for Producers) =============================== */
+#if PRODUCER_MODE
+static {Module}_Output_t s_out;
+#endif
+
+/* === INPUT CALLBACK (for Consumers) ============================== */
+__weak void {Module}_OnInput({Module}_Input_t *pInput) 
+{ (void)pInput; }
 
 /* === END AI-MANAGED === */
 
-/* ====== strong symbols (what this module PROVIDES) ====== */
-
-/* ====== module state ====== */
-
-/* ====== Module_Run ====== */
+/* ====== Module_Run (v2.0 Three-Phase Standard) ====== */
 
 void {Module}_Run(void)
 {
     static uint8_t _init = 0;
-    if (!_init) { _init = 1; /* init */ }
+    if (!_init) { 
+        _init = 1; 
+        /* --- INIT PHASE --- */
+        #if PRODUCER_MODE
+        s_out.status = 0x01;  /* bit0=已构造 */
+        #endif
+    }
 
-    /* --- INPUT --- */
+    /* ====== INPUT PHASE ====== */
+    /* 所有外部数据入口集中在此 */
+    #if CONSUMER_MODE
+    {Module}_Input_t input;
+    {Module}_OnInput(&input);  /* Switcher 会覆盖此 __weak 回调 */
+    #endif
 
-    /* --- COMPUTE --- */
+    /* ====== COMPUTE PHASE ====== */
+    /* 纯计算，不调输入/输出通道 */
+    // TODO: 核心算法、状态机、数据变换
 
-    /* --- OUTPUT --- */
+    /* ====== OUTPUT PHASE ====== */
+    /* 所有结果出口集中在此 */
+    #if PRODUCER_MODE
+    s_out.status |= 0x02;     /* bit1=新数据就绪 */
+    #endif
+}
+
+/* === PRODUCER IO Interface === */
+#if PRODUCER_MODE
+void {module}_GetIO({Module}_Output_t **ppOut)
+{
+    *ppOut = &s_out;
+}
+
+void {module}_DoWork(void)
+{
+    s_out.status &= ~0x02;    /* 每帧先清就绪标志 */
+    {Module}_Run();           /* 执行模块逻辑 */
+    /* 有新产出时由 _Run() 内部置位 bit1 */
+}
+#endif
+```
+
+---
+
+## Step 5: Update Data Switcher
+
+If this module is a **Producer** or **Consumer**, update `core/data_switcher.c`:
+
+### For Producers:
+```c
+// In data_switcher.c
+#include "../include/{module}_io.h"
+
+static {Module}_Output_t *p{Module};
+
+// In Switcher_Init()
+{module}_GetIO(&p{Module});
+p{Module}->status = 0x01;
+```
+
+### For Consumers:
+```c
+// In data_switcher.c
+void Switcher_Run_SlotX(void)
+{
+    // ... other producers ...
+    
+    if (p{Producer}->status & 0x02) {
+        {Consumer}_OnInput(p{Producer});  /* 结构体直接传参 */
+        p{Producer}->status &= ~0x02;     /* Switcher 清标志 */
+    }
+    
+    {Consumer}_DoWork();
 }
 ```
 
 ---
 
-## Step 4: Cross-Module Structs
+## Step 6: Register __weak Pairs
 
-### Mode A: structs.json 存在 → JSON 驱动生成
+Update `core/interface_map.h`:
 
-Edit `cfg/structs.json` → run:
+```c
+/* Pair X: {producer} → {consumer} (v2.0 Switcher PUSH) */
+ * 发送方: data_switcher.c  WEAK void {Consumer}_OnInput({Producer}_Output_t *pData) {}
+ * 接收方: {consumer}.c  void {Consumer}_OnInput({Producer}_Output_t *pData)
+ * v2.0: Switcher 检测 status bit1 → 回调(结构体直接传参) → 清标志
+ */
+```
+
+---
+
+## Step 7: Verify
+
+Run `/check`. All 4 checks must pass:
 
 ```bash
-python ../methodology-seed/tools/generate_structs.py . --project m4-ekf
+python ../methodology-seed/tools/check_deps.py . --project m4-ekf
+python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf
+python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+armcc -c --cpu Cortex-M4 --c99 -I... {module}.c
 ```
-
-### Mode B: 无 structs.json → AI 自动生成消费者副本
-
-**本模式适用于 m4_ekf_observer (float 类型 + 嵌套结构体, structs.json V1.0 不覆盖).**
-
-当新模块需要消费其他模块的结构体时, AI 自动完成:
-
-1. **读取 owner 的 .h 文件** → 找到 `INTERFACE STRUCTS` 段 → 提取目标 `@STRUCT` 定义
-2. **生成消费者副本** → 写入新模块 .h 的 `INTERFACE STRUCTS` 段:
-   - 类型名: `{NewModule}_{StructKey}_IN_t` (如 `AppAdc_IH_ElecResult_IN_t`)
-   - `source=` 指向 owner 结构体名 (如 `source=IH_ElecResult`)
-   - `owner=<新模块名>`, `suffix=IN`
-   - 每条字段注释 `/* offset=N, size=N */` — 与 owner 完全一致
-3. **自动计算嵌套结构体链** — 如 `IH_ElecInputDef` 嵌套了 `IH_CycleDataDef`, `IH_CycleDataDef` 嵌套了 `IH_HrtimState`, AI 递归生成所有层级的消费者副本
-4. **更新 `core/interface_map.h`** — 注册结构体配对 (owner → consumer)
-
-**约束**: `check_structs.py` 解析所有 `@STRUCT` 标记, 自动验证 consumer 的 offset/type/sizeof 与 owner 一致 (含嵌套结构体的 source 链匹配).
-
-**AI 自检**: 生成后立即运行 `/check` — `check_structs.py` 必须 PASS.
 
 ---
 
-## Step 5: Register __weak Pairs
+## v2.0 Communication Selection
 
-Update `core/interface_map.h` with pair entries and function signatures.
-
-### 算法集调用模式 (caller → algorithm)
-
-```
-调用方: {caller}.c       WEAK void Algo_Func(void *in, void *out) {}
-提供方: {algo}.c                void Algo_Func(void *in, void *out)
-```
-
-- 调用方声明 `__weak` 空壳, **不 include** 算法集 .h
-- 算法集提供 STRONG 符号, `void*` 内部强制转换
-- interface_map.h 注册配对, check_weak_pairs.py 验证
+| Scenario | Mechanism | Implementation |
+|----------|-----------|---------------|
+| **Switcher 路由** (周期性数据) | Struct direct param | `Consumer_OnInput(Producer_Output_t*)` |
+| **ISR → 业务** (延迟敏感) | `__weak` direct call | 零中间层，链接器接线 |
+| **跨时间片异步** | `Msg_Post` | 队列缓冲 |
+| **纯算法集调用** | `__weak` + `void*` | 不 include .h，链接器接线 |
 
 ---
 
-## Step 6: Verify
+## v2.0 Key Rules Summary
 
-Run `/check`. All 4 checks must pass.
-
----
-
-## Communication Selection
-
-| Scenario | Mechanism |
-|----------|-----------|
-| Same time-slice, ≤1ms latency | `__weak` direct call |
-| Cross time-slice, async | `Msg_Post` |
-| Pure algorithm, no I/O | `__weak` without `#include` |
-
-## Callback Insertion
-
-- Input/output/algorithm-set callbacks: standard, no confirmation needed
-- **Mid-compute ad-hoc callback: MUST ask user before adding**
+1. **_io.h 文件**: 保留 `#define`，仅允许 `data_switcher.c` 全路径 include
+2. **普通 .h 文件**: 屏蔽 `//#define`，禁止跨模块 include
+3. **Status Bit 协议**: bit0=已构造, bit1=新数据就绪
+4. **输入回调**: 所有外部参数通过 `_OnInput()` 统一获取
+5. **Switcher 职责**: 检测 bit1 → 调用输入回调 → 清零 bit1

@@ -141,6 +141,24 @@ python tools/check_structs.py  ← 验证一致性
 - `_LINK` = 联合管理，前后缀利于 Python 工具检索配对
 - 前缀 `{Module}_` 标明所属模块，后缀 `_LINK` 标记跨模块联合维护
 
+**_LINK 的替代路径**：
+
+当 consumer 超过 2 个或 struct 字段频繁变更时，考虑废弃 `_LINK` 副本，改用数据交换机（`08-data-switcher.md`）。Switcher 持有所有模块的 IO 指针，运行时从生产者输出槽取数据填入消费者输入槽。模块不再需要独立声明与 owner 布局相同的 consumer struct。
+
+**决策表**:
+
+| 条件 | 建议 | 原因 |
+|------|------|------|
+| 1 个 consumer, 字段稳定 | `_LINK` 可接受 | 维护负担小 |
+| ≥2 个 consumer | 数据交换机 | 改一个 Output_t → 改 N 个 _LINK 容易出错 |
+| 字段频繁变更 | 数据交换机 | 只需改 Switcher 接线，不影响 consumer |
+| consumer 需要多源汇聚 | 数据交换机 | Input_t 统一入口，Switcher 负责聚合 |
+| ISR 延迟敏感 | `__weak` 直调 | 不走 Switcher，不受调度槽限制 |
+
+`_LINK` 和 Switcher 的关系：Switcher 是更激进的那一档——连副本都不需要了。但 Switcher 引入了中间层调度开销（~1 帧延迟），不适合 ISR 路径。
+
+**从 _LINK 迁移到 Switcher 的标志**: 发现自己在两个 `.h` 之间同步 struct 字段 → 立即考虑迁移。这就是 m4_ekf_observer 项目触发 v2.0 升级的原因。
+
 ### 6.3 与 interface_map.h 的分工
 
 | 文档 | 管什么 | 维护方式 |

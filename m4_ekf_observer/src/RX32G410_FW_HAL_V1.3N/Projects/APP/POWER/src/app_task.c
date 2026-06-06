@@ -21,7 +21,6 @@
 
 #include	"app_task.h"
 #include	"app_power.h"
-#include	"app_power.h"
 #include	"APP_ZERO.H"
 #include	"APP_ADC.H"
 
@@ -97,13 +96,15 @@ void Task_TimeChip0(void)
 
 }
 
+__attribute__((weak)) void Switcher_Run_Slot1(void) {}
+__attribute__((weak)) void Switcher_Init(void) {}
+
 void Task_TimeChip1(void)
 {
 
 //	API_TIM_TGO_PPG_SINGLE_Start();
 
- 		AdcValueFun();					//APP_ADC: 采集 ADC 数据 (Pair O 发送方)
- 		PowerTypeFun();					//统一处理功率的模式，
+ 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
 
 }
 void Task_TimeChip2(void)
@@ -358,6 +359,7 @@ void AppTask_Init(void)
 {
 	
 	Sys_SetTskFunAddress((TSK_FUN*)TaskFun);
+	Switcher_Init();                 /* v2.0 Data Switcher 初始化 */
 //	SetDrvCallbackFun(TimIrqHandlePPGstepChange,TIM6_PPGstepChangeFun);					//调整PPG值增减
 //	SetDrvCallbackFun(Tim8IrqHandlePPGstepChange,TIM8_PPGstepChangeFun);				//设置PPG到寄存器	
 //	

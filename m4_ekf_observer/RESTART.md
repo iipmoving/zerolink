@@ -83,22 +83,22 @@ HAL (RX32G410 FW HAL V1.3N)            ← 原厂固件库 (只读不写)
 
 ### 3.2 谐振参数
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| C_known | 0.90 μF | 0.45μF×2 并联 |
-| L_iron @30kHz | 65 μH | 铁锅 |
-| L_iron @20kHz | 70 μH | 铁锅低频 |
-| L_steel @30kHz | 57 μH | 钢锅 |
-| f0_iron | 20-21 kHz | 实测 |
-| f0_steel | 23-24 kHz | 实测 |
+| 参数             | 值         | 说明          |
+| -------------- | --------- | ----------- |
+| C_known        | 0.94μF    | 0.45μF×2 并联 |
+| L_iron @30kHz  | 65 μH     | 铁锅          |
+| L_iron @20kHz  | 70 μH     | 铁锅低频        |
+| L_steel @30kHz | 57 μH     | 钢锅          |
+| f0_iron        | 20-21 kHz | 实测          |
+| f0_steel       | 23-24 kHz | 实测          |
 
 ### 3.3 三相验证数据集
 
-| 数据集 | Vbus ADC | Vbus | 相位 | 用途 |
-|--------|---------|------|------|------|
-| D1 (高电压) | ~2860 | ~300V | ≈90° | 大功率基准 |
-| D2 (中电压) | ~2240 | ~235V | ≈87° | 常规工况 |
-| D3 (低电压) | ~920 | ~97V | ≈94° | 低功率验证 |
+| 数据集      | Vbus ADC | Vbus  | 相位   | 用途    |
+| -------- | -------- | ----- | ---- | ----- |
+| D1 (高电压) | ~2860    | ~300V | ≈90° | 大功率基准 |
+| D2 (中电压) | ~2240    | ~235V | ≈87° | 常规工况  |
+| D3 (低电压) | ~920     | ~97V  | ≈94° | 低功率验证 |
 
 ---
 
@@ -119,14 +119,14 @@ HAL (RX32G410 FW HAL V1.3N)            ← 原厂固件库 (只读不写)
 
 ### 4.2 待推进
 
-| 优先级 | 任务 | 依赖 | 规划文档 |
-|--------|------|------|---------|
-| **P0** | WaveCapture 模块 — printMessage→MODBUS波形回读 | — | `docs/WAVECAPTURE-PLAN.md` |
-| **P1** | EKF C 端移植 (ekf_resonant_track.c) | 需完整源文件 | `docs/ekf-implementation-plan.md` |
-| **P1** | EKF 补丁 5 处集成 (FIRMWARE_PATCH.md) | 需完整源文件 | `app/ekf/FIRMWARE_PATCH.md` |
-| **P2** | HRTIM MASTER 同步简化 (hrtim-master-sync) | EKF 完成后 | `memory/project_m4-hrtim-master-sync-simplify.md` |
-| **P3** | 半桥→全桥迁移 (migrate-full-bridge) | HRTIM完成后 | `memory/project_m4-half-to-full-bridge-migration.md` |
-| **P4** | APP 层逐步解耦 (__weak回调化) | 不紧急 | `memory/m4-architecture-analysis.md` |
+| 优先级    | 任务                                       | 依赖       | 规划文档                                                 |
+| ------ | ---------------------------------------- | -------- | ---------------------------------------------------- |
+| **P0** | WaveCapture 模块 — printMessage→MODBUS波形回读 | —        | `docs/WAVECAPTURE-PLAN.md`                           |
+| **P1** | EKF C 端移植 (ekf_resonant_track.c)         | 需完整源文件   | `docs/ekf-implementation-plan.md`                    |
+| **P1** | EKF 补丁 5 处集成 (FIRMWARE_PATCH.md)         | 需完整源文件   | `app/ekf/FIRMWARE_PATCH.md`                          |
+| **P2** | HRTIM MASTER 同步简化 (hrtim-master-sync)    | EKF 完成后  | `memory/project_m4-hrtim-master-sync-simplify.md`    |
+| **P3** | 半桥→全桥迁移 (migrate-full-bridge)            | HRTIM完成后 | `memory/project_m4-half-to-full-bridge-migration.md` |
+| **P4** | APP 层逐步解耦 (__weak回调化)                    | 不紧急      | `memory/m4-architecture-analysis.md`                 |
 
 ### 4.3 已知固件问题
 

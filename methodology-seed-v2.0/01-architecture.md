@@ -92,22 +92,51 @@
 APP:   不得 include drv/ 或 hal/
 DRV:   不得 include app/
 HAL:   零依赖，不知上层存在
-APP↔APP: 只通过 __weak 回调通信，禁止直接 include 或调用
+APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁止直接 include 或调用
 仅 DRV → HAL 合法
 ```
 
 **约束机制**: `check_deps.py` 扫描所有 `#include` 语句，对照层白名单。违规 → 非零退出码 → pre-commit hook 阻断。
 
-### 铁律二：__weak 回调是唯一跨模块通信机制 [L0: 链接器 + L1: check_weak_pairs.py]
+### 铁律二：三种通信机制互补 [L0: 链接器 + L1: check_weak_pairs.py]
+
+**三种通信机制，按调用时机和数据类型选择，不互相替代。**
+
+| 机制 | 适用场景 | 调用时机 | 中间层 |
+|------|---------|---------|--------|
+| `__weak` 直调 | 同时间片连续执行 | 同步，调用即执行 | 无（链接器接线） |
+| `Msg_Post` 消息 | 跨时间片 / 跨进程 | 异步，队列缓冲 | msg_scheduler |
+| 数据交换机 | 周期性结构化数据路由 | 调度槽内顺序执行 | Switcher（指针搬运） |
 
 ```
+/* 同步场景 — __weak 直调 */
 发送方: __weak void Receiver_OnXxx(uint16_t param, void *data_ptr) {}  (空壳)
 接收方:        void Receiver_OnXxx(uint16_t param, void *data_ptr) {}  (强符号)
-发送时机: 直接调用 Receiver_OnXxx(param, data)
-无队列，无注册，无消息 ID
+调用:    Receiver_OnXxx(param, data)  — 立即执行，无队列，无注册
+
+/* 异步场景 — Msg_Post */
+发送方: Msg_Post(MSG_KEY_EVENT, param, &data)  — 写入环形队列
+接收方: MsgScheduler_Register(MSG_KEY_EVENT, handler)  — 下个时间片消费
+
+/* 结构化数据路由 — 数据交换机 */
+发送方: ModuleA_DoWork() → g_out.status |= 0x02        — 输出就绪
+中间层: Switcher 检测 bit1 → 搬运 Output_t → Input_t   — 指针/值拷贝
+接收方: ModuleB_DoWork() → 检查 g_in.status bit1 → 消费 — 下个调度槽
 ```
 
-**约束机制**: L0 — 强符号自动覆盖弱符号（链接器保证）。函数名不匹配则链接失败。L1 — `check_weak_pairs.py` 验证 `interface_map.h` 记录的配对是否在代码中存在、签名一致。
+**选择规则（两层）**:
+
+```
+1. 这个操作必须在同一次调度槽内完成？
+   → 是: __weak 直调 ← 调用即执行，无延迟
+   → 否: 进入下一问
+
+2. 传递的是事件通知还是结构化数据块？
+   → 事件通知: Msg_Post        ← 写入队列，下个时间片消费
+   → 结构化数据块: 数据交换机    ← Switcher 指针搬运，模块不需要 _LINK_t 副本
+```
+
+**约束机制**: L0 — 强符号自动覆盖弱符号（链接器保证），函数名不匹配则链接失败。L1 — `check_weak_pairs.py` 验证 `interface_map.h` 记录的配对是否在代码中存在、签名一致。数据交换机侧：`check_include.py` 阻断非 Switcher 文件的全路径 `_io.h` 引用。
 
 ### 铁律三：独立声明，生成器管一致性 [L2: generate_structs.py + check_structs.py]
 
@@ -245,3 +274,189 @@ python tools/check_weak_pairs.py      # __weak 配对检查
 python tools/check_structs.py         # 结构体一致性检查
 armcc -c ... → 0 error, 0 warning     # 编译验证
 ```
+
+---
+
+## 七、模块三段式范式
+
+### 7.1 总览
+
+所有模块（无论大小）统一为三段式结构：**输入 → 计算 → 输出**。
+
+模块入口有两种形式，取决于通信机制：
+
+```
+/* 形式 A: __weak / Msg_Post 模块 (铁律二传统模式) */
+Module_Run()                    ← 主循环/调度槽直接调用
+  ├─ [构造] 首次调用懒惰初始化    ← static initialized 自检，不需外部 Init
+  │
+  ├─ [输入] 回调/消息收参        ← 所有输入顶部集中，禁止中途插回调
+  │    ├─ __weak 强符号函数      ← 同时间片同步数据
+  │    └─ Msg_Post 消费         ← 跨时间片异步数据
+  │
+  ├─ [计算] 核心逻辑              ← 纯计算，不调输入/输出通道
+  │    └─ 调子模块 __weak 直调   ← 子模块也不 include .h
+  │
+  └─ [输出] 回调/消息丢结果       ← 所有输出底部集中
+       ├─ Consumer_OnResult()    ← 同步回调给同时间片下游
+       └─ Msg_Post(...)         ← 异步给跨时间片下游
+
+
+/* 形式 B: 数据交换机模块 (铁律二 Switcher 模式, 详见 08-data-switcher.md) */
+Module_DoWork()                 ← Switcher 每周期调用
+  ├─ [构造] 自检 g_in.status bit0=0 → _Constructor() → 置 bit0
+  │
+  ├─ [输入] 消费 g_in 字段        ← Switcher 在上游已填入
+  │    检查 g_in.status bit1   ← 有新输入才继续, 否则 return
+  │    读取 g_in 字段           ← 搬到本地或直接用
+  │    g_in.status &= ~0x02   ← 消费完毕, 自清
+  │
+  ├─ [计算] 核心逻辑              ← 纯计算, 不调输入/输出通道
+  │
+  └─ [输出] 更新 g_out 字段       ← Switcher 在后续会取走
+       g_out.status |= 0x02    ← "有新输出"
+       (g_out.status &= ~0x02 已在进入时完成)
+```
+
+**关键区别**:
+
+| | 形式 A (__weak) | 形式 B (Switcher) |
+|---|---|---|
+| 入口函数 | `Module_Run()` | `Module_DoWork()` |
+| 输入来源 | __weak 强符号 / Msg_Post | `g_in` 字段 (Switcher 预填) |
+| 输出去向 | __weak 回调 / Msg_Post | `g_out` 字段 (Switcher 取走) |
+| 输入有效性 | 被调 = 有效 | 检查 `g_in.status & 0x02` |
+| 类型可见性 | void* 解耦 (调用方不知道类型) | 类型化 struct (Switcher 持有所有 _io.h) |
+| 头文件 | `module.h` (private, `//#define`) | `_io.h` (public, `#define` 保留) + 可选 `module.h` |
+
+### 7.2 构造：懒惰初始化
+
+两种形式的构造机制不同但等价：
+
+**形式 A (__weak 模块)**: `static` 局部变量自检。
+
+```c
+void Module_Run(void)
+{
+    static uint8_t initialized = 0;
+    if (!initialized) {
+        initialized = 1;
+        /* 初始化自己的状态变量 */
+    }
+    /* ... 三段式主体 ... */
+}
+```
+
+**形式 B (Switcher 模块)**: `g_in.status bit0` 自检。Switcher_Init() 上电清零所有模块 status = 0，模块首次 DoWork 时检测 bit0=0 → 调 _Constructor() → 置 bit0。不需要外部 Init 函数。
+
+```c
+void Module_DoWork(void)
+{
+    if (!(g_in.status & 0x01)) {       /* Switcher 上电清零, 首次进入触发 */
+        _Constructor();                 /* static 函数, 初始化 g_in/g_out */
+        g_in.status |= 0x01;           /* 标记已构造 */
+    }
+    /* ... 三段式主体 ... */
+}
+```
+
+**约束**: `main()` 不调用 `Module_Init()`。Switcher_Init() 只做指针绑定 + 清零 status，不知道模块内部构造逻辑。构造逻辑是模块私有的。
+
+### 7.3 输入段：提前规划，禁止中途回调
+
+所有外部数据的入口集中在模块顶部。不允许在计算逻辑中间插入新的 `__weak` 回调声明或 `Msg_Post` 消费。
+
+**规划原则**: 新模块时先问——"这个模块需要哪些外部数据？"→ 一次性声明所有输入回调 → 再写计算逻辑。
+
+**回调插入分级**:
+
+| 类型 | 位置 | 是否需要确认 |
+|------|------|-------------|
+| 输入回调（顶部） | 输入段 | 否 — 标准做法 |
+| 输出回调（底部） | 输出段 | 否 — 标准做法 |
+| 算法子集调用（__weak） | 计算段 | 否 — 必须的依赖，不 include .h |
+| **即时回调（计算段中途）** | 计算段 | **是 — 必须用户确认** |
+
+**即时回调管控**: 计算段中间发现需要一个外部数据 → **先停下来问**，不是先加上再说。如果规划到位，输入段已经覆盖所有需要的外部参数，很少需要中途插入。
+
+```c
+void AppPower_Run(void)
+{
+    /* ====== 输入段 ====== */
+    /* __weak 被覆盖 → 非空调用, 未覆盖 → 空壳跳过 */
+    AppPower_OnTargetPower(POWER_DEFAULT, NULL);
+    /* Msg_Post 异步消息 — 前一帧缓存的功率指令 */
+    /* ... */
+    
+    /* ====== 计算段 ====== */
+    uint16_t power = CalculateRamp(s_target, s_current);
+    
+    /* ====== 输出段 ====== */
+    DrvPower_OnSet(power, NULL);    /* 同步 → 同时间片生效 */
+    Msg_Post(MSG_POWER_DONE, 0, NULL);  /* 异步 → 下时间片通知 */
+}
+```
+
+### 7.4 主模块调纯算法集：不 include .h
+
+大模块调用内部算法集时，不 `#include "algo.h"`。在自身 .c 顶部声明 `__weak` 空壳，链接时由算法集的强符号覆盖。
+
+```c
+/* === app_power.c (主模块) === */
+/* 声明 __weak — 替代 #include "algo_ramp.h" */
+__weak uint16_t AlgoRamp_Calculate(uint16_t target, uint16_t current, void *cfg)
+{ return target; }  /* 空壳：无算法集时直通 */
+
+void AppPower_Run(void)
+{
+    /* ... 输入段 ... */
+    uint16_t result = AlgoRamp_Calculate(s_target, s_current, &s_ramp_cfg);
+    /* ... 输出段 ... */
+}
+
+/* === algo_ramp.c (纯算法集) === */
+/* 强符号覆盖 __weak 空壳 */
+uint16_t AlgoRamp_Calculate(uint16_t target, uint16_t current, void *cfg)
+{
+    RampCfg_t *c = (RampCfg_t *)cfg;
+    /* 纯计算 — 不访问全局变量，不调 I/O */
+    return (target > current) 
+        ? min(current + c->step_up, target)
+        : max(current - c->step_down, target);
+}
+```
+
+**效果**: 大模块 .c 不 include 算法集 .h。`interface_map.h` 记录配对的弱/强关系，`check_weak_pairs.py` 验证签名一致。
+
+### 7.5 模块大小与范式适用
+
+```
+主进程大模块 (APP层, ~200-500行)
+  ├─ Module_Run()           ← 三段式入口: 输入→计算→输出 (形式 A)
+  ├─ Module_OnXxx() 强符号  ← 输入回调 (被外部 __weak 调)
+  └─ __weak Algo_Run()      ← 调子模块的空壳声明
+
+数据交换机模块 (APP层, ~100-300行)
+  ├─ Module_DoWork()        ← 三段式入口: 输入→计算→输出 (形式 B)
+  ├─ Module_GetIO()         ← 暴露 g_in/g_out 指针给 Switcher
+  ├─ _io.h                  ← 公开接口: Input_t, Output_t, GetIO(), DoWork()
+  └─ module.h (可选)         ← 私有配置常量, //#define 注释
+
+纯算法集 (无层归属, ~50-150行)
+  ├─ Algo_Run(param)        ← 强符号覆盖上层的 __weak
+  └─ 纯函数: 不调 I/O, 不访问全局, 不 include 业务层
+```
+
+三者结构相同（输入→计算→输出），区别在输入来源/输出去向。
+
+### 7.6 通信选择速查
+
+| 场景 | 机制 | 示例 |
+|------|------|------|
+| 同时间片连续调用（上下级） | `__weak` 直调 | 主模块 → 算法集 / DRV → HAL |
+| 同时间片平行模块 | `__weak` 直调 | APP 显示 → 装配器 |
+| 跨时间片异步通知 | `Msg_Post` | 按键事件 → 业务 / 状态变更广播 |
+| 跨时间片延迟消费 | `Msg_Post` | 功率下发 → MODBUS 下一帧发送 |
+| 周期性结构化数据路由 | 数据交换机 | ADC输出→Power输入 / 状态广播 |
+
+**原则**: 同步走 `__weak`，异步走 `Msg_Post`，结构化数据路由走数据交换机。三者不互相替代，组合使用。

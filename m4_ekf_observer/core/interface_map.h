@@ -43,20 +43,21 @@
  * consumer: app_power      (app)        — Power_AdcOut_IN_t     (sizeof=16)
  */
 
-/* Pair S6: ADC 原始值输出 → app_power 消费 (替代 getADCinputValue)
- * owner:    app_adc        (app)        — AdcRawInput           (sizeof=52)
- * consumer: app_power      (app)        — Power_RawInput_LINK_t   (sizeof=52)
+/* Pair S6: [已迁移] ADC 原始值输出 → Data Switcher v2.0
+ * v1.0: Power_RawInput_LINK_t (已删除)
+ * v2.0: include/app_adc_io.h → Adc_Output_t.inputValue[]
+ * 路由: data_switcher.c → memcpy(pPower_In->inputValue, pAdc_Out->inputValue)
  */
 
-/* Pair S7: AWD DNTR 类型 → app_power 消费 (ISR 回调参数)
- * owner:    app_adc        (app)        — APP_ADC_AWD_DNTR_DEF  (sizeof=24)
- * consumer: app_power      (app)        — Power_AwdDntr_LINK_t    (sizeof=24)
+/* Pair S7: [已迁移] AWD DNTR 类型 → 本地定义
+ * v1.0: Power_AwdDntr_LINK_t (app_power.h, 已删除)
+ * v2.0: app_power.c 本地 typedef (ISR 路径使用)
  */
 
-
-/* Pair S8: ADC 全量数据 → app_power 消费 (Pair O PUSH 指针)
- * owner:    app_adc        (app)        — APP_ADC_DEF
- * consumer: app_power      (app)        — Power_AdcDef_LINK_t    (inputValue[30] @ offset 4)
+/* Pair S8: [已迁移] ADC 全量数据 → Data Switcher v2.0
+ * v1.0: Power_AdcDef_LINK_t (app_power.h, 已删除)
+ * v2.0: static const Power_Input_t *_adc (指向 g_in, Switcher 直接填入)
+ * 路由: data_switcher.c → memcpy(g_in.inputValue, Adc_Output_t.inputValue) → Power_DoWork 消费
  */
 
 
@@ -118,10 +119,50 @@
  * 接收方: app_power.c  void API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)
  * 注: 原在 APP_ADC.C, 现完整迁入 app_power.c; 内部直接调用 APP_ADC_IRQ_PPGstepDecTxA
 
-/* Pair O: APP_ADC → app_power (ADC 数据就绪, PUSH 范式: void *input) */
- * 发送方: APP_ADC.C  WEAK void AppAdc_OnDataReady(void *input) { (void)input; }
- * 接收方: app_power.c  void AppAdc_OnDataReady(void *input)
- * 传: &AdcFunRam.inputValue → 存到 _adc.input_value, 调 APP_PPG_SetIcVcOk()
+/* Pair O: [已删除] APP_ADC → app_power (AppAdc_OnDataReady)
+ * v2.0: 数据由 Switcher 直接 memcpy 到 g_in.inputValue[], Power_DoWork 内部消费.
+ *       __weak 回调不再需要.  发送方 WEAK 和接收方 STRONG 均已移除.
+ */
+
+/* Pair P: app_task → data_switcher (Slot1 调度入口) */
+ * 发送方: app_task.c  WEAK void Switcher_Run_Slot1(void) {}
+ * 接收方: data_switcher.c  void Switcher_Run_Slot1(void)
+ * v2.0: 替代 Task_TimeChip1 中的 AdcValueFun() + PowerTypeFun()
+
+/* Pair Q: app_task → data_switcher (Switcher 初始化) */
+ * 发送方: app_task.c  WEAK void Switcher_Init(void) {}
+ * 接收方: data_switcher.c  void Switcher_Init(void)
+ * v2.0: AppTask_Init 中调用, 绑定各模块 output 指针
+
+/* Pair R: [已删除] APP_ADC → app_power (Power_OnAdcData)
+ * v2.0: Switcher 直接写入 g_in.inputValue[], Power_DoWork 从 g_in 消费.
+ *       不需要中间回调转发.
+ */
+
+/* Pair T: APP_ADC → app_power (TxaAwd 设置, ISR 路径)
+ * 发送方: APP_ADC.C  WEAK void APP_POWERR_SetTxaAwdValue(void) {}
+ * 接收方: app_power.c  void APP_POWERR_SetTxaAwdValue(void)
+ */
+
+/* Pair U: APP_ADC → app_power (TxaAwd 设置 v2, ISR 路径)
+ * 发送方: APP_ADC.C  WEAK void APP_POWER_SetTxaAwdValue(void) {}
+ * 接收方: app_power.c  void APP_POWER_SetTxaAwdValue(void)
+ */
+
+/* Pair V: APP_ADC → app_power (PAN DMA 缓冲地址, ISR 路径)
+ * 发送方: APP_ADC.C  WEAK int16_t* APP_POWER_GetPanDmaBuffAddress(void) { return 0; }
+ * 接收方: app_power.c  int16_t* APP_POWER_GetPanDmaBuffAddress(void)
+ */
+
+/* Pair W: app_power → APP_ADC (PAN 通道切换, ISR 路径)
+ * 发送方: app_power.c  WEAK void APP_ADC_PanSwChange(uint32_t ch) { (void)ch; }
+ * 接收方: APP_ADC.C  void APP_ADC_PanSwChange(uint32_t ch)
+ */
+
+/* Pair X: app_power → APP_ADC (PAN DMA 恢复, ISR 路径)
+ * 发送方: app_power.c  WEAK void APP_ADC_DMA_RecoverPan(uint8_t ch) { (void)ch; }
+ * 接收方: APP_ADC.C  void APP_ADC_DMA_RecoverPan(uint8_t ch)
+ */
 
 
 #endif /* INTERFACE_MAP_H */

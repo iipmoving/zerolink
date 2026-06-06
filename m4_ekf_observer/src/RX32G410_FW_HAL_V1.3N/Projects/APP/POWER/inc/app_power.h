@@ -21,49 +21,10 @@
 #include "data_type.h"
 
 
-/* === AI-MANAGED INTERFACE STRUCTS (CONSUMER) ======================
- *
- *  双向维护区 — AI 从 owner 自动同步, 禁止手动编辑
- *
- *  消费者: app_power
- *  Owner:  APP_ADC.H / app_adc
- *
- *  check_structs.py 自动验证 sizeof/offset 与 owner 一致.
- *  owner 字段变更后 AI 必须同步更新本段.
- *
- *  命名: {Module}_{OwnerStruct}_LINK_t  (_LINK = 联合管理)
- *
+/* === v2.0 Data Switcher: 跨模块结构体已迁移至 include/app_power_io.h ===
+ * 原 _LINK 双向维护区 (S6/S7/S8) 已删除.
+ * app_power 通过 Power_DoWork() 从 g_in (Power_Input_t) 消费 Switcher 填入的数据.
  * ==================================================================== */
-
-#pragma pack(4)
-
-/* @STRUCT Pair S6 owner=app_adc  suffix=LINK  source=AdcRawInput */
-typedef struct {
-    uint32_t txa_current[4];
-    uint32_t voltage;
-    uint32_t phase[4];
-    uint32_t ceil_q[4];
-} Power_RawInput_LINK_t;
-
-/* @STRUCT Pair S7 owner=app_adc  suffix=LINK  source=APP_ADC_AWD_DNTR_DEF */
-typedef struct {
-    uint32_t num;
-    uint32_t ch;
-    uint32_t res;
-    uint32_t dntr[5];
-} Power_AwdDntr_LINK_t;
-
-/* @STRUCT Pair S8 owner=app_adc  suffix=LINK  source=APP_ADC_DEF */
-typedef struct {
-    uint8_t  adc20msCount;
-    uint8_t  flag20ms;
-    uint8_t  adcSelect;
-    uint8_t  res;
-    uint32_t inputValue[30];   /* AdcGroupMax = 30 */
-} Power_AdcDef_LINK_t;
-#pragma pack()
-
-/* === END AI-MANAGED INTERFACE STRUCTS === */
 
 
 

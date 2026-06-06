@@ -15,7 +15,7 @@
       "forbidden": ["app/", "base_class/"]
     },
     "core": {
-      "allowed": ["core/", "<"],
+      "allowed": ["core/", "include/", "<"],
       "forbidden": ["app/", "base_class/", "proto/"]
     }
   }

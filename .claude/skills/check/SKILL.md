@@ -1,10 +1,10 @@
 ---
 name: check
-description: "Run all four methodology compliance checks on the current project. Use after every code change to verify layer dependencies, weak pairs, struct consistency, and compilation. Triggers on: check, 检查, 验证, audit, verify, 审计, 合规检查."
+description: "Run all methodology compliance checks on the current project. Use after every code change to verify layer dependencies, weak pairs, struct consistency, include permissions, and compilation. Triggers on: check, 检查, 验证, audit, verify, 审计, 合规检查."
 user-invocable: true
 ---
 
-# /check — 一键四件套合规审计
+# /check — 一键合规审计
 
 Run all methodology checks against the current project and report pass/fail with violation locations.
 
@@ -12,7 +12,7 @@ Run all methodology checks against the current project and report pass/fail with
 
 ## The Job
 
-Execute four checks sequentially. **Do NOT stop on first failure** — run all four and produce a full report. Each check must report `[PASS]` or `[FAIL]` with file:line locations on failure.
+Execute up to five checks sequentially. **Do NOT stop on first failure** — run all applicable checks and produce a full report. Each check must report `[PASS]` or `[FAIL]` with file:line locations on failure. Checks that don't apply to the project report `[SKIP]`.
 
 ---
 
@@ -22,9 +22,9 @@ Determine which project we are in:
 
 | Signal | Project | Tools subdir |
 |--------|---------|-------------|
-| `src/app/` `src/drv/` `src/hal/` exist | four_head | `../methodology-seed/tools/` |
-| `app/` `base_class/` `src/RX32G410_FW_HAL_V1.3N/` exist | m4_ekf_observer | `../methodology-seed/tools/` |
-| `methodology-seed/tools/` exists in cwd | methodology-seed itself | `tools/` |
+| `src/app/` `src/drv/` `src/hal/` exist | four_head | `../methodology-seed-v2.0/tools/` |
+| `app/` `base_class/` `src/RX32G410_FW_HAL_V1.3N/` exist | m4_ekf_observer | `../methodology-seed-v2.0/tools/` |
+| `methodology-seed-v2.0/tools/` exists in cwd | methodology-seed-v2.0 itself | `tools/` |
 
 If unable to detect, ask the user which project and where the tools are.
 
@@ -36,17 +36,17 @@ If unable to detect, ask the user which project and where the tools are.
 python <tools_dir>/check_deps.py <project_dir> [--project <name>]
 ```
 
-- four_head: `python ../methodology-seed/tools/check_deps.py . --project four_head`
-- m4_ekf_observer: `python ../methodology-seed/tools/check_deps.py . --project m4-ekf`
+- four_head: `python ../methodology-seed-v2.0/tools/check_deps.py . --project four_head`
+- m4_ekf_observer: `python ../methodology-seed-v2.0/tools/check_deps.py . --project m4-ekf`
 
 **Report format:**
 ```
---- 1/4 check_deps.py ---
+--- 1/5 check_deps.py ---
 [PASS] 0 layer violations found
 ```
 or on failure:
 ```
---- 1/4 check_deps.py ---
+--- 1/5 check_deps.py ---
 [FAIL] 3 violations:
   src/app/cooking.c:5: includes forbidden "drv/power.h"
   src/app/display.c:12: includes forbidden "hal/gpio.h"
@@ -63,17 +63,17 @@ Parse the script's stdout/stderr. Non-zero exit = `[FAIL]`.
 python <tools_dir>/check_weak_pairs.py <project_dir> [--project <name>]
 ```
 
-- four_head: `python ../methodology-seed/tools/check_weak_pairs.py . --project four_head`
-- m4_ekf_observer: `python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf`
+- four_head: `python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project four_head`
+- m4_ekf_observer: `python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project m4-ekf`
 
 **Report format:**
 ```
---- 2/4 check_weak_pairs.py ---
+--- 2/5 check_weak_pairs.py ---
 [PASS] 0 orphan pairs found (N pairs registered)
 ```
 or on failure:
 ```
---- 2/4 check_weak_pairs.py ---
+--- 2/5 check_weak_pairs.py ---
 [FAIL] 5 violations:
   app/power.c: orphan WEAK: __weak void Power_OnSet(...)
   core/interface_map.h: orphan strong: void Display_Commit(...)
@@ -93,12 +93,12 @@ If the project has no `cfg/structs.json`, report `[SKIP] No cfg/structs.json fou
 
 **Report format:**
 ```
---- 3/4 check_structs.py ---
+--- 3/5 check_structs.py ---
 [PASS] All types.h match structs.json (serial=N)
 ```
 or on failure:
 ```
---- 3/4 check_structs.py ---
+--- 3/5 check_structs.py ---
 [FAIL] 2 issues:
   [serial] display_module/types.h: JSON serial=2 < file serial=5
   [deprecated] structs["State"].consumers["timer"]: references deprecated field "old_mode"
@@ -106,7 +106,43 @@ or on failure:
 
 ---
 
-## Step 4: Compile Check
+## Step 4: Include Permission Audit (Data Switcher)
+
+Detect whether the project uses Data Switcher:
+
+| Signal | Meaning |
+|--------|---------|
+| `include/` directory exists with `*_io.h` files | Project uses Data Switcher |
+| `data_switcher.c` or `Switcher.c` exists in source tree | Project uses Data Switcher |
+| Neither exists | Skip this check |
+
+If Switcher detected:
+```bash
+python <tools_dir>/check_include.py <project_dir>
+```
+
+**Report format:**
+```
+--- 4/5 check_include.py ---
+[PASS] 0 unauthorized _io.h includes found
+```
+or on failure:
+```
+--- 4/5 check_include.py ---
+[FAIL] 2 violations:
+  app/power.c:3: unauthorized #include "../include/adc_io.h" (only Switcher.c allowed)
+  drv/display.c:7: unauthorized #include "../include/key_io.h"
+```
+
+If no Switcher detected:
+```
+--- 4/5 check_include.py ---
+[SKIP] No include/ *_io.h or data_switcher.c found
+```
+
+---
+
+## Step 5: Compile Check
 
 Detect compiler and run syntax check on all modified `.c` files.
 
@@ -125,18 +161,18 @@ Check `CLAUDE.md` for the project-specific compile command.
 
 **If no compiler available, skip:**
 ```
---- 4/4 compile ---
+--- 5/5 compile ---
 [SKIP] armcc not found on PATH
 ```
 
 **Report format:**
 ```
---- 4/4 compile ---
+--- 5/5 compile ---
 [PASS] app/cooking.c compiled (0 errors, 0 warnings)
 ```
 or:
 ```
---- 4/4 compile ---
+--- 5/5 compile ---
 [FAIL] app/cooking.c:42: error: #20: identifier "PowerCmd_t" is undefined
 ```
 
@@ -144,16 +180,17 @@ or:
 
 ## Final Report
 
-After all four checks, print a summary:
+After all checks, print a summary:
 
 ```
 ========================================
   CHECK SUMMARY
 ========================================
-  1/4 check_deps.py       [PASS]
-  2/4 check_weak_pairs.py [PASS]
-  3/4 check_structs.py    [PASS]
-  4/4 compile             [SKIP] (no compiler)
+  1/5 check_deps.py       [PASS]
+  2/5 check_weak_pairs.py [PASS]
+  3/5 check_structs.py    [PASS]
+  4/5 check_include.py    [SKIP] (no Switcher)
+  5/5 compile             [SKIP] (no compiler)
 ----------------------------------------
   Result: 0 violations — CLEAN
 ========================================
@@ -164,12 +201,13 @@ If any check fails:
 ========================================
   CHECK SUMMARY
 ========================================
-  1/4 check_deps.py       [PASS]
-  2/4 check_weak_pairs.py [FAIL] 3 orphan pairs
-  3/4 check_structs.py    [PASS]
-  4/4 compile             [FAIL] 2 errors
+  1/5 check_deps.py       [PASS]
+  2/5 check_weak_pairs.py [FAIL] 3 orphan pairs
+  3/5 check_structs.py    [PASS]
+  4/5 check_include.py    [FAIL] 1 violation
+  5/5 compile             [FAIL] 2 errors
 ----------------------------------------
-  Result: 5 violations — FIX REQUIRED
+  Result: 6 violations — FIX REQUIRED
 ========================================
 ```
 
@@ -179,7 +217,7 @@ If any check fails:
 
 ## Quick Mode
 
-If the user says `--quick` or "快速检查" or "quick check", skip the compile step (4/4) and only run checks 1-3.
+If the user says `--quick` or "快速检查" or "quick check", skip the compile step (5/5) and only run checks 1-4.
 
 ---
 

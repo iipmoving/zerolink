@@ -45,7 +45,7 @@ BUILTIN_PRESETS = {
     },
     'm4-ekf': {
         'interface_map': 'core/interface_map.h',
-        'scan_dirs': ['app', 'base_class', 'proto', 'core'],
+        'scan_dirs': ['app', 'base_class', 'proto', 'core', 'src'],
         'public_api_excludes': [
             '.*_OnTick', '.*_OnInit',
         ],
@@ -74,8 +74,9 @@ RECEIVER_RE = re.compile(
 NOTE_RE = re.compile(r'注\s*:\s*(.+?)\s*[*]/')
 
 # 搜索 WEAK 声明: WEAK void FuncName(params);
+# 支持: WEAK, __weak, __attribute__((weak))
 WEAK_DECL_H_RE = re.compile(
-    r'(?:WEAK|__weak)\s+'
+    r'(?:WEAK|__weak|__attribute__\s*\(\s*\(\s*weak\s*\)\s*\))\s+'
     r'(\w+(?:\s*\*)?)\s+'            # return type
     r'(\w+)\s*[(]'                     # function name
     r'([^)]*)[)]'                      # params
@@ -266,7 +267,7 @@ def _find_weak_in_content(filepath, func_name):
     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
 
-    weak_positions = [m.end() for m in re.finditer(r'\b(?:WEAK|__weak)\b', content)]
+    weak_positions = [m.end() for m in re.finditer(r'\b(?:WEAK|__weak|__attribute__\s*\(\s*\(\s*weak\s*\)\s*\))(?=\s)', content)]
 
     for wpos in weak_positions:
         window = content[wpos:wpos + 500]
@@ -293,7 +294,7 @@ def _find_strong_in_content(filepath, func_name):
 
     # 逐行匹配，排除以 WEAK/__weak/extern/typedef 开头的行
     pattern = re.compile(
-        r'^(?!\s*(?:WEAK|__weak|extern|typedef)\b)'
+        r'^(?!\s*(?:WEAK|__weak|__attribute__\s*\(\s*\(\s*weak\s*\)\s*\)|extern|typedef)\b)'
         r'(?:inline\s+)?(?:static\s+)?'
         r'(\w+(?:\s*\*)?)\s+'
         + re.escape(func_name) +
@@ -502,7 +503,7 @@ def scan_orphans(source_dir, known_pairs, config):
                     # 检查 .c 中的强符号回调定义
                     if cfile.endswith('.c'):
                         sm = re.match(
-                            r'^(?!.*(?:WEAK|__weak|extern|typedef))\s*'
+                            r'^(?!.*(?:WEAK|__weak|__attribute__\s*\(\s*\(\s*weak\s*\)\s*\)|extern|typedef))\s*'
                             r'(?:inline\s+)?(?:static\s+)?'
                             r'(\w+(?:\s*\*)?)\s+'       # return type
                             r'(\w+)\s*[(]'                # function name
@@ -519,7 +520,7 @@ def scan_orphans(source_dir, known_pairs, config):
                                         excluded = True
                                         break
                                 if not excluded:
-                                    if 'WEAK' not in line and '__weak' not in line:
+                                    if 'WEAK' not in line and '__weak' not in line and '__attribute__((weak))' not in line:
                                         found_callbacks.append(
                                             (os.path.basename(cfile), fname,
                                              sm.group(1), sm.group(3), lineno, cfile))

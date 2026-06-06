@@ -45,14 +45,14 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 #include	"API_gpio.h"
 #include	"API_TIM.h"
 #include		"api_dma.h"
-/* === 桥接声明 — APP_ADC 不 include app_power.h (零耦合铁律) ===
- * PotChWork → PotCh1 (API_HRTIM.h 已定义)
- * FIXME: 以下直接调用待创建 __weak 配对后移除 */
 #define PotChWork PotCh1
-void APP_POWERR_SetTxaAwdValue(void);
-void APP_POWER_SetTxaAwdValue(void);
-int16_t* APP_POWER_GetPanDmaBuffAddress(void);
-#include "adc_processing.h"	
+#include "adc_processing.h"
+#include "../include/app_adc_io.h"
+
+/* === __weak stubs → app_power (Pair T/U/V) ====================== */
+__attribute__((weak)) void APP_POWERR_SetTxaAwdValue(void) {}
+__attribute__((weak)) void APP_POWER_SetTxaAwdValue(void) {}
+__attribute__((weak)) int16_t* APP_POWER_GetPanDmaBuffAddress(void) { return 0; }
 #include	"API_FMAC.H"
 
 #include	"printMessage.h"
@@ -225,7 +225,7 @@ typedef struct	__attribute__((aligned(1)))
 
 
 
-typedef struct	__attribute__((aligned(1)))
+typedef struct	__attribute__((aligned(32)))
 {
 	uint8_t 							num;					//有效计数
 	uint8_t 				count;				//100ms計數
@@ -259,17 +259,7 @@ typedef struct	__attribute__((aligned(1)))
 PowerCalculatorInputDef inputArray[4];		//两组同步炉头，每组是同频率
 
 
-#if 0			//实例化回调函数
 
-//API_ADC
-__weak	void	API_VcIc_EOC_IRQHandlerCallBack(void);			//ADC2 EOC中断
-__weak	void	API_T34_EOC_IRQHandlerCallBack(void);				//ADC3 EOC中断
-__weak	void	API_ADC_DMA_M2M_IRQHandlerCallBack(void);		//M2M DMA中断
-__weak	void	API_ADC_DMA_TxA_IRQHandlerCallBack(void);
-//API_HRTIM
-__weak	void	API_HRTIM1_TEST_UPD_IRQHandlerCallback(void);		//HRTIM的UPD中断，开停ADC T34A EOC中断
-
-#endif
 
 /* Private define ------------------------------------------------------------*/
 
@@ -309,6 +299,7 @@ uint16_t 	TxaBuffCh1[TxA_ADC_AdcBUFF_NUM];
 //#define		AdcFromApiDma100us	TxA_ADC_TimDmaBuff			//从API DMA 每10us传过来的数据谐振
 APP_ADC_AVG_BUFF_DEF		AdcFromApiDma20ms;				//从API DMA 每20ms传过来的数据
 APP_ADC_DEF					AdcFunRam;
+static Adc_Output_t g_out;                                        /* v2.0 Data Switcher 输出槽 */
 
 
 
@@ -363,13 +354,6 @@ __attribute__((weak)) void APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value) 
 	/* ====== __weak stub — 接线到 methodology ih_elec_params 算法集 ====== */
 __attribute__((weak)) void IhElecParams_Calculate(void *in, void *out) {}
 
-	/* Pair O: __weak — APP_ADC 推送 AdcFunRam.inputValue 指针给 app_power
-	 * 推模式: 发送方直接传指针, 接收方存本地缓存, 不需要 PULL 回调 */
-__attribute__((weak)) void AppAdc_OnDataReady(void *input)
-{ (void)input; }
-
-	/* Pair D: __weak — 通知 API_ADC AWD 保护值重写 */
-__attribute__((weak)) void Adc_SetAwdValue(void) {}
 
 
 
@@ -770,9 +754,6 @@ uint8_t 		AdcValueFun(void)					//统一处理ADC值
 						
 
 						xReturn=1;
-	}
-	if (xReturn) {
-		AppAdc_OnDataReady(&AdcFunRam);
 	}
 	return	xReturn;
 }
@@ -2412,10 +2393,10 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 
 
 
-void	APP_ADC_WaitTxaCalOver(void)		//等待TXA DMA采集完成，防止与检锅冲突
-{
-	while(TxA_ADC_AdcDmaBuff.step!=TXA_StepStart);
-}
+//void	APP_ADC_WaitTxaCalOver(void)		//等待TXA DMA采集完成，防止与检锅冲突
+//{
+//	while(TxA_ADC_AdcDmaBuff.step!=TXA_StepStart);
+//}
 
 
 void 	APP_ADC_GetTxaPeiodPoint(void)			//从DMA缓存到TXA数组转换
@@ -2964,6 +2945,22 @@ extern uint32_t Image$$RAMCODE$$Length;  // 段长度
 //}
 
 #endif
+
+
+/* === v2.0 Data Switcher interface ================================= */
+void Adc_GetIO(Adc_Output_t **ppOut)
+{
+    *ppOut = &g_out;
+}
+
+void Adc_DoWork(void)
+{
+    g_out.status &= ~0x02;               /* 每帧先清就绪标志 */
+    if (AdcValueFun()) {
+        memcpy(g_out.inputValue, AdcFunRam.inputValue, sizeof(g_out.inputValue));
+        g_out.status |= 0x02;            /* 有新产出时置位 */
+    }
+}
 
 
 #if 0
