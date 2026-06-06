@@ -90,6 +90,55 @@ git commit -m "..."
 
 pre-commit hook 自动跑前三件套，不通过则阻断提交。
 
+### 5.1 提交前自检
+
+```
+/check                           # 跑全部检查
+/check --quick                   # 跳过编译，只跑 1-4
+```
+
+全部 PASS 后再 `git commit`。不要在 hook 失败后 `--no-verify`。
+
+---
+
+## 六、Git 安全操作
+
+### 6.1 回退前：永远先保存现场
+
+**任何 `git reset`、`git checkout --`、`git restore` 之前，先 stash 或建备份分支。** 这些操作不可逆，丢失的代码无法恢复。
+
+```
+# 方案 A: stash（推荐 — 轻量）
+git stash push -m "WIP: before revert — $(date +%Y-%m-%d)" --include-untracked
+git stash list                    # 确认 stash 存在
+# ... 回退操作 ...
+# git stash pop                   # 需要时恢复
+
+# 方案 B: 备份分支（安全 — 永久保留）
+git checkout -b backup/before-revert-$(date +%Y%m%d)
+git checkout -                     # 切回原分支
+# ... 回退操作 ...
+```
+
+**铁律**: `git reset --hard` 前必须确认 `git stash list` 或备份分支已创建。禁止裸 `reset --hard` 不检查现场。
+
+### 6.2 回退操作速查
+
+| 场景 | 命令 | 前提 |
+|------|------|------|
+| 撤销未暂存的修改 | `git stash` 或 `git checkout -- <file>` | 确认修改不需要保留 |
+| 撤销已暂存的修改 | `git reset HEAD <file>` → 再 stash | 先 unstage |
+| 撤销最近一次 commit（保留修改） | `git reset --soft HEAD~1` | 修改回到工作区 |
+| 撤销最近一次 commit（丢弃修改） | `git stash` → `git reset --hard HEAD~1` | **必须先 stash** |
+| 回到某个历史 commit 查看 | `git checkout <hash>` (detached HEAD) | 看完 `git switch -` 回来 |
+| 永久回到历史 commit | `git stash` → 建备份分支 → `git reset --hard <hash>` | **双重保险** |
+
+### 6.3 禁止操作
+
+- `git push --force` 到 main/master — 永远禁止
+- `git reset --hard` 不先 stash — 永远禁止
+- `git clean -fd` 不先 `git stash --include-untracked` — 永远禁止
+
 ---
 
 ## 完整示例：修改功率模块输出接口
@@ -142,6 +191,7 @@ git commit -m "feat: add pot_detect module"
 | `05-interface-management.md` | interface_map.h 维护 + _LINK 命名约定 | 通用 |
 | `07-struct-generation.md` | structs.json → types.h 生成流程 | 通用 |
 | `08-data-switcher.md` | 数据交换机：GetIO/DoWork/状态字协议 | Switcher 项目 |
+| `09-std-module.md` | std_module.h：MODULE_SKELETON + MODULE_EXPORT + Para_Grp_t | **v2.1 核心** |
 | `03-dual-engine.md` | JS/C 双引擎同源检测 | HMI 项目 |
 | `04-golden-output.md` | 黄金输出录制 + 模块分解验证 | HMI 项目 |
 | `06-json-driven.md` | JSON 三层驱动架构 | HMI 项目 |

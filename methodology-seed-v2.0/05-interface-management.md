@@ -16,7 +16,7 @@
 ## 二、格式模板
 
 ```c
-/* interface_map.h — __weak 回调配对文档 (v2.0)
+/* interface_map.h — __weak 回调配对文档 (v2.1)
  *
  * 本文件是 __weak 配对的唯一真相源。
  * 每对包含: 发送方(WEAK空壳) → 接收方(强符号实现)
@@ -128,36 +128,29 @@ python tools/check_structs.py  ← 验证一致性
 
 详见 `07-struct-generation.md`。
 
-### 6.2 命名约定: _OUT / _LINK 后缀
+### 6.2 命名约定: _OUT / _LINK 后缀 (v2.1: _LINK 已废弃)
 
-| 后缀 | 含义 | 示例 |
-|------|------|------|
-| `_OUT` | 本模块是**生产者**，对外输出 | `StateGlobal_OUT_t` |
-| `_LINK` | 本模块是**消费者**，与 owner 双向维护 | `Power_AdcDef_LINK_t` |
-| (无后缀) | 本模块**内部使用**，不跨模块 | `DisplayBuffer_t` |
+> **v2.1**: `std_module.h` 的 `Para_Grp_t` + consumer STRONG `memcpy` 模式已消除对 `_LINK_t` 副本的需求。下表中的 `_LINK` 保留仅供旧项目参考。新项目应使用 `09-std-module.md` 中的 `MODULE_SKELETON` + `MODULE_EXPORT` 模式。
+
+| 后缀 | 含义 | 示例 | 状态 |
+|------|------|------|------|
+| `_OUT` | 本模块是**生产者**，对外输出 | `StateGlobal_OUT_t` | 仍用于 structs.json 生成 |
+| `_LINK` | 本模块是**消费者**，与 owner 双向维护 | `Power_AdcDef_LINK_t` | **已废弃** — 改用 `Para_Grp_t` + `memcpy` |
+| (无后缀) | 本模块**内部使用**，不跨模块 | `DisplayBuffer_t` | 不变 |
 
 - Owner struct: `{StructKey}_t` 或 `{StructKey}_OUT_t`
-- Consumer struct: `{Module}_{StructKey}_LINK_t`
-- `_LINK` = 联合管理，前后缀利于 Python 工具检索配对
-- 前缀 `{Module}_` 标明所属模块，后缀 `_LINK` 标记跨模块联合维护
+- **旧** Consumer struct: `{Module}_{StructKey}_LINK_t` (已废弃, v2.1 不再需要)
+- v2.1 替代方案: consumer STRONG `{Producer}_OnOutput(Para_Grp_t *pOut)` → `memcpy(g_input.para, pOut->para, sizeof(...))` — 无需类型副本
 
 **_LINK 的替代路径**：
 
-当 consumer 超过 2 个或 struct 字段频繁变更时，考虑废弃 `_LINK` 副本，改用数据交换机（`08-data-switcher.md`）。Switcher 持有所有模块的 IO 指针，运行时从生产者输出槽取数据填入消费者输入槽。模块不再需要独立声明与 owner 布局相同的 consumer struct。
-
-**决策表**:
-
-| 条件 | 建议 | 原因 |
+| 方案 | 适用 | 版本 |
 |------|------|------|
-| 1 个 consumer, 字段稳定 | `_LINK` 可接受 | 维护负担小 |
-| ≥2 个 consumer | 数据交换机 | 改一个 Output_t → 改 N 个 _LINK 容易出错 |
-| 字段频繁变更 | 数据交换机 | 只需改 Switcher 接线，不影响 consumer |
-| consumer 需要多源汇聚 | 数据交换机 | Input_t 统一入口，Switcher 负责聚合 |
-| ISR 延迟敏感 | `__weak` 直调 | 不走 Switcher，不受调度槽限制 |
+| `Para_Grp_t` + `__weak` 链 | 所有新模块 | **v2.1 (推荐)** |
+| 数据交换机 (Switcher 搬运) | 多 consumer, 字段频繁变更 | v2.0 (已被 v2.1 __weak 链替代) |
+| `_LINK_t` 副本 | 仅旧项目遗留 | v1.x (不推荐新项目) |
 
-`_LINK` 和 Switcher 的关系：Switcher 是更激进的那一档——连副本都不需要了。但 Switcher 引入了中间层调度开销（~1 帧延迟），不适合 ISR 路径。
-
-**从 _LINK 迁移到 Switcher 的标志**: 发现自己在两个 `.h` 之间同步 struct 字段 → 立即考虑迁移。这就是 m4_ekf_observer 项目触发 v2.0 升级的原因。
+v2.1 的 `__weak` 链路由模式 (producer `_onOutput` → `__weak` → consumer STRONG `memcpy`) 同时消除了 `_LINK_t` 副本和 Switcher 的数据搬运职责。详见 `09-std-module.md`。
 
 ### 6.3 与 interface_map.h 的分工
 

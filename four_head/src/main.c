@@ -26,6 +26,7 @@
 #include "app/app_cooking.h"
 #include "app/app_hmi.h"
 #include "app/app_seg_align.h"
+#include "core/data_switcher.h"
 
 /* __weak 定时回调: 链接器自动接线, interface_map.h 文档化 */
 __weak void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
@@ -133,11 +134,11 @@ static void ExecSlot_Run(void)
     switch (s_prog_slot) {
     case 0u: Slot_TimerTick();     break;
     case 1u: Drv_Display_Update();  break;
-    case 2u: App_Power_Run();        break;
+    case 2u: /* v2.0: 交由 Switcher Slot3 统一路由 */ break;
     case 3u: Drv_Key_Scan();        break;
     case 4u: Drv_CommMgr_Update(); App_CommMgr_Run(); break;
     case 5u: App_Protect_Run();      break;
-    case 6u: App_Cooking_Run();     break;
+    case 6u: Switcher_Run();  break;
     case 7u: App_Hmi_Run();            break;
     case 8u: AppSegAlign_Run();         break;
     case 9u: /* 预留 */            break;
@@ -164,8 +165,9 @@ int main(void)
     Drv_Buzzer_Init();
     App_CommMgr_Init();
     App_Protect_Init();
-    App_Power_Init();
-    App_Cooking_Init();
+    /* v2.0: Switcher 接管模块路由 */
+    Switcher_Init();
+//    App_Cooking_Init();
     App_Hmi_Init();
     AppSegAlign_Init();
 

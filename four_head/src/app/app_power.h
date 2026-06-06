@@ -63,7 +63,7 @@ typedef struct {
 #define POWER_SOFT_START_TIME  60u  /* 软启动时间(×100ms=6秒) */
 
 /* ========== 公共接口 ========== */
-void App_Power_Init(void);
-void App_Power_Run(void);  /* 每10ms槽位2调用 */
+/* v2.0: Switcher 入口（data_switcher.h 声明 GetIO + DoWork）*/
+void AppPower_DoWork(void);
 
 #endif /* APP_POWER_H */

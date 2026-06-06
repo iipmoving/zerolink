@@ -48,7 +48,9 @@
 | C2 | `02-weak-callback.md` | 8 min | 模块间怎么通信？三种机制怎么选？ |
 | C3 | `05-interface-management.md` | 3 min | interface_map.h 怎么维护？_LINK 命名约定？ |
 | C4 | `07-struct-generation.md` | 5 min | 跨模块结构体怎么一致性管理？ |
-| C5 | `08-data-switcher.md` | 6 min | 结构化数据怎么路由？什么时候替代 _LINK？ |
+| C5 | `08-data-switcher.md` | 4 min | 结构化数据怎么路由？Switcher 怎么接线？ |
+| C6 | `09-std-module.md` | 6 min | **v2.1 核心**: `MODULE_SKELETON` + `MODULE_EXPORT` — 骨架宏就是范式 |
+| C7 | `core/std_module.h` (项目内) | 3 min | 宏定义源码参考 |
 
 ### HMI/UI 扩展（灯板等 JSON 驱动项目，+16 分钟）
 

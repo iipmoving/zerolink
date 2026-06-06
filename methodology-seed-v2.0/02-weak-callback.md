@@ -54,14 +54,14 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
 |------|-------------|---------------|-----------|
 | **适用** | 同时间片连续执行 | 跨时间片 / 跨进程 | 周期性结构化数据路由 |
 | **时序** | 同步，调用即执行 | 异步，队列缓冲 | 调度槽内顺序执行 |
-| 发送代码 | `Receiver_OnXxx(param, &data)` | `Msg_Post(ID, param, &data)` | Switcher 读 Output_t → 填 Input_t |
-| 接收注册 | 强符号同名函数 | `Register(ID, handler)` | `GetIO()` 暴露输入槽 + `DoWork()` |
+| 发送代码 | `Receiver_OnXxx(param, &data)` | `Msg_Post(ID, param, &data)` | producer ProcessInput → ST_OUT → DoWork 自动调 _onOutput |
+| 接收注册 | 强符号同名函数 | `Register(ID, handler)` | consumer STRONG {Producer}_OnOutput → memcpy(g_input.para, ...) + 置 ST_NEW |
 | 消息 ID | 不需要 | 需要，全局唯一 | 不需要 |
-| 队列 | 无，直接调 | 环形队列 | 无，指针搬运 |
-| 运行时内存 | 0 | 队列缓冲+消息体 | 每个模块一对 Input_t/Output_t |
-| 独立编译 | 零外部依赖 | 需 msg_scheduler.o | 需 Switcher (唯一中间层) |
-| 多接收方 | 多个 __weak 逐一调用 | 多次 Msg_Post | Switcher 分发给多个 Input_t |
-| 模块间互知 | 发送方知道函数名 | 发送方知道消息 ID | 模块间零互知，只看自己的槽 |
+| 队列 | 无，直接调 | 环形队列 | 无，__weak 链自动路由 |
+| 运行时内存 | 0 | 队列缓冲+消息体 | Para_Grp_t g_input/g_output (MODULE_SKELETON 展开) |
+| 独立编译 | 零外部依赖 | 需 msg_scheduler.o | 需 Switcher (声明 __weak 背板) |
+| 多接收方 | 多个 __weak 逐一调用 | 多次 Msg_Post | 每个 consumer 独立 STRONG 回调 |
+| 模块间互知 | 发送方知道函数名 | 发送方知道消息 ID | 模块间零互知，只知道自己收到的 __weak 函数名 |
 
 ### 选择规则
 
