@@ -13,6 +13,29 @@ description: "Interactive wizard to create a new module using std_module.h — d
 
 ---
 
+## Step 0: 路径检索 — 规划输入输出
+
+先查清所有 I/O 路径再编码：
+
+```bash
+# 1a. 找本模块的入口（别人调我）
+grep -rn "Module_Init\|Module_Run\|Module_On" src/main.c src/
+
+# 1b. 找本模块的输出桩（我调别人，__weak 声明）
+grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}.c
+```
+
+按结果填写 I/O 表：
+
+| 方向 | 来源/去向 | route | 数据字段 | 类型 | 
+|------|----------|-------|---------|------|
+| 输入 | drv_key | 1 | key_code, key_state | uint8_t |
+| 输出 | drv_display | 1 | seg_chars[8], ... | 36 bytes |
+
+**InData_t / OutData_t 按此表字段精确设计。**
+
+---
+
 ## Step 1: 模块身份
 
 ```

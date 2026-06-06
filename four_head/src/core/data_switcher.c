@@ -11,6 +11,11 @@
 
 /* 模块 GetIO 声明（由 MODULE_EXPORT 生成，在各自 .c 中定义）*/
 void AppPower_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+void AppHmi_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+
+/* DRV 层强符号（v1.0 桥接，migrate 后移除）*/
+void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
+void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr);
 
 #define MAX_MODULES  16
 
@@ -36,6 +41,9 @@ void Switcher_Init(void)
     AppPower_GetIO(&pIn, &pOut, &pWork);
     /* INFO 是模块私有的，Switcher 不碰 */
     Switcher_Register(pWork);
+
+    AppHmi_GetIO(&pIn, &pOut, &pWork);
+    Switcher_Register(pWork);
 }
 
 void Switcher_Run(void)
@@ -43,4 +51,23 @@ void Switcher_Run(void)
     for (uint8_t i = 0; i < s_count; i++)
         if (s_slots[i].pDoWork)
             s_slots[i].pDoWork();
+}
+
+/* ===== v2.0 输出路由 ===== */
+
+/* AppHmi 输出 → 分发到 drv_display / drv_buzzer */
+void AppHmi_OnOutput(Para_Grp_t *pOut)
+{
+    /* OutData_t layout: has_display(1) has_buzzer(1) buzzer_on(1) res(1) [display_data...] */
+    uint8_t *d = (uint8_t *)pOut->para;
+    uint8_t has_display = d[0];
+    uint8_t has_buzzer  = d[1];
+    uint8_t buzzer_on   = d[2];
+
+    if (has_display) {
+        DrvDisplay_OnRefresh(0, d + 4);  /* d+4 = &hot_head_idx = display data start */
+    }
+    if (has_buzzer) {
+        DrvBuzzer_OnCtrl(buzzer_on ? 1u : 0u, NULL);
+    }
 }

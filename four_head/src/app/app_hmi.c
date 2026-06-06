@@ -8,14 +8,57 @@
  * 层级: APP — 通过消息调度器收发
  */
 
+#include "core/std_module.h"
 #include "app_hmi.h"
 #include <string.h>
 #include <stddef.h>
 
-/* __weak 回调: 发送给 DRV 层, 链接器自动接线, interface_map.h 文档化 */
-__weak void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
+/* ---- 数据结构 ----
+ * 输入输出提前规划，按数据源/目的地分组
+ *
+ * 输入（谁给我）:
+ *   drv_key → key (route=1)
+ *   main    → tick_100ms (route=2)
+ *   main    → tick_1s (route=3)
+ *
+ * 输出（我给谁）:
+ *   drv_display → display (route=1)
+ *   drv_buzzer  → buzzer_on (route=2)
+ */
+typedef struct {
+    uint8_t  key_code;
+    uint8_t  key_state;
+    uint8_t  tick_100ms;
+    uint8_t  tick_1s;
+} InData_t;
+
+typedef struct {
+    uint8_t  has_display;            /* drv_display 消费 */
+    uint8_t  has_buzzer;             /* drv_buzzer 消费 */
+    uint8_t  buzzer_on;
+    uint8_t  res;
+    /* 显示缓存 — 36 bytes, 与 drv_display 的 DisplayFrame_t 布局一致 */
+    int8_t   hot_head_idx;
+    uint8_t  seg_chars[8];
+    uint8_t  seg_blink[4];
+    uint8_t  seg_mode;
+    uint8_t  leds_power;
+    uint8_t  leds_timer;
+    uint8_t  leds_pause;
+    uint8_t  leds_child_lock;
+    uint8_t  leds_head_select[4];
+    uint8_t  leds_power_level[10];
+} OutData_t;
+
+static InData_t  s_in;
+static OutData_t s_out;
+
+MODULE_SKELETON();
+
+/* __weak 输出桩（向后兼容，新代码走 g_output + ST_OUT）*/
+__attribute__((weak)) void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
-__weak void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
+__attribute__((weak)) void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 
 #ifdef HMI_DEBUG_KEYS
@@ -122,7 +165,7 @@ static void run_power_on_seq_step(void);
  * 三、初始化
  * ================================================================ */
 
-void App_Hmi_Init(void)
+static void Init(void)
 {
     uint8_t i;
 
@@ -165,13 +208,23 @@ void App_Hmi_Init(void)
 #else
     run_power_on_seq_step();
 #endif
+
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
-void App_Hmi_Run(void)
+static void ProcessInput(void)
 {
-    /* 当前所有逻辑在回调(on_key_event/on_timer_100ms/on_timer_1s)中处理。
-     * 保留此槽位供后续扩展（如显示刷新周期调整）。 */
+    /* 当前所有逻辑在回调中处理。ProcessInput 保留供后续 route 分流 */
 }
+
+void App_Hmi_Run(void) { /* 保留，main.c 调用 */ }
+
+/* v2.0 桥接: 保留旧入口名 */
+void App_Hmi_Init(void) { Constructor(); }
+
+/* ---- 导出 ---- */
+MODULE_EXPORT(AppHmi);
 
 /* ================================================================
  * 四、按键 → 路由 → 动作 主流程
@@ -1224,6 +1277,22 @@ static void post_display(void)
         update_all_displays();
     }
 
+    /* v2.0: 写 g_output — 完整复制显示缓存 */
+    s_out.has_display   = 1;
+    s_out.hot_head_idx  = s_display.hot_head_idx;
+    s_out.seg_mode      = s_display.seg_mode;
+    s_out.leds_power    = s_display.leds_power;
+    s_out.leds_timer    = s_display.leds_timer;
+    s_out.leds_pause    = s_display.leds_pause;
+    s_out.leds_child_lock = s_display.leds_child_lock;
+    memcpy(s_out.seg_chars, s_display.seg_chars, 8);
+    memcpy(s_out.seg_blink, s_display.seg_blink, 4);
+    memcpy(s_out.leds_head_select, s_display.leds_head_select, 4);
+    memcpy(s_out.leds_power_level, s_display.leds_power_level, 10);
+    g_output.info.route = 1;
+    g_output.info.status |= ST_OUT;
+
+    /* v1.0 向后兼容 */
     DrvDisplay_OnRefresh(0, &s_display);
 }
 
@@ -1713,7 +1782,13 @@ static uint8_t any_timer_active(void)
 
 static void post_buzzer(uint8_t valid)
 {
-    DrvBuzzer_OnCtrl(valid ? 1u : 0u, NULL);
+    /* v2.0: 写 g_output + 即时回调 */
+    s_out.has_buzzer = 1;
+    s_out.buzzer_on  = valid ? 1u : 0u;
+    g_output.info.route = 2;
+    g_output.info.status |= ST_OUT;
+    if (_onOutput) _onOutput(&g_output);
+    g_output.info.status &= ~ST_OUT;
 }
 
 /* ================================================================
