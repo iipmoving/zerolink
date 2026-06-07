@@ -20,7 +20,13 @@
 #include <stddef.h>
 
 typedef struct { uint8_t dummy; } InData_t;
-typedef struct { uint8_t dummy; } OutData_t;
+/* 输出 — 系统错误 (Switcher 路由到 app_power) */
+typedef struct {
+    uint8_t  has_err;
+    uint8_t  head_idx;
+    uint8_t  slave_addr;
+    uint16_t fault;
+} OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
 MODULE_SKELETON();
@@ -36,9 +42,7 @@ typedef struct {
     uint16_t regs[PROT_REG_COUNT];
 } ProtRegData_t;
 
-/* __weak 回调: 发送给 app_power, 链接器自动接线 */
-__weak void AppPower_OnSystemError(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
+/* APP→APP 走 Switcher 路由，不再用 __weak */
 
 /* ========== 炉头保护上下文 ========== */
 typedef struct {
@@ -54,7 +58,7 @@ typedef struct {
 
 static ProtectCtx_t s_ctx[PROTECT_HEAD_COUNT];
 static uint8_t      s_tick_10ms;
-static ProtectEvent_t s_event;  /* static: Msg_Post传递指针 */
+/* s_event 已移除 — 输出走 g_output */
 
 /* ========== 内部: 单炉头IGBT传感器检测 ========== */
 static void check_igbt(uint8_t idx)
@@ -299,11 +303,12 @@ void App_Protect_Run(void)
 
         /* 故障状态变化时发送消息 */
         if (s_ctx[i].fault.byte != old_fault.byte) {
-            s_event.head_index = i;
-            s_event.slave_addr = PROT_SLAVE_ADDR_BASE
-                               + i * PROT_SLAVE_ADDR_STEP;
-            s_event.fault.byte = s_ctx[i].fault.byte;
-            AppPower_OnSystemError((uint16_t)i, &s_event);
+            OutData_t *o = (OutData_t *)g_output.para;
+            o->has_err     = 1;
+            o->head_idx    = i;
+            o->slave_addr  = PROT_SLAVE_ADDR_BASE + i * PROT_SLAVE_ADDR_STEP;
+            o->fault       = s_ctx[i].fault.byte;
+            g_output.info.status |= ST_OUT;
         }
     }
 }

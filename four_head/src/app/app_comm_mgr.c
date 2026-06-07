@@ -25,7 +25,14 @@ typedef struct {
     uint8_t  tx_done;      /* 发送完成 */
     uint8_t  power_cmd;    /* 功率命令 */
 } InData_t;
-typedef struct { uint8_t dummy; } OutData_t;
+/* 输出 — 寄存器数据广播 (Switcher 路由到 app_power/cooking/protect) */
+typedef struct {
+    uint8_t  has_reg;
+    uint8_t  head_idx;
+    uint8_t  slave_addr;
+    uint8_t  online;
+    uint16_t regs[22];
+} OutData_t;
 
 static InData_t  s_in;
 static OutData_t s_out;
@@ -50,13 +57,7 @@ __weak uint16_t Proto_BuildWriteSingle(uint8_t slave, uint16_t reg,
                                        uint16_t val, uint8_t *buf)
 { (void)slave; (void)reg; (void)val; (void)buf; return 0u; }
 
-/* __weak 回调: 多接收方广播, 链接器自动接线, interface_map.h 文档化 */
-__weak void AppPower_OnRegData(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__weak void AppCooking_OnRegData(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__weak void AppProtect_OnRegData(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
+/* __weak: 仅 DRV 层方向保留，APP→APP 走 Switcher 路由 */
 __weak void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 
@@ -129,7 +130,6 @@ static void handle_response(const uint8_t *rx_data, uint16_t frame_len)
     uint16_t  count;
     uint8_t   head_idx;
     HeadCtx_t *ctx;
-    static RegData_t s_reg_data;
 
     if (frame_len == 0u) return;
 
@@ -153,16 +153,14 @@ static void handle_response(const uint8_t *rx_data, uint16_t frame_len)
         ctx->state  = COMM_STATE_POLLING;
         ctx->retry_cnt = 0u;
 
-        /* 广播寄存器数据到三个接收方 */
-        s_reg_data.head_index = head_idx;
-        s_reg_data.slave_addr = slave;
-        s_reg_data.online     = 1u;
-        for (i = 0u; i < COMM_REG_COUNT; i++) {
-            s_reg_data.regs[i] = ctx->regs[i];
-        }
-        AppPower_OnRegData((uint16_t)head_idx, &s_reg_data);
-        AppCooking_OnRegData((uint16_t)head_idx, &s_reg_data);
-        AppProtect_OnRegData((uint16_t)head_idx, &s_reg_data);
+        /* 广播寄存器数据: 写 g_output → Switcher 路由到三个接收方 */
+        OutData_t *o = (OutData_t *)g_output.para;
+        o->has_reg = 1;
+        o->head_idx  = head_idx;
+        o->slave_addr = slave;
+        o->online    = 1;
+        for (i = 0; i < COMM_REG_COUNT; i++) o->regs[i] = ctx->regs[i];
+        g_output.info.status |= ST_OUT;
     }
 }
 

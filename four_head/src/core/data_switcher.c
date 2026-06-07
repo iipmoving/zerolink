@@ -24,6 +24,10 @@ void DrvDisplay_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(v
 void AppHmi_OnKey(uint16_t param, void *data_ptr);
 void AppCooking_OnKey(uint16_t param, void *data_ptr);
 void AppSegAlign_OnKey(uint16_t param, void *data_ptr);
+void AppPower_OnRegData(uint16_t param, void *data_ptr);
+void AppCooking_OnRegData(uint16_t param, void *data_ptr);
+void AppProtect_OnRegData(uint16_t param, void *data_ptr);
+void AppPower_OnSystemError(uint16_t param, void *data_ptr);
 
 /* DRV 层强符号（v1.0 桥接，migrate 后移除）*/
 void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
@@ -87,6 +91,25 @@ void Switcher_Run(void)
 }
 
 /* ===== v2.0 输出路由 ===== */
+
+/* AppCommMgr 输出 → 寄存器数据广播到三个 APP 模块 */
+void AppCommMgr_OnOutput(Para_Grp_t *pOut)
+{
+    uint8_t *d = (uint8_t *)pOut->para;
+    if (!d[0]) return;
+    uint8_t head = d[1];
+    AppPower_OnRegData((uint16_t)head, d);
+    AppCooking_OnRegData((uint16_t)head, d);
+    AppProtect_OnRegData((uint16_t)head, d);
+}
+
+/* AppProtect 输出 → 系统错误到 app_power */
+void AppProtect_OnOutput(Para_Grp_t *pOut)
+{
+    uint8_t *d = (uint8_t *)pOut->para;
+    if (!d[0]) return;
+    AppPower_OnSystemError((uint16_t)d[1], d);
+}
 
 /* DrvKey 输出 → 广播到三个 APP 模块 */
 void DrvKey_OnOutput(Para_Grp_t *pOut)
