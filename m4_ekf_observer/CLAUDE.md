@@ -66,24 +66,27 @@
 
 ---
 
-## 四、每次编码后强制：四件套
+## 四、每次编码后强制：五件套
 
-**以下 4 步必须全部 PASS 才能声明"完成"。任一步失败 = 不得提交。**
+**以下 5 步必须全部 PASS 才能声明"完成"。任一步失败 = 不得提交。**
 
 ```bash
 # 工作目录: m4_ekf_observer/
-# 工具位于 ../methodology-seed/tools/，自动检测项目类型
+# 工具位于 ../methodology-seed-v2.0/tools/，自动检测项目类型
 
 # 1. 层依赖审计 → 必须 0 violations
-python ../methodology-seed/tools/check_deps.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_deps.py . --project m4-ekf
 
 # 2. __weak 配对一致性 → 必须 0 violations
-python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project m4-ekf
 
 # 3. 结构体一致性 → 必须 PASS
-python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_structs.py . --project m4-ekf
 
-# 4. 编译验证 → 必须 0 error, 0 warning
+# 4. 输出回调审计 (v2.2 PULL 范式) → 必须 0 violations
+python tools/check_output_callback.py .
+
+# 5. 编译验证 → 必须 0 error, 0 warning
 armcc -c --cpu Cortex-M4 --c99 -I... <modified.c>
 ```
 
@@ -297,6 +300,10 @@ void Receiver_OnEvent(uint16_t param, void *data_ptr)
 
 **配对管理**: 所有 __weak 配对记录在 `interface_map.h`，由 `check_weak_pairs.py` 验证一致性。
 
+**PULL 路由模式 (v2.2)**: 对于使用 `MODULE_SKELETON()` 的模块，推荐 Switcher 显式路由
+(producer 写 g_output.para → Switcher 调 consumer 回调)，__weak 直调作为简易通道保留。
+`_onOutput`/`ST_OUT` 仅限 `@OUTPUT_CALLBACK` 白名单场景，由 `check_output_callback.py` 审计。
+
 ### 12.5 头文件私有化
 
 **APP/PROTO 层的每个 .h 文件，include guard 的 `#define` 必须注释掉。**
@@ -365,9 +372,9 @@ void Module_Run(void);
 ```bash
 # 编辑 cfg/structs.json → 添加 owner/consumer 定义
 # 生成 types.h
-python ../methodology-seed/tools/generate_structs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/generate_structs.py . --project m4-ekf
 # 验证一致性
-python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_structs.py . --project m4-ekf
 ```
 
 ### Step 6: 注册 __weak 配对到 interface_map.h
@@ -378,16 +385,17 @@ python ../methodology-seed/tools/check_structs.py . --project m4-ekf
 /* 格式: {线ID, "方向", "发送模块", "__weak声明函数", ..., "接收模块", "接收函数", ...} */
 ```
 
-### Step 7: 运行四件套验证
+### Step 7: 运行五件套验证
 
 ```bash
-python ../methodology-seed/tools/check_deps.py . --project m4-ekf
-python ../methodology-seed/tools/check_weak_pairs.py . --project m4-ekf
-python ../methodology-seed/tools/check_structs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_deps.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project m4-ekf
+python ../methodology-seed-v2.0/tools/check_structs.py . --project m4-ekf
+python tools/check_output_callback.py .
 armcc -c --cpu Cortex-M4 --c99 -I... <module.c>
 ```
 
-**四件套全部 PASS → 才能声明模块完成。任一步失败 → 修复后重跑全部。**
+**五件套全部 PASS → 才能声明模块完成。任一步失败 → 修复后重跑全部。**
 
 ---
 
