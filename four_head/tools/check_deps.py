@@ -27,13 +27,17 @@ import tempfile
 # ============================================================
 BUILTIN_PRESETS = {
     'four_head': {
-        'layer_dirs': ['app', 'drv', 'hal', 'proto', 'core', 'cfg'],
-        'scan_dirs': ['app', 'drv', 'hal', 'proto', 'core', 'cfg', 'src'],
+        'layer_dirs': ['app', 'api', 'drv', 'hal', 'proto', 'core', 'cfg'],
+        'scan_dirs': ['app', 'api', 'drv', 'hal', 'proto', 'core', 'cfg', 'src'],
         'weak_whitelist': [],  # APP→APP __weak 例外白名单
         'rules': {
             'app': {
-                'allowed': ['app/', 'core/', 'proto/', 'cfg/', '<'],
+                'allowed': ['app/', 'api/', 'core/', 'proto/', 'cfg/', '<'],
                 'forbidden': ['drv/', 'hal/'],
+            },
+            'api': {
+                'allowed': ['api/', 'drv/', 'hal/', 'core/', 'cfg/', '<'],
+                'forbidden': ['app/', 'proto/'],
             },
             'drv': {
                 'allowed': ['drv/', 'core/', 'hal/', 'cfg/', '<'],

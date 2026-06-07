@@ -9,7 +9,7 @@ description: "Interactive wizard to create a new module using std_module.h — d
 
 **核心**: `core/std_module.h` — **模块的骨架宏就是范式**
 **Project**: four_head (SC32L14T, Cortex-M0+, ARMCC V5.06)
-**Layers**: `app` | `drv` | `hal` | `proto` | `core`
+**Layers**: `app` | `api` | `drv` | `hal` | `proto` | `core`
 
 ---
 
