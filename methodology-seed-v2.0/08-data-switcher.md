@@ -17,7 +17,7 @@
 ```
 __weak 回调    → ISR 驱动、同槽同步计算        （链接器接线，零开销）
 Msg_Post      → 跨时间片异步事件通知           （环形队列缓冲）
-数据交换机     → 周期性模块间结构化数据路由     （中间层指针搬运，按调度槽执行）
+数据交换机     → 周期性模块间结构化数据路由     （Switcher 显式 PULL，按调度槽执行）
 ```
 
 选择规则扩展为两层：
@@ -53,7 +53,7 @@ Msg_Post      → 跨时间片异步事件通知           （环形队列缓冲
 
 ## 四、模块标准结构
 
-> **v2.1**: 模块使用 `MODULE_SKELETON()` + `MODULE_EXPORT()` 宏消除样板代码, 详见 `09-std-module.md`。以下描述模块在数据交换机中的角色和协议。
+> **v2.2**: 模块使用 `MODULE_SKELETON()` + `MODULE_EXPORT()` 宏消除样板代码, 详见 `09-std-module.md`。以下描述模块在数据交换机中的角色和协议。
 
 ### 4.1 组成部分
 
@@ -63,48 +63,47 @@ Msg_Post      → 跨时间片异步事件通知           （环形队列缓冲
 |----------|------|------|
 | `g_input` (Para_Grp_t) | 外部输入槽 — `info.status` + `void *para` 指向本模块 InData_t | MODULE_SKELETON 展开 |
 | `g_output` (Para_Grp_t) | 输出槽 — `info.status` + `void *para` 指向本模块 OutData_t | MODULE_SKELETON 展开 |
-| `DoWork()` | 每周期: 懒惰构造 → ProcessInput → 检测 ST_OUT → 调 _onOutput | MODULE_SKELETON 展开 |
+| `DoWork()` | 每周期: 懒惰构造 → ProcessInput | MODULE_SKELETON 展开 |
 | `Init()` | 模块实现: memset InData_t/OutData_t, 绑定 g_input.para/g_output.para | 模块自己写 |
 | `ProcessInput()` | 模块实现: 三段式 (输入→计算→输出) | 模块自己写 |
 | `GetIO(Para_Grp_t **, Para_Grp_t **, void (**)(void))` | 暴露指针 + DoWork 函数指针给 Switcher | MODULE_EXPORT 展开 |
-| `__weak {Module}_OnOutput(Para_Grp_t *pOut)` | 输出桩 — consumer STRONG 实现负责 memcpy | MODULE_EXPORT 展开 |
 
-纯生产者 (如 ADC) 无输入 — `g_input.para` 保持 NULL。纯消费者无下行输出 — `_onOutput` 为空壳。
+纯生产者 (如 ADC) 无输入 — `g_input.para` 保持 NULL。纯消费者无下行输出。
 
 ### 4.2 状态字协议
 
 IN 和 OUT 各自独立的 status 字节, 由 `Info_Header.status` 管理:
 
 ```
-g_input.info.status   bit0=ST_INIT (Constructor 置)  bit1=ST_NEW (consumer STRONG 回调设 → ProcessInput 消费后自清)
-g_output.info.status  bit0=ST_INIT (Constructor 置)  bit2=ST_OUT  (ProcessInput 设 → DoWork 调 _onOutput 后自清)
+g_input.info.status   bit0=ST_INIT (Constructor 置)  bit1=ST_NEW (consumer 回调设 → ProcessInput 消费后自清)
+g_output.info.status  bit0=ST_INIT (Constructor 置)
 ```
 
-**关键**: 模块 DoWork 进入时**先清自己的 g_output.info.status ST_OUT** (每帧都清)。有产出才在 ProcessInput 末尾置位。
-
-**bit1 生命周期** — 两个方向独立, 均由模块自身管理 (Switcher 不参与):
+**bit1 生命周期**:
 
 ```
-g_output ST_OUT (本模块产出):
-  1. ProcessInput 进入 → g_output.info.status &= ~ST_OUT    (每帧先清)
-  2. ProcessInput 结束 → 有产出时 g_output.info.status |= ST_OUT
-
 g_input ST_NEW (外部输入):
-  1. __weak STRONG 回调被调用 → memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW  (consumer 自设)
+  1. Consumer 回调被 Switcher 调用 → memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW  (consumer 自设)
   2. ProcessInput 检查 ST_NEW=1 → 消费 → g_input.info.status &= ~ST_NEW                                   (consumer 自清)
 ```
 
-完整周期:
+完整周期 (PULL 模式):
 
 ```
-1. Producer ProcessInput: 计算 → 写 g_output.para → g_output.info.status |= ST_OUT
-   Producer DoWork 检测 ST_OUT → 调 _onOutput(&g_output)
-2. __weak {Producer}_OnOutput → linker 解析到 consumer STRONG 实现
-3. Consumer STRONG {Producer}_OnOutput(pOut): memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW
-4. Consumer ProcessInput: g_output.info.status &= ~ST_OUT → 检查 ST_NEW → 消费 → g_input.info.status &= ~ST_NEW
+1. Producer ProcessInput: 计算 → 写 g_output.para (不置状态位)
+2. Switcher 显式路由: 检查 producer g_output.para 标志 → 调 consumer 回调
+3. Consumer 回调: memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW
+4. Consumer ProcessInput: 检查 ST_NEW → 消费 → g_input.info.status &= ~ST_NEW
 ```
 
-Switcher 只负责按顺序调用各模块 DoWork, 不读写任何 status 字节。
+Switcher 负责按顺序调用各模块 DoWork + 路由检查，不读写任何 status 字节。
+
+**@OUTPUT_CALLBACK 例外** (实时性要求):
+```
+Producer ProcessInput → 写 g_output.para + 置 info.route → 立即调 consumer DoWork (绕开 Switcher 周期)
+Consumer DoWork 检查 g_input.info.route → 选择执行路径 → 立即生效
+```
+适用场景: 蜂鸣器即时反馈等。须 `@OUTPUT_CALLBACK` 标记 + 用户确认 + interface_map.h 注册。
 
 ### 4.3 _io.h 接口文件
 
@@ -169,9 +168,6 @@ static void ProcessInput(void)
     ModuleAInData_t  *in  = (ModuleAInData_t *)g_input.para;
     ModuleAOutData_t *out = (ModuleAOutData_t *)g_output.para;
 
-    /* ★ 每帧先清输出标志 */
-    g_output.info.status &= ~ST_OUT;
-
     /* ====== 输入段 ====== */
     if (!(g_input.info.status & ST_NEW)) return;  // 无新输入
 
@@ -184,14 +180,14 @@ static void ProcessInput(void)
     out->flag   = 1;
 
     /* ====== 输出段 ====== */
-    g_output.info.status |= ST_OUT;               // 本帧有产出
+    /* 只写 g_output.para — Switcher 负责路由 */
 }
 
-/* ---- 导出: GetIO + __weak OnOutput + constructor 注册 ---- */
+/* ---- 导出: GetIO (不再生成 __weak OnOutput) ---- */
 MODULE_EXPORT(ModuleA);
 
-/* ---- 强符号: 接收 {Producer} 的输出 (每个数据源一个) ---- */
-void Producer_OnOutput(Para_Grp_t *pOut)
+/* ---- Consumer 回调: Switcher 在 Producer DoWork 后显式调用 ---- */
+void ModuleA_On{Producer}Data(Para_Grp_t *pOut)
 {
     /* consumer 自己 memcpy — Switcher 不搬运数据 */
     memcpy(g_input.para, pOut->para, sizeof(ModuleAInData_t));
@@ -199,7 +195,7 @@ void Producer_OnOutput(Para_Grp_t *pOut)
 }
 ```
 
-> **pre-v2.1 手动模式**: 不使用 `MODULE_SKELETON` 时, 需手动写 `Constructor()` / `DoWork()` / `GetIO()` / `__weak OnOutput`。不推荐新项目使用, 详见 `09-std-module.md` §8 迁移路径。
+> **pre-v2.1 手动模式**: 不使用 `MODULE_SKELETON` 时, 需手动写 `Constructor()` / `DoWork()` / `GetIO()`。不推荐新项目使用, 详见 `09-std-module.md` §8 迁移路径。
 
 ---
 
@@ -209,106 +205,115 @@ void Producer_OnOutput(Para_Grp_t *pOut)
 
 **全项目唯一有权 include 所有 `_io.h` 的文件。** 模块之间互不知道对方存在。
 
-**Switcher 不做数据搬运。** 数据通过 `__weak` 回调路由——producer 调用 `__weak` 桩，consumer 的 STRONG 实现写入自己的 `g_in`。Switcher 的职责是：
-1. 声明所有跨模块 `__weak` 桩（作为"接线板"，集中可见）
-2. 按调度次序依次调用各模块 `DoWork()`
+**Switcher 不做数据搬运。** Switcher 的职责是：
+1. 按调度次序依次调用各模块 `DoWork()`
+2. 在 Producer DoWork 后检查输出标志 → 显式调用 consumer 回调 (PULL)
+3. Consumer 回调内部自己 memcpy + 置 ST_NEW
 
 ### 5.2 初始化：Switcher_Init()
 
 ```c
 // ===== data_switcher.c =====
-#include "../include/module_a_io.h"
-#include "../include/module_b_io.h"
-// ... 所有模块的 _io.h
-
 void Switcher_Init(void)
 {
-    /* 所有模块使用懒惰初始化，首次 DoWork 自检 _Constructor() */
-    /* 不需要调 GetIO，不需要清零 status */
+    Para_Grp_t *pIn, *pOut;
+    void       (*pDoWork)(void);
+
+    AppCommMgr_GetIO(&pIn, &pOut, &pDoWork);
+    Switcher_Register(pDoWork, pOut);   /* 注册 DoWork + 输出指针 */
+
+    AppPower_GetIO(&pIn, &pOut, &pDoWork);
+    Switcher_Register(pDoWork, pOut);
+
+    // ... 所有模块
 }
 ```
 
-Switcher_Init 通常为空。模块的构造由自身 `DoWork()` 首次进入时自检完成。
+### 5.3 运行时：Switcher_Run() — PULL 路由
 
-### 5.3 __weak 桩：接线板
-
-**Switcher 声明所有跨模块 __weak 回调桩**，集中管理数据路由的"函数名 + 签名"。
+按调度次序依次调用各模块 `DoWork()`。每个 Producer 后立即检查输出并路由到 Consumer。
 
 ```c
-/* === __weak 桩 — 跨模块数据路由（接线板）=== */
+void Switcher_Run(void)
+{
+    /* Phase 1+2 交错: Producer DoWork → 路由 → Consumer DoWork */
 
-/* app_cooking 产出 → app_power 消费 */
-__attribute__((weak)) void AppPower_OnInput_PowerCtrl(uint8_t head_idx, uint8_t onoff, uint16_t target_power)
-{ (void)head_idx; (void)onoff; (void)target_power; }
+    /* AppCommMgr: producer of register data */
+    s_slots[SLOT_COMM_MGR].pDoWork();
+    _route_comm_mgr();  /* 检查 has_reg → AppPower_OnCommMgrData(pOut) */
 
-/* app_protect 产出 → app_power 消费 */
-__attribute__((weak)) void AppPower_OnInput_SystemError(uint8_t head_idx, uint8_t slave_addr, uint16_t fault)
-{ (void)head_idx; (void)slave_addr; (void)fault; }
+    /* AppPower: consumer (消费 CommMgr 数据) + producer */
+    s_slots[SLOT_POWER].pDoWork();
 
-/* app_comm_mgr 产出 → app_power 消费 */
-__attribute__((weak)) void AppPower_OnInput_RegData(uint8_t head_idx, uint8_t online, uint16_t igbt, uint16_t bot, uint16_t vol)
-{ (void)head_idx; (void)online; (void)igbt; (void)bot; (void)vol; }
+    /* AppProtect: consumer + producer */
+    s_slots[SLOT_PROTECT].pDoWork();
+    _route_protect();   /* 检查 has_err → AppPower_OnProtectData(pOut) */
+
+    /* ... 按调度顺序继续 */
+}
 ```
 
-**模块不需要 include 其他模块的头文件。** 模块只需知道 `__weak` 函数名和签名。Switcher 声明空壳，consumer 提供 STRONG 实现（写入自己的 `g_in`），producer 直接调用函数名。链接器自动接线。
-
-### 5.4 运行时：Switcher_Run()
-
-按调度次序依次调用各模块 `DoWork()`。数据路由已在模块内部通过 `__weak` 完成，Switcher 不参与。
+### 5.4 路由函数模板
 
 ```c
-void Switcher_Run_Slot3(void)
+/* AppCommMgr 输出 → 寄存器数据广播 */
+static void _route_comm_mgr(void)
 {
-    /* 按调度次序执行模块 — 数据通过 __weak 回调自动路由 */
-    AppCooking_DoWork();
-    AppPower_DoWork();
+    Para_Grp_t *pOut = s_slots[SLOT_COMM_MGR].pOut;
+    if (!pOut || !pOut->para) return;
+    uint8_t *d = (uint8_t *)pOut->para;
+    if (!d[0]) return;  /* has_reg flag */
+    AppPower_OnCommMgrData(pOut);          /* v2.2: Para_Grp_t 直传 */
+    /* v1.x compat: unpack for pre-MODULE_SKELETON consumers */
+    uint8_t head = d[1];
+    AppCooking_OnRegData((uint16_t)head, d);
+    AppProtect_OnRegData((uint16_t)head, d);
 }
 ```
 
-**时序保证**：producer 的 DoWork 先执行（内部调 `__weak` 回调 → consumer STRONG 写 `g_in` → 设 `g_in.status bit1`）→ consumer 的 DoWork 后执行（检查 `g_in.status bit1` → 消费）。同一帧内完成，无需延迟一帧。
+**关键**：producer 不知道 consumer 的存在，只写 g_output.para + 内部标志。如果 consumer 未注册，Switcher 路由检查 has_* 标志为 0，静默跳过。
 
-### 5.5 生产者调用模式
+### 5.5 @OUTPUT_CALLBACK 例外：立即 DoWork + route 分流
 
-Producer 在 DoWork 的计算段末尾，调用 Switcher 声明的 `__weak` 回调：
+正常 PULL 模式下，consumer 的 DoWork 要等下一轮 Switcher 调度。蜂鸣器等实时操作需要绕开这个延迟。
 
+**模式**:
 ```c
-/* === app_cooking.c (producer) === */
-void AppCooking_DoWork(void)
+/* === producer (app_hmi.c) === */
+static void post_buzzer(uint8_t valid)
 {
-    /* ... 输入段 ... */
+    s_out.has_buzzer = 1;
+    s_out.buzzer_on  = valid ? 1u : 0u;
+    g_output.info.route = 2;  /* route=2 → buzzer 执行路径 */
 
-    /* === 计算段 === */
-    /* ... 计算出功率命令 ... */
-
-    /* 输出段：调用 __weak 回调 → linker 解析到 consumer STRONG */
-    AppPower_OnInput_PowerCtrl(head_idx, onoff, target_power);
+    /* @OUTPUT_CALLBACK: buzzer real-time feedback — user confirmed */
+    DrvBuzzer_OnCtrl(valid ? 1u : 0u, NULL);
 }
 
-/* === app_power.c (consumer) === */
-void AppPower_OnInput_PowerCtrl(uint8_t head_idx, uint8_t onoff, uint16_t target_power)
+/* === consumer (drv_buzzer.c) === */
+static void ProcessInput(void)
 {
-    /* STRONG — 写入自己的 g_in */
-    g_in.ctrl_valid  = 1;
-    g_in.ctrl_head   = head_idx;
-    g_in.ctrl_onoff  = onoff;
-    g_in.ctrl_power  = target_power;
-}
-
-void AppPower_DoWork(void)
-{
-    /* ... 检查 g_in.status & 0x02 → 消费 g_in 字段 ... */
+    /* route 分流: 检查 info.route 选择执行路径 */
+    switch (g_input.info.route) {
+    case 1: /* 正常蜂鸣 */ break;
+    case 2: /* 即时蜂鸣 — @OUTPUT_CALLBACK 触发 */ break;
+    }
 }
 ```
 
-**关键**：producer 不知道 consumer 的存在，只知道函数名 `AppPower_OnInput_PowerCtrl`。如果 consumer 未迁移（无 STRONG），链接器选中 Switcher 的 WEAK 空壳，调用静默丢弃。
+**规则**:
+- route 字段由 producer 设置，consumer ProcessInput 内 switch 分流
+- @OUTPUT_CALLBACK 绕开 Switcher 周期，直接调 consumer DoWork 或回调
+- 须 `@OUTPUT_CALLBACK` 标记 + 用户确认 + interface_map.h 白名单注册
+- `check_output_callback.py` 扫描无标记的输出回调 → 阻断提交
 
 ---
 
 ## 六、结构体使用约束
 
 - **枚举不出模块**：跨模块数据用纯 struct 字段描述，不用枚举值。模块内部遍历用联合体或指针偏移
-- **常量不跨模块**：没有公共 `constants.h`。跨模块常量由定义方放入 Output_t，Switcher 填入消费方 Input_t
-- **字段变更影响面**：owner 的 Output_t 字段变更 → 只影响 Switcher 接线段。不需要改所有 consumer
+- **常量不跨模块**：没有公共 `constants.h`。跨模块常量由定义方放入 Output_t，通过 Switcher 路由到达消费方
+- **字段变更影响面**：owner 的 Output_t 字段变更 → 只影响 Switcher 路由段 + consumer 回调。不需要改所有 consumer
 
 ---
 
@@ -347,23 +352,25 @@ void AppPower_DoWork(void)
 
 ```
 文件:       include/module_a_io.h   module_a.h   module_a.c
-类型:       ModuleA_Input_t         ModuleA_Output_t
+类型:       ModuleA_InData_t        ModuleA_OutData_t
 函数:       ModuleA_GetIO()         ModuleA_DoWork()
-变量:       g_in                    g_out
+Consumer:   ModuleA_On{Producer}Data(Para_Grp_t *pOut)
+变量:       g_input                 g_output
 结构体成员:  snake_case 单词，不加模块前缀 (power, mode, voltage，不是 a_power)
 ```
 
-`{Module}{Name}_{type}` — 模块前缀区分命名空间，结构体成员不加前缀。
+`{Consumer}_On{Producer}Data` — 消费者名+数据源，清晰表达数据流向。
 
 ---
 
 ## 十、优势
 
 - **消除 `_LINK` 副本**：模块不需要声明 consumer struct
-- **AI 维护量下降**：owner 字段变更 → 只改 Switcher 接线，不改 N 个 consumer
+- **AI 维护量下降**：owner 字段变更 → 只改 Switcher 路由，不改 N 个 consumer
 - **数据流集中可见**：所有跨模块路由在 `Switcher_Run()` 一目了然
 - **头文件物理隔离**：`_io.h` 统一放 `include/`，全路径可被工具审计
-- **初始化一致**：Switcher 上电统一清零，不依赖模块记住
+- **PULL 单向调用**：Producer 只写, Switcher 拉, 不产生回调链混乱
+- **route 分流**：info.route 字段让 consumer 单入口多分支，不依赖函数名多态
 
 ---
 
@@ -372,18 +379,21 @@ void AppPower_DoWork(void)
 - ISR 回调（延迟敏感 → 仍走 `__weak`）
 - 同槽同步计算（调用即执行 → 仍走 `__weak`）
 - 跨进程/跨核通信（需消息持久化 → `Msg_Post`）
+- 实时输出（→ `@OUTPUT_CALLBACK` 例外，绕开 Switcher 周期）
 
 ---
 
 ## 十二、与 interface_map.h 的关系
 
-`interface_map.h` 仍然管 __weak 函数配对。数据交换机引入后，新增一块"接线表"——可硬编码在 Switcher，也可抽成 `wiring.json`（后续工具化）。
+`interface_map.h` 仍然管 __weak 函数配对 + Switcher 路由文档。数据交换机 PULL 模式引入后：
 
 ```
-interface_map.h  →  __weak 函数配对 + 签名验证        → check_weak_pairs.py
-Switcher 接线段  →  结构化数据路由（Output_t → Input_t） → 暂无工具（后续 generate_switcher.py）
+interface_map.h  →  __weak 函数配对 + Switcher 路由表 + @OUTPUT_CALLBACK 白名单
+check_weak_pairs.py  →  __weak 签名验证
+check_include.py     →  _io.h include 权限审计
+check_output_callback.py →  _onOutput/ST_OUT 检测 + @OUTPUT_CALLBACK 白名单验证
 ```
 
 ---
 
-*方法论版本: v2.1, 2026-06-06*
+*方法论版本: v2.2, 2026-06-06*

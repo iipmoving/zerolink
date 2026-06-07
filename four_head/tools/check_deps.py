@@ -275,6 +275,9 @@ def check_weak_callbacks(project_dir, whitelist):
     return violations
 
 
+# void* 参数检查 — 仅检查 APP→DRV __weak 场景（已在 check_weak_callbacks 中处理）
+
+
 def check_onoutput_routing(project_dir):
     """检查 _OnOutput 强符号是否真实传递数据，非空壳。"""
     violations = []
@@ -737,6 +740,7 @@ def main():
     print("  weak    → 改用 g_output+ST_OUT, 由 Switcher 统一路由")
     print("           需要白名单例外 → 用户确认后加入 deps_config.json weak_whitelist")
     print("  route   → _OnOutput 函数必须有实际数据操作，不得为空壳")
+    print("  void*   → 替换为具体类型，中间层做类型映射")
     print()
     sys.exit(1)
 

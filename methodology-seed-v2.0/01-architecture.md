@@ -106,7 +106,7 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 |------|---------|---------|--------|
 | `__weak` 直调 | 同时间片连续执行 | 同步，调用即执行 | 无（链接器接线） |
 | `Msg_Post` 消息 | 跨时间片 / 跨进程 | 异步，队列缓冲 | msg_scheduler |
-| 数据交换机 | 周期性结构化数据路由 | 调度槽内顺序执行 | Switcher（指针搬运） |
+| 数据交换机 | 周期性结构化数据路由 | 调度槽内顺序执行 | __weak 链自动路由 + Switcher 顺序调用 |
 
 ```
 /* 同步场景 — __weak 直调 */
@@ -118,10 +118,10 @@ APP↔APP: 只通过 __weak 回调 (同步) 或 Msg_Post (异步) 通信，禁�
 发送方: Msg_Post(MSG_KEY_EVENT, param, &data)  — 写入环形队列
 接收方: MsgScheduler_Register(MSG_KEY_EVENT, handler)  — 下个时间片消费
 
-/* 结构化数据路由 — 数据交换机 (v2.1: __weak 链自动路由) */
-发送方: ModuleA_DoWork() → ProcessInput → g_output.info.status |= ST_OUT → DoWork 自动调 _onOutput
-中间层: __weak {ModuleA}_OnOutput → linker 解析到 consumer STRONG → memcpy(g_input.para, ...)
-接收方: ModuleB_DoWork() → ProcessInput 检查 g_input.info.status & ST_NEW → 消费
+/* 结构化数据路由 — 数据交换机 (v2.2: Switcher 显式 PULL) */
+发送方: ModuleA_DoWork() → ProcessInput 写 g_output.para (不置状态位)
+中间层: Switcher 检查 producer 输出标志 → 显式调 consumer 回调
+接收方: Consumer 回调 memcpy(g_input.para, ...) + 置 ST_NEW → ModuleB_DoWork() 消费
 ```
 
 **选择规则（两层）**:
@@ -249,7 +249,7 @@ typedef struct {
   _t        — 通用结构体类型
   _IN_t     — 数据交换机输入槽（本模块消费）
   _OUT_t    — 数据交换机输出槽（本模块产出）
-  _LINK_t   — [v1.0 遗留] consumer 副本，v2.0 数据交换机已消除此模式
+  _LINK_t   — [v1.0 遗留] consumer 副本，v2.1 __weak 链 + Para_Grp_t 已消除此模式
 ```
 
 ### 4.2 函数: `{ModulePrefix}_{Action}(...)`
@@ -404,11 +404,11 @@ Module_DoWork()                 ← Switcher 每周期调用
   │
   ├─ [计算] 核心逻辑              ← 纯计算, 不调输入/输出通道
   │
-  └─ [输出] 更新 g_out 字段       ← 写 g_out.para 后 g_output.status |= ST_OUT
-       DoWork 检测 ST_OUT → 调 _onOutput (自动, 模块无感知)
+  └─ [输出] 更新 g_out 字段       ← 写 g_out.para (不置 ST_OUT)
+       Switcher 显式路由 consumer 回调
 
 
-/* 形式 C: std_module.h 宏骨架 (v2.1 推荐, 详见 09-std-module.md) */
+/* 形式 C: std_module.h 宏骨架 (v2.2 推荐, 详见 09-std-module.md) */
 MODULE_SKELETON()               ← 展开 g_input/g_output/Constructor/DoWork
   │
   ├─ Init()                     ← 初始化绑定 g_input.para / g_output.para
@@ -416,21 +416,27 @@ MODULE_SKELETON()               ← 展开 g_input/g_output/Constructor/DoWork
   ├─ ProcessInput()             ← 每帧被 DoWork 调用
   │    ├─ [输入] 检查 g_input.info.status & ST_NEW → 消费 → &= ~ST_NEW
   │    ├─ [计算] 纯逻辑
-  │    └─ [输出] 写 g_output.para → g_output.info.status |= ST_OUT
+  │    └─ [输出] 写 g_output.para (不置状态位, Switcher 负责路由)
   │
-  ├─ DoWork 检查 ST_OUT → 调 _onOutput(&g_output)
-  │    └─ _onOutput → consumer 的 STRONG {Module}_OnOutput() → memcpy 数据
-  │
-  └─ MODULE_EXPORT({Module})    ← GetIO + __weak OnOutput + constructor 注册
+  └─ MODULE_EXPORT({Module})    ← GetIO (不再生成 __weak OnOutput)
+
+  Consumer 回调: {Module}_On{Producer}Data(Para_Grp_t *pOut)
+     ← Switcher 在 Producer DoWork 后显式调用
+     ← memcpy(g_input.para, pOut->para, ...) + g_input.info.status |= ST_NEW
+
+  @OUTPUT_CALLBACK 例外:
+     Producer 写 g_output.para + 置 info.route → 立即调 Consumer DoWork (绕开 Switcher)
+     Consumer ProcessInput 内 switch(info.route) 选择执行路径
+     ← 适用: 蜂鸣器实时反馈等。须用户确认 + 白名单注册
 ```
 
 **关键区别**:
 
-| | 形式 A (__weak) | 形式 B (Switcher v2.0) | 形式 C (std_module.h v2.1) |
+| | 形式 A (__weak) | 形式 B (Switcher v2.0) | 形式 C (std_module.h v2.2) |
 |---|---|---|---|
 | 入口函数 | `Module_Run()` | `Module_DoWork()` | `MODULE_SKELETON()` 展开 `DoWork()` |
-| 输入来源 | __weak 强符号 | `g_in` 字段 (Switcher copy) | consumer STRONG 回调 `memcpy` 到 `g_input.para` |
-| 输出去向 | __weak 回调 | `g_out` 字段 (Switcher copy) | `_onOutput` 函数指针 → consumer STRONG |
+| 输入来源 | __weak 强符号 | `g_in` 字段 (Switcher copy) | Switcher 显式调 consumer 回调 → memcpy 到 `g_input.para` |
+| 输出去向 | __weak 回调 | `g_out` 字段 (Switcher copy) | Switcher 检查 producer 标志 → 调 consumer 回调 (PULL) |
 | 数据搬运 | 无 (直接调) | Switcher 做 copy | consumer 自己做 `memcpy` |
 | 参数槽 | 无 | 自定义 Input_t/Output_t | 统一 `Para_Grp_t { info + void* para }` |
 | 构造机制 | `static uint8_t _init` | `g_in.status & 0x01` | `g_init_done` + `Constructor()` |
@@ -482,7 +488,7 @@ static void Init(void)
 }
 ```
 
-**约束**: `main()` 不调用 `Module_Init()`。Switcher_Init() 只做指针绑定 + 清零 status，不知道模块内部构造逻辑。构造逻辑是模块私有的。
+**约束**: `main()` 不调用 `Module_Init()`。Switcher_Init() 只做 GetIO + Switcher_Register(pDoWork)，不知道模块内部构造逻辑。构造逻辑是模块私有的（DoWork 首次进入自检）。
 
 ### 7.3 输入段：提前规划，禁止中途回调
 
@@ -557,8 +563,8 @@ std_module.h 宏骨架模块 (推荐, ~50-300行)
   ├─ MODULE_SKELETON()      ← 展开 Constructor + DoWork (形式 C)
   ├─ Init()                 ← 绑定 g_input.para / g_output.para
   ├─ ProcessInput()         ← 三段式: 输入→计算→输出
-  ├─ MODULE_EXPORT({Name})  ← GetIO + __weak OnOutput + constructor
-  └─ {Producer}_OnOutput()  ← 每个数据源一个 STRONG 强符号
+  ├─ MODULE_EXPORT({Name})  ← GetIO
+  └─ {Consumer}_On{Producer}Data()  ← 每个数据源一个 consumer 回调 (Switcher PULL 调用)
 
 主进程大模块 (APP层, ~200-500行, 形式 A 遗留)
   ├─ Module_Run()           ← 三段式入口: 输入→计算→输出

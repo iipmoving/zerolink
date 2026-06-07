@@ -1787,6 +1787,7 @@ enum {
     BUZZER_ALARM,        /* 5: 报警 */
 };
 
+/* @OUTPUT_CALLBACK: buzzer real-time feedback — user confirmed */
 static void post_buzzer(uint8_t sound)
 {
     s_out.has_buzzer = 1;
