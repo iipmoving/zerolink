@@ -165,37 +165,153 @@ def normalize_include(inc_path):
     return inc_path
 
 
-WEAK_APP_RE = re.compile(r'__attribute__\(\(weak\)\)\s+(void|uint8_t|uint16_t|int8_t|int16_t)\s+(\w+)')
-APP_PREFIXES = ('App', 'Proto')
+WEAK_RE = re.compile(r'__attribute__\(\(weak\)\)\s+(void|uint8_t|uint16_t|int8_t|int16_t|uint32_t|int32_t|char)\s+(\w+)')
+VENDOR_DIRS = ('vendor', 'FWLib', 'CMSIS', 'lib')
+
+def find_strong_symbol(project_dir, func_name):
+    """在项目 src/ 中搜索同名强符号（非 __weak 的函数定义）。"""
+    for root, dirs, files in os.walk(project_dir):
+        # 跳过 vendor 目录
+        rel = os.path.relpath(root, project_dir).replace('\\', '/')
+        if any(v in rel.split('/') for v in VENDOR_DIRS):
+            continue
+        for f in files:
+            if not f.endswith('.c'):
+                continue
+            fpath = os.path.join(root, f)
+            try:
+                with open(fpath, 'r', encoding='utf-8', errors='ignore') as fp:
+                    for line in fp:
+                        # 匹配函数定义：返回类型 + 函数名 + (
+                        if f' {func_name}(' in line and '__weak' not in line and '__attribute__' not in line:
+                            # 确认不是声明（没有 ; 结尾）
+                            if ';' not in line.strip().rstrip(')'):
+                                return True
+            except Exception:
+                continue
+    return False
 
 def check_weak_callbacks(project_dir, whitelist):
-    """检查 APP→APP __weak 输出回调，非白名单则违规。"""
+    """检查所有 __attribute__((weak)) 输出回调的有效性。
+    
+    检查项:
+      1. APP→APP 方向：不允许（除非白名单）
+      2. 所有方向：弱符号必须有对应的强符号实现，否则数据无意义。
+    """
     violations = []
-    app_dir = os.path.join(project_dir, 'app')
-    if not os.path.isdir(app_dir):
-        return violations
+    weak_decls = []  # (file, line, func_name, return_type)
 
-    for fname in sorted(os.listdir(app_dir)):
-        if not fname.endswith('.c'):
+    # 扫描所有非 vendor 的 .c 文件
+    for root, dirs, files in os.walk(project_dir):
+        rel = os.path.relpath(root, project_dir).replace('\\', '/')
+        if any(v in rel.split('/') for v in VENDOR_DIRS):
             continue
-        fpath = os.path.join(app_dir, fname)
-        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-            for line_no, line in enumerate(f, 1):
-                m = WEAK_APP_RE.search(line)
-                if not m:
-                    continue
-                func_name = m.group(2)
-                # 检查接收方是否在 APP 层（函数名以 App/Proto 开头）
-                is_app_dest = any(func_name.startswith(p) for p in APP_PREFIXES)
-                if not is_app_dest:
-                    continue  # DRV/HAL 方向合法
-                if func_name in whitelist:
-                    continue  # 白名单例外
+        for fname in files:
+            if not fname.endswith('.c'):
+                continue
+            fpath = os.path.join(root, fname)
+            relpath = os.path.relpath(fpath, project_dir).replace('\\', '/')
+            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                for line_no, line in enumerate(f, 1):
+                    m = WEAK_RE.search(line)
+                    if m:
+                        func_name = m.group(2)
+                        # MODULE_EXPORT 生成的 OnOutput 弱符号由骨架自动定义，跳过
+                        if func_name.endswith('_OnOutput'):
+                            continue
+                        weak_decls.append((relpath, line_no, func_name))
+
+    # 检查 _OnOutput 强符号是否真实传递数据
+    onoutput_violations = check_onoutput_routing(project_dir)
+    violations.extend(onoutput_violations)
+
+    # 检查每个 weak 声明是否有强符号实现
+    for filepath, line_no, func_name in weak_decls:
+        # 检查 APP→APP 方向
+        is_app_dest = func_name.startswith('App') or func_name.startswith('Proto')
+        is_drv_src = 'drv/' in filepath
+        
+        if is_app_dest and not is_drv_src:
+            if func_name not in whitelist:
                 violations.append({
-                    'file': f'app/{fname}:{line_no}',
+                    'file': f'{filepath}:{line_no}',
                     'func': func_name,
                     'desc': f'APP→APP __weak 输出回调 ({func_name})，应改 g_output+ST_OUT'
                 })
+                continue
+        
+        # 检查是否有对应的强符号
+        if not find_strong_symbol(project_dir, func_name):
+            violations.append({
+                'file': f'{filepath}:{line_no}',
+                'func': func_name,
+                'desc': f'__weak 无对应强符号 ({func_name}) — 数据无意义，应移除或补充实现'
+            })
+
+    return violations
+
+
+def check_onoutput_routing(project_dir):
+    """检查 _OnOutput 强符号是否真实传递数据，非空壳。"""
+    violations = []
+    onoutput_re = re.compile(r'\b(\w+_OnOutput)\s*\(')
+
+    for root, dirs, files in os.walk(project_dir):
+        rel = os.path.relpath(root, project_dir).replace('\\', '/')
+        if any(v in rel.split('/') for v in VENDOR_DIRS):
+            continue
+        for fname in files:
+            if not fname.endswith('.c'):
+                continue
+            fpath = os.path.join(root, fname)
+            relpath = os.path.relpath(fpath, project_dir).replace('\\', '/')
+            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            for i, line in enumerate(lines):
+                m = onoutput_re.search(line)
+                if not m:
+                    continue
+                func_name = m.group(1)
+                if '__weak' in line or '__attribute__' in line:
+                    continue
+
+                # 收集函数体
+                body_lines = []
+                brace_depth = 0
+                started = False
+                for j in range(i + 1, min(i + 50, len(lines))):
+                    l = lines[j]
+                    if '{' in l:
+                        brace_depth += l.count('{')
+                        started = True
+                    if '}' in l:
+                        brace_depth -= l.count('}')
+                    if started:
+                        body_lines.append(l)
+                    if started and brace_depth <= 0:
+                        break
+
+                body_text = '\n'.join(body_lines)
+                has_void_cast = '(void)' in body_text
+                has_real_op = any(op in body_text for op in [
+                    'memcpy', '->', '=', 'Drv_', 'App', '_OnKey',
+                    '_OnRegData', '_OnSystemError', '_OnPowerCtrl'])
+
+                if not has_real_op and has_void_cast:
+                    violations.append({
+                        'file': f'{relpath}:{i + 1}',
+                        'func': func_name,
+                        'type': 'weak',
+                        'desc': f'{func_name} 仅有 (void) 空壳，无实际数据传递'
+                    })
+                elif not has_real_op and not has_void_cast and len(body_text.strip()) < 10:
+                    violations.append({
+                        'file': f'{relpath}:{i + 1}',
+                        'func': func_name,
+                        'type': 'weak',
+                        'desc': f'{func_name} 函数体为空，未路由任何数据'
+                    })
     return violations
 
 
@@ -585,7 +701,7 @@ def main():
         print()
 
     if weak_violations:
-        print(f"  [weak] — {len(weak_violations)} 项 APP→APP __weak 输出回调违规:")
+        print(f"  [weak] — {len(weak_violations)} 项 __weak/__OnOutput 违规:")
         for v in weak_violations:
             print(f"    {v['file']}")
             print(f"      → {v['desc']}")
@@ -596,6 +712,7 @@ def main():
     print("  extern  → 改用 __weak 函数 (消费者写 weak 默认, 生产者强覆盖)")
     print("  weak    → 改用 g_output+ST_OUT, 由 Switcher 统一路由")
     print("           需要白名单例外 → 用户确认后加入 deps_config.json weak_whitelist")
+    print("  route   → _OnOutput 函数必须有实际数据操作，不得为空壳")
     print()
     sys.exit(1)
 
