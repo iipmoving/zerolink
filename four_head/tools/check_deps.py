@@ -170,7 +170,7 @@ def normalize_include(inc_path):
 
 
 WEAK_RE = re.compile(r'__attribute__\(\(weak\)\)\s+(void|uint8_t|uint16_t|int8_t|int16_t|uint32_t|int32_t|char)\s+(\w+)')
-STRUCT_PARAM_RE = re.compile(r'\b(Hmi|Display|Comm|Power|Reg|Protect|Event|Frame|Cache|Config|Head|Global|State|Key)\w*\s+\*')
+STRUCT_PARAM_RE = re.compile(r'\*\s*\)|\bvoid\s*\*')  # 结构体指针 或 void*
 VENDOR_DIRS = ('vendor', 'FWLib', 'CMSIS', 'lib')
 
 def find_strong_symbol(project_dir, func_name):
