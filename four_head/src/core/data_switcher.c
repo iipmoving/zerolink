@@ -1,10 +1,13 @@
 /**
  * @file    data_switcher.c
- * @brief   Data Switcher — 统一调度
+ * @brief   Data Switcher — PULL 路由调度器
  * @layer   core
  *
- * 所有模块通过 GetIO 注册函数指针，Switcher 只调 pDoWork。
- * 数据通过 __weak 回调自动路由，Switcher 不碰 struct 字段。
+ * 所有模块通过 GetIO 注册函数指针和输出指针。
+ * Phase 1: 按序调各模块 DoWork (producer 写 g_output.para)
+ * Phase 2: 显式路由 — Switcher 检查输出标志, 调 consumer 回调
+ *
+ * 数据流: Producer 写 g_output.para → Switcher 路由 → Consumer 回调写入 g_input.para + ST_NEW
  */
 #include "core/std_module.h"
 #include "data_switcher.h"
@@ -20,100 +23,115 @@ void DrvCommMgr_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(v
 void DrvBuzzer_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
 void DrvDisplay_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
 
-/* APP / DRV 强符号 */
+/* Consumer 回调 — Switcher 在 Producer DoWork 后显式调用 */
+
+/* v2.2 PULL: 接收 Para_Grp_t *pOut (consumer 内部 memcpy + ST_NEW) */
+void AppPower_OnCookingData(Para_Grp_t *pOut);
+void AppPower_OnProtectData(Para_Grp_t *pOut);
+void AppPower_OnCommMgrData(Para_Grp_t *pOut);
+
+/* v1.x __weak 回调: pre-MODULE_SKELETON 模块使用 (uint16_t, void*) */
+void AppCooking_OnRegData(uint16_t param, void *data_ptr);
+void AppProtect_OnRegData(uint16_t param, void *data_ptr);
 void AppHmi_OnKey(uint16_t param, void *data_ptr);
 void AppCooking_OnKey(uint16_t param, void *data_ptr);
 void AppSegAlign_OnKey(uint16_t param, void *data_ptr);
-void AppPower_OnRegData(uint16_t param, void *data_ptr);
-void AppCooking_OnRegData(uint16_t param, void *data_ptr);
-void AppProtect_OnRegData(uint16_t param, void *data_ptr);
-void AppPower_OnSystemError(uint16_t param, void *data_ptr);
-
-/* DRV 层强符号（v1.0 桥接，migrate 后移除）*/
 void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
+/* @OUTPUT_CALLBACK: buzzer real-time feedback — user confirmed */
 void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr);
 
 #define MAX_MODULES  16
 
+/* 模块槽位索引 */
+enum {
+    SLOT_COMM_MGR = 0,
+    SLOT_POWER,
+    SLOT_PROTECT,
+    SLOT_COOKING,
+    SLOT_HMI,
+    SLOT_SEG_ALIGN,
+    SLOT_KEY,
+    SLOT_COMM_MGR_DRV,
+    SLOT_BUZZER,
+    SLOT_DISPLAY,
+    SLOT_COUNT
+};
+
 typedef struct {
     void (*pDoWork)(void);
+    Para_Grp_t *pOut;
 } ModuleSlot_t;
 
-static ModuleSlot_t s_slots[MAX_MODULES];
-static uint8_t      s_count = 0;
+static ModuleSlot_t s_slots[SLOT_COUNT];
 
-void Switcher_Register(void (*pDoWork)(void))
+static void _register(uint8_t idx, void (*pDoWork)(void), Para_Grp_t *pOut)
 {
-    if (s_count < MAX_MODULES)
-        s_slots[s_count++].pDoWork = pDoWork;
+    s_slots[idx].pDoWork = pDoWork;
+    s_slots[idx].pOut    = pOut;
 }
 
 void Switcher_Init(void)
 {
     Para_Grp_t *pIn, *pOut;
-    void       (*pWork)(void);
+    void       (*pDoWork)(void);
 
-    /* 已迁移到 std_module.h 的模块 */
-    AppPower_GetIO(&pIn, &pOut, &pWork);
-    /* INFO 是模块私有的，Switcher 不碰 */
-    Switcher_Register(pWork);
+    AppCommMgr_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_COMM_MGR, pDoWork, pOut);
 
-    AppHmi_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    AppPower_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_POWER, pDoWork, pOut);
 
-    AppCommMgr_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    AppProtect_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_PROTECT, pDoWork, pOut);
 
-    AppProtect_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    /* AppCooking — not yet migrated to MODULE_SKELETON, skip */
 
-    AppSegAlign_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    AppHmi_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_HMI, pDoWork, pOut);
 
-    DrvKey_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    AppSegAlign_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_SEG_ALIGN, pDoWork, pOut);
 
-    DrvCommMgr_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    DrvKey_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_KEY, pDoWork, pOut);
 
-    DrvBuzzer_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    DrvCommMgr_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_COMM_MGR_DRV, pDoWork, pOut);
 
-    DrvDisplay_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork);
+    DrvBuzzer_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_BUZZER, pDoWork, pOut);
+
+    DrvDisplay_GetIO(&pIn, &pOut, &pDoWork);
+    _register(SLOT_DISPLAY, pDoWork, pOut);
 }
 
-void Switcher_Run(void)
-{
-    for (uint8_t i = 0; i < s_count; i++)
-        if (s_slots[i].pDoWork)
-            s_slots[i].pDoWork();
-}
+/* ===== Phase 2: 显式路由 ===== */
 
-/* ===== v2.0 输出路由 ===== */
-
-/* AppCommMgr 输出 → 寄存器数据广播到三个 APP 模块 */
-void AppCommMgr_OnOutput(Para_Grp_t *pOut)
+static void _route_comm_mgr(void)
 {
+    Para_Grp_t *pOut = s_slots[SLOT_COMM_MGR].pOut;
+    if (!pOut || !pOut->para) return;
     uint8_t *d = (uint8_t *)pOut->para;
-    if (!d[0]) return;
+    if (!d[0]) return;  /* has_reg */
+    AppPower_OnCommMgrData(pOut);          /* v2.2 PULL: Para_Grp_t 直传 */
     uint8_t head = d[1];
-    AppPower_OnRegData((uint16_t)head, d);
-    AppCooking_OnRegData((uint16_t)head, d);
-    AppProtect_OnRegData((uint16_t)head, d);
+    AppCooking_OnRegData((uint16_t)head, d);   /* v1.x compat */
+    AppProtect_OnRegData((uint16_t)head, d);   /* v1.x compat */
 }
 
-/* AppProtect 输出 → 系统错误到 app_power */
-void AppProtect_OnOutput(Para_Grp_t *pOut)
+static void _route_protect(void)
 {
+    Para_Grp_t *pOut = s_slots[SLOT_PROTECT].pOut;
+    if (!pOut || !pOut->para) return;
     uint8_t *d = (uint8_t *)pOut->para;
-    if (!d[0]) return;
-    AppPower_OnSystemError((uint16_t)d[1], d);
+    if (!d[0]) return;  /* has_err */
+    AppPower_OnProtectData(pOut);          /* v2.2 PULL: Para_Grp_t 直传 */
 }
 
-/* DrvKey 输出 → 广播到三个 APP 模块 */
-void DrvKey_OnOutput(Para_Grp_t *pOut)
+static void _route_key(void)
 {
+    Para_Grp_t *pOut = s_slots[SLOT_KEY].pOut;
+    if (!pOut || !pOut->para) return;
     uint8_t *d = (uint8_t *)pOut->para;
     if (!d[0]) return;  /* has_key */
     uint16_t param = (uint16_t)d[1] | ((uint16_t)d[2] << 8);
@@ -122,19 +140,57 @@ void DrvKey_OnOutput(Para_Grp_t *pOut)
     AppSegAlign_OnKey(param, NULL);
 }
 
-/* AppHmi 输出 → 分发到 drv_display / drv_buzzer */
-void AppHmi_OnOutput(Para_Grp_t *pOut)
+static void _route_hmi(void)
 {
-    /* OutData_t layout: has_display(1) has_buzzer(1) buzzer_on(1) res(1) [display_data...] */
+    Para_Grp_t *pOut = s_slots[SLOT_HMI].pOut;
+    if (!pOut || !pOut->para) return;
     uint8_t *d = (uint8_t *)pOut->para;
-    uint8_t has_display = d[0];
-    uint8_t has_buzzer  = d[1];
-    uint8_t buzzer_on   = d[2];
+    if (d[0]) {
+        DrvDisplay_OnRefresh(0, d + 4);  /* d+4 = display data start */
+    }
+    /* 蜂鸣器: APP 输出枚举 1~5，中间层映射到 DRV 参数 */
+    if (d[1]) {
+        uint8_t sound = d[2];
+        switch (sound) {
+        case 1:  DrvBuzzer_OnCtrl(1, NULL); break;  /* KEY_TAP */
+        case 2:  DrvBuzzer_OnCtrl(1, NULL); break;  /* KEY_LONG */
+        case 3:  DrvBuzzer_OnCtrl(1, NULL); break;  /* OP_OK */
+        case 4:  DrvBuzzer_OnCtrl(0, NULL); break;  /* OP_FAIL */
+        case 5:  DrvBuzzer_OnCtrl(1, NULL); break;  /* ALARM */
+        default: break;
+        }
+    }
+}
 
-    if (has_display) {
-        DrvDisplay_OnRefresh(0, d + 4);  /* d+4 = &hot_head_idx = display data start */
-    }
-    if (has_buzzer) {
-        DrvBuzzer_OnCtrl(buzzer_on ? 1u : 0u, NULL);
-    }
+void Switcher_Run(void)
+{
+    /* Phase 1+2 交错: Producer DoWork → 立即路由 → Consumer DoWork */
+
+    /* AppCommMgr: producer of register data */
+    if (s_slots[SLOT_COMM_MGR].pDoWork) s_slots[SLOT_COMM_MGR].pDoWork();
+    _route_comm_mgr();
+
+    /* AppPower: consumer of reg data + system error, producer of power commands */
+    if (s_slots[SLOT_POWER].pDoWork) s_slots[SLOT_POWER].pDoWork();
+
+    /* AppProtect: consumer of reg data, producer of system errors */
+    if (s_slots[SLOT_PROTECT].pDoWork) s_slots[SLOT_PROTECT].pDoWork();
+    _route_protect();
+
+    /* AppCooking: not yet migrated */
+
+    /* AppHmi: producer of display data (buzzer via @OUTPUT_CALLBACK) */
+    if (s_slots[SLOT_HMI].pDoWork) s_slots[SLOT_HMI].pDoWork();
+    _route_hmi();
+
+    /* Remaining modules in order */
+    if (s_slots[SLOT_SEG_ALIGN].pDoWork) s_slots[SLOT_SEG_ALIGN].pDoWork();
+
+    /* DrvKey: producer of key events */
+    if (s_slots[SLOT_KEY].pDoWork) s_slots[SLOT_KEY].pDoWork();
+    _route_key();
+
+    if (s_slots[SLOT_COMM_MGR_DRV].pDoWork) s_slots[SLOT_COMM_MGR_DRV].pDoWork();
+    if (s_slots[SLOT_BUZZER].pDoWork) s_slots[SLOT_BUZZER].pDoWork();
+    if (s_slots[SLOT_DISPLAY].pDoWork) s_slots[SLOT_DISPLAY].pDoWork();
 }

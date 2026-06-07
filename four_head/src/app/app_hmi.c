@@ -55,11 +55,8 @@ static OutData_t s_out;
 
 MODULE_SKELETON();
 
-/* __weak 输出桩（向后兼容，新代码走 g_output + ST_OUT）*/
-__attribute__((weak)) void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
-__attribute__((weak)) void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }
+/* DRV 强符号声明（Switcher 路由调用，APP 不定义 __weak 桩）*/
+void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
 
 #ifdef HMI_DEBUG_KEYS
 __attribute__((weak)) void Drv_Display_SetRawLEDs(uint8_t io8, uint8_t io9, uint8_t io10)
@@ -1291,7 +1288,6 @@ static void post_display(void)
     memcpy(s_out.leds_head_select, s_display.leds_head_select, 4);
     memcpy(s_out.leds_power_level, s_display.leds_power_level, 10);
     g_output.info.route = 1;
-    g_output.info.status |= ST_OUT;
 
     /* v1.0 向后兼容 */
     DrvDisplay_OnRefresh(0, &s_display);
@@ -1781,15 +1777,22 @@ static uint8_t any_timer_active(void)
     return 0;
 }
 
-static void post_buzzer(uint8_t valid)
+/* APP 层蜂鸣器 — 输出枚举值 1~N，由中间层映射到 DRV 参数 */
+enum {
+    BUZZER_INVALID = 0,
+    BUZZER_KEY_TAP,      /* 1: 按键短按 */
+    BUZZER_KEY_LONG,     /* 2: 按键长按 */
+    BUZZER_OP_OK,        /* 3: 操作成功 */
+    BUZZER_OP_FAIL,      /* 4: 操作失败 */
+    BUZZER_ALARM,        /* 5: 报警 */
+};
+
+static void post_buzzer(uint8_t sound)
 {
-    /* v2.0: 写 g_output + 即时回调 */
     s_out.has_buzzer = 1;
-    s_out.buzzer_on  = valid ? 1u : 0u;
+    s_out.buzzer_on  = sound;
     g_output.info.route = 2;
-    g_output.info.status |= ST_OUT;
-    if (_onOutput) _onOutput(&g_output);
-    g_output.info.status &= ~ST_OUT;
+    /* Switcher _route_hmi 下帧读取 has_buzzer 并映射到 DRV 参数 */
 }
 
 /* ================================================================
