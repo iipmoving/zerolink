@@ -46,6 +46,21 @@ grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}.c
 
 ---
 
+## Step 1.5: 检残留 — 清除旧 __weak 输出回调
+
+```bash
+# 检查本模块是否定义了发给其他 APP 模块的 __weak 回调
+grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
+```
+
+**规则**: APP→APP 方向不得有 __weak 输出回调。发现则改为写 `g_output` + `ST_OUT`，由 Switcher 路由。
+
+合法例外:
+- DRV→APP 方向（如 drv_key → AppHmi_OnKey）— 通过 Switcher 的 `OnOutput` 强符号路由
+- APP→DRV 方向（如 AppHmi_OnOutput → DrvDisplay_OnRefresh）— Switcher 直接调 DRV 强符号
+
+---
+
 ## Step 2: 查路径 — 追踪每条 I/O 的数据流
 
 对每个输入回调，追踪：
@@ -273,7 +288,7 @@ void Module_OnXxx(uint16_t param, void *data_ptr)
 # 1. 本模块通过编译
 # 2. 旧调用方不受影响（旧入口仍存在）
 # 3. layer deps 不增加
-python tools/check_deps.py src
+python tools/check_all.py
 ```
 
 ---
@@ -287,4 +302,4 @@ python tools/check_deps.py src
 - [ ] Step 4: 每个旧输入回调对应一个 `_OnInput_` 新函数
 - [ ] Step 5: 旧 __weak 输出桩已替换为 `g_out` 写
 - [ ] Step 5: `DoWork()` 三段完整：输入→计算→输出
-- [ ] Step 6: `check_deps.py` → 0 violations
+- [ ] Step 6: `check_all.py` → 全部 PASS

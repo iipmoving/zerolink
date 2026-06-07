@@ -34,6 +34,9 @@ grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}.c
 
 **InData_t / OutData_t 按此表字段精确设计。**
 
+**铁律: 模块之间单向调用，不定义 __weak 输出回调。**
+模块只管写 `g_output` → `ST_OUT`，由 Switcher 统一路由到下游模块的 `g_input`。APP↔APP 之间不得有 `__attribute__((weak))` 输出回调。
+
 ---
 
 ## Step 1: 模块身份

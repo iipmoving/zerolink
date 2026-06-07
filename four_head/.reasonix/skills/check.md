@@ -54,10 +54,13 @@ python tools/check_msgs.py src
 | 检查项 | 方法 | 违规示例 |
 |--------|------|---------|
 | 裸 `__weak` 关键字 | `grep -n "__weak "` | `__weak void Foo(void)` → 应 `__attribute__((weak))` |
+| APP→APP __weak 输出回调 | `grep -n "__attribute__((weak))" src/app/*.c` | APP 模块定义 __weak 回调给其他 APP 模块 → 应改 g_output |
 | 缺 _Constructor | `grep "_Constructor" {module}.c` | 每个模块必须有一处 |
 | include guard 未注释 | 检查 app/drv/proto .h | `#define` 应改为 `//#define` |
 | 跨模块 struct 无 pack(4) | grep `typedef struct` 前 pack(4) | struct 未对齐 |
 | 文件编码 | `file --mime-encoding {file}` | 非 UTF-8 → WARN |
+
+APP→APP 方向合法例外：无。所有 APP 间通信必须通过 Switcher 路由（g_output → ST_OUT → Switcher → g_input）。DRV→APP 和 APP→DRV 方向可通过 Switcher 的 OnOutput 强符号路由。
 
 报告格式：
 ```
