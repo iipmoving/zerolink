@@ -8,6 +8,8 @@ user-invocable: true
 
 Run all methodology checks against the current project and report pass/fail with violation locations.
 
+**核心**: `core/std_module.h` — 模块的骨架宏就是范式
+
 ---
 
 ## The Job
@@ -218,6 +220,22 @@ If any check fails:
 ## Quick Mode
 
 If the user says `--quick` or "快速检查" or "quick check", skip the compile step (5/5) and only run checks 1-4.
+
+---
+
+## 编码基本规范（每次提交前自检）
+
+- [ ] 所有文件为 **UTF-8 without BOM**？
+- [ ] 无裸 `__weak` — 全部使用 `__attribute__((weak))`？
+- [ ] 4 空格缩进，无 Tab？
+- [ ] 每个模块有 `static void _Constructor(void)` 或 `MODULE_SKELETON()`？
+- [ ] 跨模块 struct 有 `#pragma pack(4)` + `res[]` 填充到 4 倍数？
+- [ ] 函数/变量/常量带模块前缀？（`ModuleName_Func` / `g_` / `MODULE_CONST`）
+- [ ] app/drv/proto 的 `.h` 使用 `//#define`（L0 阻断）？
+- [ ] `_io.h` 的 `#define` 保留（公开接口）？
+- [ ] APP 层不 include DRV/HAL？
+- [ ] 在 git reset 前 stash 或建备份分支？
+- [ ] 中文注释说明复杂逻辑？
 
 ---
 

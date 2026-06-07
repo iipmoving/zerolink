@@ -164,6 +164,12 @@ Copy as-is. The template has an `_example_StructKey` that serves as documentatio
 
 Copy as-is. The template has documented sections for __weak pair registration and struct pair registration.
 
+### 3.8 std_module.h → PROJECT_DIR/core/std_module.h
+
+Copy from the methodology-seed template or from an existing project (`four_head/src/core/std_module.h`).
+This is the **v2.0 module skeleton header** — `MODULE_SKELETON()` + `MODULE_EXPORT()` macros define the module paradigm.
+If the template doesn't exist yet, create `core/std_module.h` with the content from `01-architecture.md` §7 appendix.
+
 ---
 
 ## Step 4: Copy Tools
@@ -451,6 +457,7 @@ Created:
   .claude/specs/*.md      ✓  (4 files)
   cfg/structs.json        ✓
   cfg/interface_map.h     ✓
+  core/std_module.h       ✓
   deps_config.json        ✓
   tools/check_*.py        ✓  (5 tools)
   .git/hooks/pre-commit   ✓  (.ps1 + .sh)
@@ -479,6 +486,7 @@ Before declaring completion:
 - [ ] 4 spec files copied to .claude/specs/
 - [ ] structs.json copied to cfg/ (serial: 0)
 - [ ] interface_map.h copied to cfg/
+- [ ] core/std_module.h copied to core/
 - [ ] 5 tools copied to tools/ (check_deps, check_weak_pairs, check_structs, check_include, generate_structs)
 - [ ] deps_config.json generated with correct layer rules
 - [ ] Pre-commit hooks generated (.ps1 + .sh)
