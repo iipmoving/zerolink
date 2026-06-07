@@ -1792,7 +1792,7 @@ static void post_buzzer(uint8_t sound)
     s_out.has_buzzer = 1;
     s_out.buzzer_on  = sound;
     g_output.info.route = 2;
-    /* Switcher _route_hmi 下帧读取 has_buzzer 并映射到 DRV 参数 */
+    g_output.info.status |= ST_OUT;  /* 触发 _onOutput → 即时路由 */
 }
 
 /* ================================================================

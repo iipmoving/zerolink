@@ -140,17 +140,12 @@ static void _route_key(void)
     AppSegAlign_OnKey(param, NULL);
 }
 
-static void _route_hmi(void)
+/* ===== AppHmi _onOutput（ST_OUT 触发，即时路由） ===== */
+void AppHmi_OnOutput(Para_Grp_t *pOut)
 {
-    Para_Grp_t *pOut = s_slots[SLOT_HMI].pOut;
-    if (!pOut || !pOut->para) return;
     uint8_t *d = (uint8_t *)pOut->para;
-    if (d[0]) {
-        DrvDisplay_OnRefresh(0, d + 4);  /* d+4 = display data start */
-    }
-    /* 蜂鸣器: APP 输出枚举 1~5，中间层映射到 DRV 参数 */
-    if (d[1]) {
-        uint8_t sound = d[2];
+    if (d[1]) {  /* has_buzzer */
+        uint8_t sound = d[2];  /* buzzer_on = 枚举值 */
         switch (sound) {
         case 1:  DrvBuzzer_OnCtrl(1, NULL); break;  /* KEY_TAP */
         case 2:  DrvBuzzer_OnCtrl(1, NULL); break;  /* KEY_LONG */
@@ -159,6 +154,17 @@ static void _route_hmi(void)
         case 5:  DrvBuzzer_OnCtrl(1, NULL); break;  /* ALARM */
         default: break;
         }
+    }
+    /* 提示音已即时路由，显示在 _route_hmi 中处理 */
+}
+
+static void _route_hmi(void)
+{
+    Para_Grp_t *pOut = s_slots[SLOT_HMI].pOut;
+    if (!pOut || !pOut->para) return;
+    uint8_t *d = (uint8_t *)pOut->para;
+    if (d[0]) {
+        DrvDisplay_OnRefresh(0, d + 4);  /* d+4 = display data start */
     }
 }
 
