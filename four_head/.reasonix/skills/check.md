@@ -54,13 +54,18 @@ python tools/check_msgs.py src
 | 检查项 | 方法 | 违规示例 |
 |--------|------|---------|
 | 裸 `__weak` 关键字 | `grep -n "__weak "` | `__weak void Foo(void)` → 应 `__attribute__((weak))` |
-| __weak 输出回调审计 | `python tools/check_deps.py src` （自动审计） | APP→APP 违规 / 无强符号 / _OnOutput 空壳 |
+| __weak + void* 审计 | `python tools/check_deps.py src` （自动审计） | APP→APP / 无强符号 / _OnOutput 空壳 / APP→DRV 传指针 |
 | 缺 _Constructor | `grep "_Constructor" {module}.c` | 每个模块必须有一处 |
 | include guard 未注释 | 检查 app/drv/proto .h | `#define` 应改为 `//#define` |
 | 跨模块 struct 无 pack(4) | grep `typedef struct` 前 pack(4) | struct 未对齐 |
 | 文件编码 | `file --mime-encoding {file}` | 非 UTF-8 → WARN |
 
-APP→APP 方向合法例外：无。所有 APP 间通信必须通过 Switcher 路由（g_output → ST_OUT → Switcher → g_input）。DRV→APP 和 APP→DRV 方向可通过 Switcher 的 OnOutput 强符号路由。
+**数据传递铁律**：
+- APP 层允许零个 `__attribute__((weak))` — 所有输出走 Switcher 路由
+- APP→DRV 禁止传 `void*` 或结构体指针 — 只允许基本类型/枚举值
+- `void*` 参数无法在编译期检查类型，实际指向什么结构体靠记忆
+- 所有 `_OnOutput` 必须有实际数据操作（`memcpy` / `=` / 函数调用），不得是 `(void)param` 空壳
+- 中间层（Switcher）完成枚举→DRV 参数映射，APP 不认知 DRV 结构体
 
 报告格式：
 ```
