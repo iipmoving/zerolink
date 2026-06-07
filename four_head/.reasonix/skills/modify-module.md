@@ -59,6 +59,8 @@ grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
 - DRV→APP 方向（如 drv_key → AppHmi_OnKey）— 通过 Switcher 的 `OnOutput` 强符号路由
 - APP→DRV 方向（如 AppHmi_OnOutput → DrvDisplay_OnRefresh）— Switcher 直接调 DRV 强符号
 
+**如果确实需要 APP→APP 输出回调，必须先向用户说明理由并等待确认，不得自行添加。**
+
 ---
 
 ## Step 2: 查路径 — 追踪每条 I/O 的数据流
