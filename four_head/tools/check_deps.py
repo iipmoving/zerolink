@@ -32,12 +32,12 @@ BUILTIN_PRESETS = {
         'weak_whitelist': [],  # APP→APP __weak 例外白名单
         'rules': {
             'app': {
-                'allowed': ['app/', 'api/', 'core/', 'proto/', 'cfg/', '<'],
-                'forbidden': ['drv/', 'hal/'],
+                'allowed': ['app/', 'core/', 'proto/', 'cfg/', '<'],
+                'forbidden': ['api/', 'drv/', 'hal/'],
             },
             'api': {
-                'allowed': ['api/', 'drv/', 'hal/', 'core/', 'cfg/', '<'],
-                'forbidden': ['app/', 'proto/'],
+                'allowed': ['api/', 'core/', 'cfg/', '<'],
+                'forbidden': ['app/', 'drv/', 'hal/', 'proto/'],
             },
             'drv': {
                 'allowed': ['drv/', 'core/', 'hal/', 'cfg/', '<'],
@@ -170,6 +170,7 @@ def normalize_include(inc_path):
 
 
 WEAK_RE = re.compile(r'__attribute__\(\(weak\)\)\s+(void|uint8_t|uint16_t|int8_t|int16_t|uint32_t|int32_t|char)\s+(\w+)')
+STRUCT_PARAM_RE = re.compile(r'\b(Hmi|Display|Comm|Power|Reg|Protect|Event|Frame|Cache|Config|Head|Global|State|Key)\w*\s+\*')
 VENDOR_DIRS = ('vendor', 'FWLib', 'CMSIS', 'lib')
 
 def find_strong_symbol(project_dir, func_name):
@@ -231,6 +232,25 @@ def check_weak_callbacks(project_dir, whitelist):
 
     # 检查每个 weak 声明是否有强符号实现
     for filepath, line_no, func_name in weak_decls:
+        # APP→DRV 方向：禁止传结构体指针（只允许基本类型+void*传枚举值）
+        is_app_file = 'app/' in filepath
+        is_drv_func = func_name.startswith('Drv') or func_name.startswith('HAL_')
+        if is_app_file and is_drv_func:
+            src_path = os.path.join(project_dir, filepath)
+            try:
+                with open(src_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                line_text = lines[line_no - 1] if line_no <= len(lines) else ''
+                if STRUCT_PARAM_RE.search(line_text):
+                    violations.append({
+                        'file': f'{filepath}:{line_no}',
+                        'func': func_name,
+                        'desc': f'APP→DRV __weak 传了结构体指针，只允许基本类型/枚举值'
+                    })
+                    continue
+            except Exception:
+                pass
+
         # 检查 APP→APP 方向
         is_app_dest = func_name.startswith('App') or func_name.startswith('Proto')
         is_drv_src = 'drv/' in filepath
