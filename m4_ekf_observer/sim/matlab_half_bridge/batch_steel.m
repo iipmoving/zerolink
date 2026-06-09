@@ -1,6 +1,6 @@
 % batch_steel — 批量处理钢锅数据, 汇总输出
 function batch_steel()
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 csvs = {
     'capture_20260602_152019.csv'
     'capture_20260602_152020.csv'

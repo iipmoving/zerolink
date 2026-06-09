@@ -42,14 +42,16 @@ typedef struct {
 
 每个模块不再自定义 `Input_t`/`Output_t`，而是统一用 `Para_Grp_t` 包装。实际数据挂在 `void *para` 后面。
 
-### 2.2 `MODULE_SKELETON()` — 声明骨架
+### 2.2 `MODULE_SKELETON(name)` — 声明骨架
 
 展开为：
 - `g_input` / `g_output` (Para_Grp_t)
 - `g_init_done` 标志
 - `Init()` / `ProcessInput()` 前向声明
+- `{Module}_InputCallback()` — **弱符号空壳**，中间层覆盖强符号注入数据（Primary）
+- `{Module}_OutputCallback(Para_Grp_t *pOut)` — **弱符号**，一般不用，仅即时场景（Exception）
 - `Constructor()` — memset + 调 `Init()` + 置 `ST_INIT`
-- `DoWork()` — 懒惰构造 → `ProcessInput()`
+- `DoWork()` — 懒惰构造 → `{Module}_InputCallback()` → `ProcessInput()` → `{Module}_OutputCallback(&g_output)`
 
 ### 2.3 `MODULE_EXPORT(module_name)` — 导出接口
 
@@ -69,18 +71,18 @@ typedef struct {
 typedef struct {
     uint8_t  field;
     uint16_t value;
-} {Module}InData_t;
+} {Module}_InData_t;
 
 typedef struct {
     uint8_t  head;
     uint16_t result;
-} {Module}OutData_t;
+} {Module}_OutData_t;
 
-static {Module}InData_t  s_in;
-static {Module}OutData_t s_out;
+static {Module}_InData_t  s_in;
+static {Module}_OutData_t s_out;
 
-/* ---- 骨架: 展开 g_input/g_output/Constructor/DoWork ---- */
-MODULE_SKELETON();
+/* ---- 骨架: name 必须与 MODULE_EXPORT 一致 ---- */
+MODULE_SKELETON({Module});
 
 /* ---- 初始化: 绑定数据指针 (Constructor 自动调用) ---- */
 static void Init(void)
@@ -94,8 +96,8 @@ static void Init(void)
 /* ---- 处理逻辑 (DoWork 每帧调) ---- */
 static void ProcessInput(void)
 {
-    {Module}InData_t  *in  = ({Module}InData_t *)g_input.para;
-    {Module}OutData_t *out = ({Module}OutData_t *)g_output.para;
+    {Module}_InData_t  *in  = ({Module}_InData_t *)g_input.para;
+    {Module}_OutData_t *out = ({Module}_OutData_t *)g_output.para;
 
     /* ====== 输入段 ====== */
     if (g_input.info.status & ST_NEW) {
@@ -107,44 +109,54 @@ static void ProcessInput(void)
     out->result = calc(in);
 
     /* ====== 输出段 ====== */
-    /* 只写 g_output.para — Switcher 负责路由 */
+    /* 只写 g_output.para + 置 ST_OUT — Switcher 负责路由 */
+    g_output.info.status |= ST_OUT;
 }
 
 /* ---- 导出: GetIO ---- */
 MODULE_EXPORT({Module});
-
-/* ---- Consumer 回调: Switcher 在 Producer DoWork 后显式调用 ---- */
-void {Module}_On{Producer}Data(Para_Grp_t *pOut)
-{
-    memcpy(g_input.para, pOut->para, sizeof({Module}InData_t));
-    g_input.info.status |= ST_NEW;
-}
 ```
 
 ---
 
-## 四、数据流 (v2.2 PULL)
+## 四、数据流 (v2.2 PULL — InputCallback 主路由)
 
 ```
-Producer DoWork():
-  1. ProcessInput() 消费 g_input.para
-  2. 计算 → 写 g_output.para (不置任何状态位)
+模块名 = "Power" 的实例:
 
-Switcher 显式路由:
-  检查 producer g_output.para 的 has_* 标志
-  → 调 consumer 回调: {Consumer}_On{Producer}Data(producer_pOut)
+Module.DoWork:
+  ① Power_InputCallback()    ← 弱符号空壳, 中间层覆盖强符号注入数据
+     ├─ (weak) 默认空函数 — 无输入时不做事
+     └─ (strong) 中间层覆盖: 读 s_slot[SLOT_ADC].pOut->para,
+                     写入 s_slot[SLOT_POWER].pIn->para, 置 ST_NEW
 
-Consumer 回调 {Consumer}_On{Producer}Data(pOut):
-  1. memcpy(g_input.para, pOut->para, sizeof(InData_t))  ← consumer 自拷贝
-  2. g_input.info.status |= ST_NEW                       ← 通知自己的 DoWork
+  ② ProcessInput()           ← 消费 g_input → 计算 → 写 g_output
+     ├─ 输入段: 检查 ST_NEW, 读 g_input.para
+     ├─ 计算段: 业务逻辑
+     └─ 输出段: 写 g_output.para + 置 ST_OUT
 
-Consumer DoWork():
-  1. ProcessInput 检查 g_input.info.status & ST_NEW
-  2. 消费 → g_input.info.status &= ~ST_NEW
-  3. 计算 → 写 g_output.para
+  ③ Power_OutputCallback(&g_output)  ← 弱符号, 一般不用
+     └─ (weak) 默认空函数 — 仅 ProcessInput 中途需要即时输出时覆盖
 ```
 
-**关键**: 输出不推，Switcher 拉。Producer 只写 g_output.para，不设 ST_OUT，不调 _onOutput。Switcher 在 DoWork 调用之间显式检查标志并路由。
+**关键**:
+- **单向调用原则**: 模块不定义 `__weak` 输出给其他 APP 模块, 只写 `g_output.para`
+- **InputCallback 是主路由**: 中间层覆盖强符号拉数据, 模块本身不知道数据来源
+- **OutputCallback 是例外**: 仅即时场景（蜂鸣器反馈等）使用, 且一般不用
+- **无 `{Module}_On{Producer}Data` 模式**: v2.2 废弃了 Switcher 显式调 consumer 回调的模式, 统一为 InputCallback 弱符号
+
+典型 InputCallback 实现 (在中间层/路由文件中):
+
+```c
+void Power_InputCallback(void)
+{
+    Adc_Output_t  *adc = (Adc_Output_t *)s_slot[SLOT_ADC].pOut->para;
+    Power_Input_t *pwr = (Power_Input_t *)s_slot[SLOT_POWER].pIn->para;
+
+    memcpy(pwr, adc->measured_data, sizeof(pwr->measured_data)); /* 或逐字段赋值 */
+    s_slot[SLOT_POWER].pIn->info.status |= ST_NEW;
+}
+```
 
 ---
 
@@ -217,7 +229,8 @@ static void _route_comm_mgr(void)
 | 位 | 常量 | 谁置位 | 谁清零 | 含义 |
 |----|------|--------|--------|------|
 | bit0 | `ST_INIT 0x01` | Constructor | — | 模块已构造 |
-| bit1 | `ST_NEW 0x02` | consumer 回调 | ProcessInput 消费后 | 新输入到达 |
+| bit1 | `ST_NEW 0x02` | InputCallback (中间层) | ProcessInput 消费后 | 新输入到达 |
+| bit2 | `ST_OUT 0x04` | ProcessInput 输出段 | Switcher 路由后 | 有输出待消费 |
 
 ---
 
@@ -237,15 +250,55 @@ static void _route_comm_mgr(void)
 
 ## 八、迁移路径 (v1.x → v2.2)
 
+### 8.1 铁则: 先改名备份, 不在原文件空改
+
+**禁止直接修改原模块文件。禁止在原文件加 MODULE_SKELETON。**
+
+原因是:
+| 问题 | 后果 |
+|------|------|
+| 几千行大文件中间插骨架宏 | 宏展开位置不对导致 `g_input`/`g_output` 未定义 |
+| 旧 `g_in`/`g_out` 和范式 `g_input`/`g_output` 同名异义 | 变量名极易混淆, 该读 new 时读了 old |
+| 旧 `Module_DoWork` 和 `DoWork` 共存 | 不知道哪个是入口 |
+| 手动 GetIO 和 MODULE_EXPORT 冲突 | 链接错误 |
+
+正确流程:
+
+```bash
+# Step 0: 改名备份旧文件 (禁止在原文件修改)
+mv src/{layer}/{module}.c src/{layer}/{module}_v1.c.bak
+
+# Step 0b: 如果有旧 .h, 也改名
+mv include/{module}.h include/{module}_v1.h.bak
+
+# Step 0c: 用 new-module SKILL 生成空范模板
+#     得到: src/{layer}/{module}.c (空白模板, 含 MODULE_SKELETON)
+
+# Step 0d: 从备份逐段搬功能到模板 (搬一段测一段)
+
+# Step 0e: 功能等价后删备份
+rm src/{layer}/{module}_v1.c.bak
+```
+
+> **详见 `/modify-module` SKILL — 这是唯一合法的迁移流程。**
+
+### 8.2 迁移步骤 (搬入功能后)
+
 1. `#include "core/std_module.h"` 替换手动声明的 `g_in`/`g_out`
-2. `MODULE_SKELETON()` 替换手动 `Constructor()`/`DoWork()` 骨架
+2. `MODULE_SKELETON(name)` 替换手动 `Constructor()`/`DoWork()` 骨架
 3. `Init()` 绑定 `g_input.para` / `g_output.para`
 4. `ProcessInput()` 搬入原 `DoWork()` 的三段式逻辑
 5. `MODULE_EXPORT(Module)` 替换手动 `GetIO()`
 6. 删除旧的 `__weak OnOutput` 桩 + constructor 注册
-7. Switcher 添加显式路由调用 consumer 回调
+7. Switcher 注册 + InputCallback 强符号实现 (中间层)
 
-详见 `/modify-module` SKILL。
+### 8.3 验证
+
+```bash
+python tools/check_paradigm.py .   # MODULE_SKELETON + MODULE_EXPORT 配对
+python tools/check_output_callback.py .  # 无未批准的 _onOutput/ST_OUT
+python tools/check_deps.py .       # 层依赖
+```
 
 ---
 

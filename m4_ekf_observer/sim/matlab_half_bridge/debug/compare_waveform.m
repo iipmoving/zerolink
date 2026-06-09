@@ -6,8 +6,8 @@ cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 % 铁锅: 153424 f4, 30.3kHz, Vdc~300V, Ipk~18A
 % 钢锅: 152037 f0, 30.9kHz, Vdc~297V, Ipk~28A
 targets = {
-    {'../../tools/ekf_tuner/capture_20260602_153424.csv', 4, 'Iron', [0.2, 0.3, 0.8]}
-    {'../../tools/ekf_tuner/capture_20260602_152037.csv', 0, 'Steel', [0.2, 0.3, 0.8]}
+    {'../../tools/ekf_tuner/captures/capture_20260602_153424.csv', 4, 'Iron', [0.2, 0.3, 0.8]}
+    {'../../tools/ekf_tuner/captures/capture_20260602_152037.csv', 0, 'Steel', [0.2, 0.3, 0.8]}
 };
 
 figure('Position', [100 100 1400 500]);

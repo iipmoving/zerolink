@@ -22,7 +22,7 @@ typedef struct {
 } OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(DrvKey);
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
 #define TK_CH(n)        (1UL << (n))  /* 通道n的位掩码                         */
@@ -139,9 +139,6 @@ static void Key_PostEvent(uint8_t key_code, uint8_t key_state)
     s_out.has_key   = 1;
     s_out.key_code  = key_code;
     s_out.key_state = key_state;
-    g_output.info.status |= ST_OUT;
-    if (_onOutput) _onOutput(&g_output);
-    g_output.info.status &= ~ST_OUT;
 }
 
 /* ========== 处理按键释放（切键时先释放旧键） ========== */

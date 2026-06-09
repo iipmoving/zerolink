@@ -6,7 +6,7 @@ cal.VDC_SCALE = cal.V_SCALE;
 cal.HRTIM_CLK_MHZ = 144;
 C_FARAD = 0.94e-6;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 test_frames = {
     {'capture_20260602_153358.csv', 2, 'Iron outlier L=59.7'},

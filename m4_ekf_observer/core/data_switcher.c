@@ -1,95 +1,97 @@
 /**
  * @file    data_switcher.c
- * @brief   Data Switcher — 统一调度 + PULL 显式路由 (v2.2)
+ * @brief   Data Switcher — PULL 路由调度器 (v2.2)
  * @layer   core
  *
- * **迁移状态**: v2.2 PULL 路由。模块通过 MODULE_EXPORT 注册 GetIO,
- * Switcher 在 DoWork 调用之间显式路由数据。
+ * Phase 2 单文件模式: APP_Power (app_power.c) 作为唯一功率模块。
+ * PowerBase / PowerCalc 暂时排除 (IncludeInBuild=0)。
  *
- * 路由机制 (v2.2 PULL):
- *   Switcher_Run → Producer.DoWork → 检查 Producer 的 g_output
- *   → _route_xxx() 显式调用 Consumer 回调 → Consumer memcpy + ST_NEW
- *   → Consumer.DoWork 消费
+ * 数据流（20ms 一周期内）：
+ *   Slot 0: AppAdc.DoWork      → g_out (AdcBlock_t*)
+ *   Slot 1: APP_Power.DoWork    → InputCallback PULL AdcBlock_t.inputValue
+ *                               → ProcessInput: ADC 分发 + PowerTypeFun()
  *
- * @OUTPUT_CALLBACK 例外:
- *   需要即时回调的模块 (如蜂鸣器) 设 ST_OUT 触发 _onOutput,
- *   须有 /* @OUTPUT_CALLBACK: <reason> — user confirmed */ 标记,
- *   并在 interface_map.h 白名单注册。
+ * APP_Power_InputCallback = 强符号 (本文件提供): 从 AppAdc.g_out PULL 数据
  */
 
-#include "core/std_module.h"
+#include "std_module.h"
 #include "data_switcher.h"
+#include "../include/app_adc_io.h"
 
-/* 模块 GetIO 声明 (由 MODULE_EXPORT 生成) */
-void Adc_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
-void Power_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));
+/* ---- APP_Power_GetIO 外部声明 (MODULE_EXPORT 在 app_power.c 生成) ---- */
+void APP_Power_GetIO(Para_Grp_t **ppIn,
+                     Para_Grp_t **ppOut,
+                     void      (**ppDoWork)(void));
 
-/* Consumer 回调声明 (PULL: Switcher 显式调用, 模块实现后取消注释)
-void Power_OnAdcData(Para_Grp_t *pOut);
-*/
+/* ===== 模块槽位枚举 ===== */
+typedef enum {
+    SLOT_ADC       = 0,
+    SLOT_APP_POWER = 1,
+    SLOT_COUNT
+} SwitcherSlot_t;
 
-#define MAX_MODULES  16
-
+/* ===== Module Slot ===== */
 typedef struct {
-    void       (*pDoWork)(void);
-    Para_Grp_t *pOut;   /* 模块的 g_output 指针 */
-} ModuleSlot_t;
+    SwitcherSlot_t  idx;
+    unsigned char   res[3];
+    Para_Grp_t     *pIn;
+    Para_Grp_t     *pOut;
+    void          (*pDoWork)(void);
+} ModuleSlotDef;
 
-static ModuleSlot_t s_slots[MAX_MODULES];
-static uint8_t      s_count = 0;
+static ModuleSlotDef s_slot[SLOT_COUNT];
 
-void Switcher_Register(void (*pDoWork)(void), Para_Grp_t *pOut)
-{
-    if (s_count < MAX_MODULES) {
-        s_slots[s_count].pDoWork = pDoWork;
-        s_slots[s_count].pOut    = pOut;
-        s_count++;
-    }
-}
+/* ---- 影子结构: 与 app_power.c:Power_Input_t 布局一致 ---- */
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    uint32_t inputValue[30];
+} PwrInShadow;
 
-/* === PULL 路由函数 ================================================
- * 每个 producer 一个 _route_xxx().
- * 检查 producer 的 g_output.para 是否有新数据 → 显式调 consumer 回调.
- * Producer 只写 g_output.para, Switcher 负责路由.
- * ==================================================================== */
-
-static void _route_adc(Para_Grp_t *pOut)
-{
-    if (!pOut || !pOut->para) return;
-    /* Adc 输出 → Power 消费 (Power 模块实现后取消注释)
-    Power_OnAdcData(pOut);
-    */
-    (void)pOut;
-}
-
-/* === 初始化 ======================================================= */
+/* ================================================================
+ * Switcher_Init — 注册全部模块的 GetIO
+ * ================================================================ */
 void Switcher_Init(void)
 {
-    Para_Grp_t *pIn, *pOut;
-    void       (*pWork)(void);
+    APP_Adc_GetIO(&s_slot[SLOT_ADC].pIn,
+                  &s_slot[SLOT_ADC].pOut,
+                  &s_slot[SLOT_ADC].pDoWork);
 
-    Adc_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork, pOut);
-
-    Power_GetIO(&pIn, &pOut, &pWork);
-    Switcher_Register(pWork, pOut);
+    APP_Power_GetIO(&s_slot[SLOT_APP_POWER].pIn,
+                    &s_slot[SLOT_APP_POWER].pOut,
+                    &s_slot[SLOT_APP_POWER].pDoWork);
 }
 
-/* === Slot1 调度入口 (约每 10ms) ================================== */
+/* ================================================================
+ * APP_Power_InputCallback (强符号) — 从 AppAdc PULL 数据
+ *
+ * 覆盖 MODULE_SKELETON(APP_Power) 生成的 weak 空壳。
+ * 从 s_slot[SLOT_ADC].pOut 拉 AdcBlock_t.inputValue[30]
+ * 写入 s_slot[SLOT_APP_POWER].pIn → g_in.inputValue[30]
+ * ================================================================ */
+void APP_Power_InputCallback(void)
+{
+    Adc_Output_t *adc_out = (Adc_Output_t *)s_slot[SLOT_ADC].pOut->para;
+    PwrInShadow  *pwr_in  = (PwrInShadow *)s_slot[SLOT_APP_POWER].pIn->para;
+
+    if (adc_out && adc_out->pBlock) {
+        memcpy(pwr_in->inputValue, adc_out->pBlock->inputValue,
+               sizeof(pwr_in->inputValue));
+        pwr_in->status |= 0x02;
+    }
+    s_slot[SLOT_APP_POWER].pIn->info.status |= ST_NEW;
+}
+
+/* ================================================================
+ * Switcher_Run_Slot1 — 按序调 DoWork
+ *
+ * DoWork 内部: InputCallback(PULL) → ProcessInput → OutputCallback(按需)
+ * ================================================================ */
 void Switcher_Run_Slot1(void)
 {
-    /* Producer DoWork → 显式路由 → 下一个 DoWork */
-    for (uint8_t i = 0; i < s_count; i++) {
-        if (!s_slots[i].pDoWork) continue;
-        s_slots[i].pDoWork();
-        /* 每个 producer DoWork 之后检查是否需要路由 */
-        if (s_slots[i].pOut && s_slots[i].pOut->para) {
-            /* TODO: 根据模块索引派发路由 */
-            switch (i) {
-            case 0: _route_adc(s_slots[i].pOut); break;
-            /* case N: _route_xxx(s_slots[N].pOut); break; */
-            default: break;
-            }
+    for (uint8_t i = 0; i < SLOT_COUNT; i++) {
+        if (s_slot[i].pDoWork) {
+            s_slot[i].pDoWork();
         }
     }
 }

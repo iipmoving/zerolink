@@ -28,7 +28,7 @@ iron_files = {
     'capture_20260602_153424.csv'
 };
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 fprintf('File                           Frame  N    FMAC_n  FMAC_positions\n');
 fprintf('%s\n', repmat('-',1,100));

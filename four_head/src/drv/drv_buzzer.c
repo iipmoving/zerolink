@@ -24,7 +24,7 @@ typedef struct { uint8_t dummy; } InData_t;
 typedef struct { uint8_t dummy; } OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(DrvBuzzer);
 
 /* ========== 音阶频率表（PWM中断频率 = 2×输出音频频率） ========== */
 /* 这些PWM值与APB0时钟频率无关，因为TIM_Preload中的分子分母同时缩放 */

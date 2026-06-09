@@ -5,7 +5,7 @@ cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3+6.2e3));
 cal.VDC_SCALE = cal.V_SCALE;
 C_FARAD = 0.94e-6;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 % 手动挑几个失败帧和成功帧对比
 test_cases = {

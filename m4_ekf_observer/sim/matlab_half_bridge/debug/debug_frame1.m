@@ -1,5 +1,5 @@
 % debug_frame1 — 检查帧1 (phi=NaN) 的电流波形和过零检测
-csv_path = '../../tools/ekf_tuner/capture_20260602_104852.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_104852.csv';
 cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3 + 6.2e3));
 

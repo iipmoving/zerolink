@@ -85,7 +85,7 @@ cd sim/dll_test
 
 | 位置 | 内容 |
 |------|------|
-| `tools/ekf_tuner/capture_20260602_*.csv` | 47 个原始采集文件 (排除 `*_result.csv`) |
+| `tools/ekf_tuner/captures/capture_20260602_*.csv` | 47 个原始采集文件 (排除 `*_result.csv`) |
 | CSV 格式 | `t_us, I_adc, V_adc, Vdc_adc, CNT, CMP_UON, CMP_UOFF, CMP_LON, CMP_LOFF` + 额外列 |
 | 采样方式 | MCU HRTIM ISR 同步快照, 每采样点 9 寄存器值 |
 | 功率覆盖 | 5W ~ 4814W (轻载到满载) |

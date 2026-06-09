@@ -5,8 +5,8 @@ cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3+6.2e3));
 C_FARAD = 0.94e-6;
 
 pairs = {
-    {'../../tools/ekf_tuner/capture_20260602_153424.csv', 'Iron', [0:5]}
-    {'../../tools/ekf_tuner/capture_20260602_152037.csv', 'Steel', [0:7]}
+    {'../../tools/ekf_tuner/captures/capture_20260602_153424.csv', 'Iron', [0:5]}
+    {'../../tools/ekf_tuner/captures/capture_20260602_152037.csv', 'Steel', [0:7]}
 };
 
 fprintf('Pan   Frame  f_sw[kHz]  I_RMS_tot  I_RMS_f1  f1/tot   L_tot[uH]  L_f1[uH]  phi[deg]  THD[%%]\n');

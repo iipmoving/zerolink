@@ -26,7 +26,7 @@ typedef struct { uint8_t dummy; } InData_t;
 typedef struct { uint8_t dummy; } OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(DrvCommMgr);
 
 /* ---- 独立声明: 与 APP 层 CommSendReq_t 布局一致 ---- */
 #define DRV_COMM_SEND_BUF_SIZE  64u

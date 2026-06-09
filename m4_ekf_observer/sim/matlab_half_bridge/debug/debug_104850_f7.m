@@ -1,5 +1,5 @@
 % debug_104850_f7 — 深入检查 104850 帧7: Ipk=1653 但 Vdc=103V, 为何 L/Q/phi 全崩
-csv_path = '../../tools/ekf_tuner/capture_20260602_104850.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_104850.csv';
 cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3 + 6.2e3));
 

@@ -62,7 +62,7 @@ __attribute__((weak)) int16_t* APP_POWER_GetPanDmaBuffAddress(void) { return 0; 
 
 #define 	fmacLeveNum		FmacLeve			//根据FMAC滤波系数大小，确定缓存前置空间
 
-
+#define	module_name		Adc
 static  uint16_t arrayPoint[4];
 /* Private typedef -----------------------------------------------------------*/
 typedef	struct __attribute__((aligned(32)))
@@ -299,7 +299,7 @@ uint16_t 	TxaBuffCh1[TxA_ADC_AdcBUFF_NUM];
 //#define		AdcFromApiDma100us	TxA_ADC_TimDmaBuff			//从API DMA 每10us传过来的数据谐振
 APP_ADC_AVG_BUFF_DEF		AdcFromApiDma20ms;				//从API DMA 每20ms传过来的数据
 APP_ADC_DEF					AdcFunRam;
-static Adc_Output_t g_out;                                        /* v2.0 Data Switcher 输出槽 */
+static APP_Adc_Output_t g_out;                                        /* v2.0 Data Switcher 输出槽 */
 
 
 
@@ -352,6 +352,7 @@ __attribute__((weak)) void APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value) 
 	
 	
 	/* ====== __weak stub — 接线到 methodology ih_elec_params 算法集 ====== */
+	/* @V1_VOIDPTR: IhElecParams_Calculate — 第三方库回调, 搬功能后淘汰 */
 __attribute__((weak)) void IhElecParams_Calculate(void *in, void *out) {}
 
 
@@ -378,11 +379,11 @@ __attribute__((weak)) void IhElecParams_Calculate(void *in, void *out) {}
   * @retval None
   */
 	
-uint32_t 	Adc_GetPowerTxa(uint8_t ch)
-{
-	uint32_t*  value=(uint32_t*)(&TxA_ADC_AdcDmaBuff.Avg);
-	return 	value[ch];
-}	
+//uint32_t 	Adc_GetPowerTxa(uint8_t ch)
+//{
+//	uint32_t*  value=(uint32_t*)(&TxA_ADC_AdcDmaBuff.Avg);
+//	return 	value[ch];
+//}	
 
 // uint16_t*		APP_ADC_GetHrtimAddress(uint8_t ch)
 // {
@@ -2947,20 +2948,45 @@ extern uint32_t Image$$RAMCODE$$Length;  // 段长度
 #endif
 
 
-/* === v2.0 Data Switcher interface ================================= */
-void Adc_GetIO(Adc_Output_t **ppOut)
+/* === v2.2 Data Switcher interface =================================
+ * MODULE_SKELETON + MODULE_EXPORT 范式。
+ * g_output.para → APP_Adc_Output_t (g_out)
+ * ================================================================ */
+
+MODULE_SKELETON(APP_Adc);   /* 声明 g_input/g_output + InputCallback + OutputCallback */
+
+static void Init(void)
 {
-    *ppOut = &g_out;
+    g_input.para  = NULL;           /* 纯生产者，无输入 */
+    g_output.para = &g_out;         /* 包裹现有静态 g_out */
 }
 
-void Adc_DoWork(void)
+
+static void ProcessOutput(Para_Grp_t *pOut)
+{}
+	
+
+
+static void ProcessInput(void)
 {
+    /* ====== 输入段 (ADC 无输入) ====== */
+
+    /* ====== 计算段 ======
+     * 原 Adc_DoWork 体：ADC 平均 → 写 g_out.inputValue[]
+     * ============================================================ */
     g_out.status &= ~0x02;               /* 每帧先清就绪标志 */
     if (AdcValueFun()) {
         memcpy(g_out.inputValue, AdcFunRam.inputValue, sizeof(g_out.inputValue));
         g_out.status |= 0x02;            /* 有新产出时置位 */
     }
+
+    /* ====== 输出段 ====== */
+    g_output.info.status |= ST_OUT;
 }
+
+MODULE_EXPORT(APP_Adc);
+
+
 
 
 #if 0

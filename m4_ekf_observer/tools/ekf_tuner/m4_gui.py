@@ -327,6 +327,10 @@ class M4DebugApp:
         self._hex_mode = tk.BooleanVar(value=False)  # Hex/Dec 切换
         self._init_config = {}   # addr → int (loaded from JSON)
 
+        # 文件保存路径 (默认脚本所在目录)
+        self.save_path_var = tk.StringVar(
+            value=os.path.dirname(os.path.abspath(__file__)))
+
         self._build_ui()
 
         # 启动时自动扫描串口
@@ -342,6 +346,9 @@ class M4DebugApp:
     def _build_ui(self):
         # 顶部连接栏
         self._build_toolbar()
+
+        # 保存路径设置行
+        self._build_savepath_row()
 
         # 主内容区 (左右两栏 + 底部控制)
         main = tk.Frame(self.root, bg=BG)
@@ -465,6 +472,41 @@ class M4DebugApp:
                                   activebackground=BORDER, relief=tk.FLAT,
                                   cursor="hand2", state=tk.DISABLED, width=7)
         self.cap_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+    def _build_savepath_row(self):
+        """文件保存路径设置行"""
+        row = tk.Frame(self.root, bg=BG2, height=32)
+        row.pack(fill=tk.X, padx=8, pady=(2, 0))
+        row.pack_propagate(False)
+
+        tk.Label(row, text="保存路径", bg=BG2, fg=DIM,
+                font=("Consolas", 8)).pack(side=tk.LEFT, padx=(10, 4))
+
+        path_entry = tk.Entry(row, textvariable=self.save_path_var,
+                              bg=BG, fg=FG, font=("Consolas", 8),
+                              insertbackground=FG, relief=tk.FLAT)
+        path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+
+        def _browse():
+            d = filedialog.askdirectory(
+                title="选择 CSV 保存目录",
+                initialdir=self.save_path_var.get())
+            if d:
+                self.save_path_var.set(d)
+                self._save_config()
+
+        browse_btn = tk.Button(row, text="浏览...", command=_browse,
+                               bg=BORDER, fg=FG, font=("Consolas", 8),
+                               activebackground=BORDER, relief=tk.FLAT,
+                               cursor="hand2", width=6)
+        browse_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+    def _get_save_path(self, filename):
+        """返回完整保存路径, 若配置目录不存在则回退到脚本目录"""
+        d = self.save_path_var.get()
+        if not os.path.isdir(d):
+            d = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(d, filename)
 
     def _build_reg_panel(self, parent, title, reg_dict, prefix, side):
         """构建寄存器面板"""
@@ -849,6 +891,7 @@ class M4DebugApp:
         try:
             data = {"_comment": "M4 init/ctrl registers — auto-saved by m4_gui.py",
                     "_updated": datetime.now().isoformat(),
+                    "save_path": self.save_path_var.get(),
                     "registers": {f"0x{a:04X}": v for a, v in self._init_config.items()}}
             with open(self._config_path(), 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -869,6 +912,10 @@ class M4DebugApp:
                 if addr in self._init_entries:
                     self._init_config[addr] = int(val)
             self._refresh_init_display()
+            # 恢复保存路径
+            saved_path = data.get("save_path", "")
+            if saved_path and os.path.isdir(saved_path):
+                self.save_path_var.set(saved_path)
             if regs:
                 updated = data.get("_updated", "?")
                 self._set_status(f"已加载保存的配置 ({len(regs)} 项, {updated})")
@@ -1074,7 +1121,7 @@ class M4DebugApp:
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"capture_{ts}.csv"
-        filepath = os.path.join(os.path.dirname(__file__), filename)
+        filepath = self._get_save_path(filename)
 
         csv_header = [name for name, _ in CSV_COLUMNS]
 
@@ -1344,8 +1391,7 @@ class M4DebugApp:
         self.rec_btn.configure(text="● 记录", fg=FG)
         if self._records:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   f"m4_ekf_{ts}.csv")
+            filepath = self._get_save_path(f"m4_ekf_{ts}.csv")
             logger = DataLogger(filepath)
             logger.open(self._csv_fields)
             for row in self._records:

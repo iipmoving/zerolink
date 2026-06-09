@@ -31,7 +31,7 @@ typedef struct { uint8_t dummy; } In_t;
 typedef struct { uint8_t dummy; } Out_t;
 static In_t  s_in;
 static Out_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(DrvDisplay);
 
 /* 独立声明的显示帧类型 — 与 APP 层 HmiDisplayCache_t 布局一致，
  * 通过 MSG_DISPLAY_REFRESH 的 void* 传递。

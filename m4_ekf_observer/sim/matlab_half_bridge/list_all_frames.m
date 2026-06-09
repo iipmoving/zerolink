@@ -6,7 +6,7 @@ cal.I_SCALE = cal.VREF/cal.ADC_STEPS/(330/(10e3+330));
 cal.VDC_SCALE = cal.V_SCALE; cal.MIN_PULSE_US = 6;
 cal.F_AC = 50; cal.HRTIM_CLK_MHZ = 144;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 csvs = {'capture_20260602_104849.csv','capture_20260602_104850.csv','capture_20260602_104852.csv'};
 labels = {'104849','104850','104852'};
 

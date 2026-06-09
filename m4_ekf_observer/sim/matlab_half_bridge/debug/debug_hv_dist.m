@@ -4,7 +4,7 @@ cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3+6.2e3));
 cal.VDC_SCALE = cal.V_SCALE; cal.HRTIM_CLK_MHZ = 144;
 C_FARAD = 0.94e-6;
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 iron_files = {'capture_20260602_153307.csv','capture_20260602_153311.csv','capture_20260602_153314.csv','capture_20260602_153316.csv','capture_20260602_153326.csv','capture_20260602_153329.csv','capture_20260602_153336.csv','capture_20260602_153338.csv','capture_20260602_153340.csv','capture_20260602_153347.csv','capture_20260602_153348.csv','capture_20260602_153358.csv','capture_20260602_153400.csv','capture_20260602_153410.csv','capture_20260602_153412.csv','capture_20260602_153413.csv','capture_20260602_153421.csv','capture_20260602_153422.csv','capture_20260602_153424.csv'};
 

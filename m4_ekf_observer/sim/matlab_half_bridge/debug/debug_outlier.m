@@ -6,7 +6,7 @@ cal.VDC_SCALE = cal.V_SCALE;
 cal.HRTIM_CLK_MHZ = 144;
 C_FARAD = 0.94e-6;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 % 异常帧: file=12(capture_20260602_153400.csv) frame=2, L=59.7uH
 % 对照帧: 选一个同频段正常帧

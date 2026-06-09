@@ -4,7 +4,7 @@ cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3+6.2e3));
 C_FARAD = 0.94e-6;
 
-csv_path = '../../tools/ekf_tuner/capture_20260602_153424.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_153424.csv';
 fid = fopen(csv_path,'r');
 fgetl(fid);
 frames={}; fN=[];

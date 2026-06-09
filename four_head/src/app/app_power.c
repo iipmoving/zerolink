@@ -73,7 +73,7 @@ static uint16_t       s_power_table[] = {
  * 骨架
  * ================================================================= */
 
-MODULE_SKELETON();
+MODULE_SKELETON(AppPower);
 
 /* =================================================================
  * 内部函数
@@ -202,7 +202,6 @@ static void ProcessInput(void)
     }
 
     g_output.info.route = g_input.info.route;  /* 透传输入 route */
-    g_output.info.status |= ST_OUT;
 }
 
 /* =================================================================
@@ -232,11 +231,11 @@ static void Init(void)
 MODULE_EXPORT(AppPower);
 
 /* =================================================================
- * 强符号: 接收其他模块的输出回调
+ * Consumer 回调: Switcher PULL 路由 → 写 g_input.para + ST_NEW
  * ================================================================= */
 
 /* app_cooking → PowerCtrl */
-void AppCooking_OnOutput(Para_Grp_t *pOut)
+void AppPower_OnCookingData(Para_Grp_t *pOut)
 {
     InData_t *in = (InData_t *)g_input.para;
     /* pOut->para 指向 CookingPowerCmd_Item_t */
@@ -249,7 +248,7 @@ void AppCooking_OnOutput(Para_Grp_t *pOut)
 }
 
 /* app_protect → SystemError */
-void AppProtect_OnOutput(Para_Grp_t *pOut)
+void AppPower_OnProtectData(Para_Grp_t *pOut)
 {
     InData_t *in = (InData_t *)g_input.para;
     uint8_t *src = (uint8_t *)pOut->para;
@@ -260,7 +259,7 @@ void AppProtect_OnOutput(Para_Grp_t *pOut)
 }
 
 /* app_comm_mgr → RegData */
-void AppCommMgr_OnOutput(Para_Grp_t *pOut)
+void AppPower_OnCommMgrData(Para_Grp_t *pOut)
 {
     InData_t *in = (InData_t *)g_input.para;
     uint8_t *src = (uint8_t *)pOut->para;

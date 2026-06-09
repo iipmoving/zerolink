@@ -7,7 +7,7 @@ cal.VDC_SCALE = cal.V_SCALE;
 C_FARAD = 0.94e-6;
 
 % 铁锅高功率帧: 153424 f4
-csv_path = '../../tools/ekf_tuner/capture_20260602_153424.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_153424.csv';
 fid = fopen(csv_path,'r');
 fgetl(fid);
 frames={}; fN=[];

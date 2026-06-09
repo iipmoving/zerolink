@@ -1,7 +1,7 @@
 # RESTART.md — M4 半桥 IH 驱动 · AI 重启入口
 
 > **用途**: 新 AI 会话或接管工程师的第一个文件。读完本文件 ≈ 继承全部项目记忆。
-> **最后更新**: 2026-05-30
+> **最后更新**: 2026-06-09
 > **工作目录**: `D:\OBSIDIAN\MOVING IH\低耦合程序架构`
 
 ---
@@ -108,6 +108,7 @@ HAL (RX32G410 FW HAL V1.3N)            ← 原厂固件库 (只读不写)
 
 | 里程碑 | 完成日期 | 文档 |
 |--------|---------|------|
+| **Phase 2 婴儿模块重构** | **2026-06-09** | `RESTART.md §十` |
 | EKF 物理模型验证 | 2026-05-30 | `docs/EKF-PHASE-CLOSURE-2026-05-30.md` |
 | f0 估计三方法实现 | 2026-05-30 | `tools/ekf_tuner/ekf_q_model.py` + `memory/project_m4-f0-estimation-methods.md` |
 | 锅具判别逻辑 (9/9 PASS) | 2026-05-30 | `ekf_q_model.py --self-test` |
@@ -296,3 +297,76 @@ python m4_modbus_tool.py COM3 --wave --head 0
 
 *本文件是 m4_ekf_observer 项目的唯一重启入口。新 AI 会话从此文件开始。*
 *当前进行中: WaveCapture 模块 — T001→T005 逐任务推进*
+
+---
+
+## 十、v2.2 PULL 范式 — Phase 2 婴儿模块重构 (已完成 2026-06-09)
+
+将单体 `APP_ADC.C` (3140行) + `app_power.c` (6422行) 拆分为 3 个婴儿模块，按 v2.2 PULL 范式通过 data_switcher 级联执行。
+
+### 10.1 数据流
+
+```
+Switcher_Run_Slot1 (20ms周期):
+  Step 1: AppAdc.DoWork    → AdcBlock_t (DMA raw + avg)  → ST_OUT
+  Step 2: PowerBase.DoWork  → InputCallback: 从 AppAdc.g_out + PowerCalc.g_out(T-1) PULL
+                            → ProcessInput: PID + 保护 + 检锅 → ppg_delta
+  Step 3: PowerCalc.DoWork  → InputCallback: 从 AppAdc.g_out + PowerBase.g_out PULL
+                            → ProcessInput: 窗口积分(V×I) + i_ppg_control → HRTIM
+```
+
+### 10.2 新模块清单
+
+| 模块 | 文件 | 行数 | 状态 |
+|------|------|------|------|
+| **AppAdc** | `src/.../LIB/APP/APP_ADC.C` | 3140 | `MODULE_SKELETON(APP_Adc)` ✅ (IncludeInBuild=0, 待完成) |
+| **PowerBase** | `app/power_base.c` | 1710 | `MODULE_SKELETON(PowerBase)` → 编译 0e0w ✅ |
+| **PowerCalc** | `app/power_calc_half.c` | 583 | `MODULE_SKELETON(PowerCalc)` → 编译 0e0w ✅ |
+| **DataSwitcher** | `core/data_switcher.c` | 111 | 3 模块注册 + InputCallback 强符号 ✅ |
+
+### 10.3 I/O 头文件
+
+| 文件 | 用途 |
+|------|------|
+| `include/app_adc_io.h` | AdcBlock_t + Adc_Output_t (union 兼容旧 inputValue[]) |
+| `include/app_power_io.h` | PowerBase_Input_t / PowerBase_Output_t (每炉头 ppg_delta) |
+| `include/app_power_calc_io.h` | PowerCalc_Input_t / PowerCalc_Output_t (窗口积分结果) |
+| `include/app_power_defs.h` | 共享类型 — 从 app_power.h 提取 (PowerStatusDef, AppPowerDef, 常量等) |
+
+### 10.4 Keil 项目变更 (ReTek.uvprojx)
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| **排除** | `LIB/APP/app_power.c` | IncludeInBuild=0 — 原单体 6422 行 |
+| **排除** | `LIB/APP/APP_ADC.C` | IncludeInBuild=0 — 原单体 (ADC 婴儿模块待完成) |
+| **排除** | `BaseClass/src/power_calculator.c` | IncludeInBuild=0 — 与 power_calc_half.c 符号冲突 |
+| **新增** | `app/power_base.c` | AppLibSrc 组 |
+| **新增** | `app/power_calc_half.c` | AppLibSrc 组 |
+| **新增 include** | `../../../../../app` | app 目录加入 include path |
+
+### 10.5 编译验证 (ARMCLANG V6.12, Cortex-M4)
+
+| 模块 | 错误 | 警告 |
+|------|------|------|
+| `power_base.c` | 0 | 7 (未使用的 static 函数 + 第三方 Simulative_Uart.h) |
+| `power_calc_half.c` | **0** | **0** |
+| `data_switcher.c` | **0** | **0** |
+| `power_calculator_fullbridge.c` | 0 | 2 (预存路径大小写) |
+| `ih_elec_params.c` | 0 | 0 |
+
+### 10.6 关键架构决策
+
+- **InputCallback = PULL**: 中间层覆盖强符号，类型化指针直传 (`AdcBlock_t*`, `PowerBase_Output_t*`)
+- **子类内部 `static` 同名**: `Init`/`ProcessInput`/`s_in`/`s_out` 跨模块同名，文件作用域隔离
+- **无需 OutputCallback**: 下游通过 InputCallback 从上游 `g_output` PULL 数据
+- **`app_power_defs.h` 独立性**: 从 `app_power.h` 只提取类型/常量，不 include 函数声明
+
+### 10.7 后续推进
+
+| 优先级 | 任务 | 说明 |
+|--------|------|------|
+| P1 | `adc_sensor.c` 补全 | 缺 `APP_ADC.H` 中的 TxaHrtimPointDef 等类型 |
+| P2 | 运行 `check_deps.py` | 验证层依赖合规 |
+| P2 | 运行 `check_weak_pairs.py` | 验证 weak/strong 配对 |
+| P3 | 全桥策略 | `app/power_calc_full.c` (双 HRTIM 对角管窗口积分) |
+| P3 | 运行时分发 | `bridge_type` 字节在 DoWork 中 switch 策略 |

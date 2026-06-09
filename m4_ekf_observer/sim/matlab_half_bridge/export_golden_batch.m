@@ -246,6 +246,36 @@ for f_idx = 1:length(CSV_FILES)
             'lowOn', inp.lowOn, 'lowOff', inp.lowOff, ...
             'perAdc', inp.perAdc);
         gc.n_samples = n;
+        % KVL dI/dt formula chain (matches C power_calculator.c CalculateElecParams_20ms)
+        C_uF_kvl = 0.9; C_F_kvl = C_uF_kvl * 1e-6;
+        omega_sw_kvl = 2 * pi * f_sw_kHz * 1e3;
+        V_C_peak_kvl = I_peak / (omega_sw_kvl * C_F_kvl);
+        L_uH_kvl = (Vdc_mean/2 + V_C_peak_kvl) / (I_peak * omega_sw_kvl) * 1e6;
+        if L_uH_kvl < 0, L_uH_kvl = 0; end
+        if L_uH_kvl > 0.001
+            f_res_kvl = 1 / (2*pi*sqrt(L_uH_kvl*1e-6*C_F_kvl)) / 1e3;
+        else
+            f_res_kvl = f_sw_kHz;
+        end
+        omega_res_kvl = 2 * pi * f_res_kvl * 1e3;
+        tan_phi_kvl = tand(phi_deg);
+        ratio_kvl = f_sw_kHz / f_res_kvl;
+        denom_kvl = ratio_kvl - 1/ratio_kvl;
+        if abs(denom_kvl) > 0.001
+            Q_kvl = tan_phi_kvl / denom_kvl;
+        else
+            Q_kvl = 0;
+        end
+        if Q_kvl > 0.001
+            R_kvl = omega_res_kvl * L_uH_kvl * 1e-6 / Q_kvl;
+        else
+            R_kvl = 0;
+        end
+        X_L_sw_kvl = omega_sw_kvl * L_uH_kvl * 1e-6;
+        X_C_sw_kvl = 1 / (omega_sw_kvl * C_F_kvl);
+        X_kvl = X_L_sw_kvl - X_C_sw_kvl;
+        Z_kvl = sqrt(R_kvl*R_kvl + X_kvl*X_kvl);
+
         gc.golden = struct(...
             'P_W',      P_W, ...
             'I_rms',    I_rms, ...
@@ -257,7 +287,12 @@ for f_idx = 1:length(CSV_FILES)
             'D_U_pct',  D_U, ...
             'DT1_us',   DT1_us, ...
             'DT2_us',   DT2_us, ...
-            'Vdc_mean', Vdc_mean);
+            'Vdc_mean', Vdc_mean, ...
+            'L_uH',     L_uH_kvl, ...
+            'Q_factor', Q_kvl, ...
+            'R_ohm',    R_kvl, ...
+            'Z_mag_ohm',Z_kvl, ...
+            'X_ohm',    X_kvl);
         all_cycles{end+1} = gc;
     end
 

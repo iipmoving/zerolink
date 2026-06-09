@@ -5,7 +5,7 @@ cal.I_SCALE = 3.3/4096/(330/(10e3+330));
 cal.V_SCALE = 3.3/4096/(6.2e3/(270e3*3+6.2e3));
 cal.VDC_SCALE = cal.V_SCALE;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 iron_files = {
     'capture_20260602_153307.csv','capture_20260602_153311.csv', ...
     'capture_20260602_153314.csv','capture_20260602_153316.csv', ...

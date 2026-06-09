@@ -28,7 +28,7 @@ typedef struct { uint8_t dummy; } InData_t;
 typedef struct { uint8_t dummy; } OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(AppSegAlign);
 
 /* ================================================================
  * 串口函数 __weak 桩 — 不直接 include hal_uart.h

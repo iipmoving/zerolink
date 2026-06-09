@@ -6,7 +6,7 @@ cal.VDC_SCALE = cal.V_SCALE;
 cal.HRTIM_CLK_MHZ = 144;
 C_FARAD = 0.94e-6;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 iron_files = {
     'capture_20260602_153307.csv','capture_20260602_153311.csv', ...
     'capture_20260602_153314.csv','capture_20260602_153316.csv', ...

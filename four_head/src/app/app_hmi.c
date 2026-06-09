@@ -53,15 +53,15 @@ typedef struct {
 static InData_t  s_in;
 static OutData_t s_out;
 
-MODULE_SKELETON();
+MODULE_SKELETON(AppHmi);
 
 /* DRV 强符号声明（Switcher 路由调用，APP 不定义 __weak 桩）*/
 void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
 
 #ifdef HMI_DEBUG_KEYS
-__attribute__((weak)) void Drv_Display_SetRawLEDs(uint8_t io8, uint8_t io9, uint8_t io10)
+__attribute__((weak)) void Drv_Display_SetRawLEDsCallback(uint8_t io8, uint8_t io9, uint8_t io10)
 { (void)io8; (void)io9; (void)io10; }
-__attribute__((weak)) void Drv_Display_ShowRawSMG(const char *upper, const char *lower)
+__attribute__((weak)) void Drv_Display_ShowRawSMGCallback(const char *upper, const char *lower)
 { (void)upper; (void)lower; }
 #endif
 

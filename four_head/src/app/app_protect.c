@@ -29,7 +29,7 @@ typedef struct {
 } OutData_t;
 static InData_t  s_in;
 static OutData_t s_out;
-MODULE_SKELETON();
+MODULE_SKELETON(AppProtect);
 
 /* 独立声明 — 与 app_comm_mgr.h 的 RegData_t 布局一致 (AI保证) */
 #define PROT_REG_COUNT          22u
@@ -308,7 +308,6 @@ void App_Protect_Run(void)
             o->head_idx    = i;
             o->slave_addr  = PROT_SLAVE_ADDR_BASE + i * PROT_SLAVE_ADDR_STEP;
             o->fault       = s_ctx[i].fault.byte;
-            g_output.info.status |= ST_OUT;
         }
     }
 }

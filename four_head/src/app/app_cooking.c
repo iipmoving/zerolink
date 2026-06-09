@@ -71,7 +71,7 @@ static const CookMenu_t s_menus[COOK_MENU_MAX] = {
  * 骨架
  * ================================================================= */
 
-MODULE_SKELETON();
+MODULE_SKELETON(AppCooking);
 
 /* =================================================================
  * 内部函数
@@ -106,7 +106,6 @@ static void out_power(uint8_t h, uint8_t on, uint16_t w, uint8_t lv, uint8_t md,
     o->power_head  = h;  o->power_onoff = on;  o->power_watt = w;
     o->power_level = lv; o->power_mode  = md;  o->power_temp = tmp;
     g_output.info.route = g_input.info.route;
-    g_output.info.status |= ST_OUT;
 }
 
 static void out_disp(uint8_t h, uint8_t cmd)
@@ -115,7 +114,6 @@ static void out_disp(uint8_t h, uint8_t cmd)
     o->has_display = 1;
     o->disp_head = h;  o->disp_cmd = cmd;
     g_output.info.route = g_input.info.route;
-    g_output.info.status |= ST_OUT;
 }
 
 /* 烹饪控制命令处理 */

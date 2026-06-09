@@ -45,7 +45,7 @@ steel_files = {
     'capture_20260602_152108.csv'
 };
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 fprintf('========== 铁锅: 按频率分组, 看同频下L vs P ==========\n');
 process_set(iron_files, base, cal, C_FARAD, 'Iron');

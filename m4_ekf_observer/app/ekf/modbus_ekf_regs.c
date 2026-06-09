@@ -31,8 +31,7 @@ static Register_Area_t EKF_Area_S4[EKF_ARM_COUNT];
  * 弱回调: 由 app_power.c 覆盖实现
  * ================================================================ */
 
-__attribute__((weak))
-void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
+__attribute__((weak))void API_POWER_EKF_GetTelemetryCallback(uint8_t chn, EKF_Telemetry_t *ekf)
 {
     (void)chn;
     if (ekf) memset(ekf, 0, sizeof(EKF_Telemetry_t));
@@ -110,18 +109,18 @@ void* EKF_Regs_GetDataPtr(uint8_t slave_idx)
  * EKF_Regs_Update — 刷新 EKF 遥测数据
  * ================================================================ */
 
-void EKF_Regs_Update(uint8_t slave_idx)
+void EKF_Regs_Update(unsigned char slave_idx)
 {
-    EKF_Telemetry_t *ekf = NULL;
+//    EKF_Telemetry_t *ekf = NULL;
 
-    switch (slave_idx) {
-        case 0: ekf = &EKF_Data_S1; break;
-        case 1: ekf = &EKF_Data_S2; break;
-        case 2: ekf = &EKF_Data_S3; break;
-        case 3: ekf = &EKF_Data_S4; break;
-        default: return;
-    }
+//    switch (slave_idx) {
+//        case 0: ekf = &EKF_Data_S1; break;
+//        case 1: ekf = &EKF_Data_S2; break;
+//        case 2: ekf = &EKF_Data_S3; break;
+//        case 3: ekf = &EKF_Data_S4; break;
+//        default: return;
+//    }
 
-    /* 调用 power 层获取实时数据 (弱函数, app_power.c 覆盖) */
-    API_POWER_EKF_GetTelemetry(slave_idx, ekf);
+//    /* 调用 power 层获取实时数据 (弱函数, app_power.c 覆盖) */
+//    API_POWER_EKF_GetTelemetry(slave_idx, ekf);
 }

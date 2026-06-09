@@ -1,52 +1,79 @@
 /**
  * @file    app_power_io.h
- * @brief   app_power Data Switcher IO interface
+ * @brief   PowerBase Data Switcher IO interface
  * @layer   app (Data Switcher IO)
  *
- * 本文件定义 app_power 模块对外暴露的输入/输出接口.
- * 仅 data_switcher.c 可用全路径 include 本文件.
+ * 本文件定义 PowerBase 模块对外暴露的输入/输出接口。
+ * 每炉头独立逻辑单元 — PowerBase_InHead_t / PowerBase_OutHead_t。
+ * 中间层通过 InputCallback 类型化指针直传。
  */
 
 #ifndef APP_POWER_IO_H
-#define APP_POWER_IO_H       /* ← 保留: _io.h 是公开接口, 两个合法 include 方 */
+#define APP_POWER_IO_H
 
 #include <stdint.h>
-
-/* === INTERFACE STRUCTS ==========================================
- * app_power 是 Power_Output_t 的 Owner (生产者),
- * 同时是 Power_Input_t 的 Consumer (消费者).
- *
- * 输入来源: Adc_Output_t.inputValue[] + 其他模块 output → Switcher 搬运
- * 输出去向: 后续 consumer 模块
- *
- * 协议 (详见 08-data-switcher.md):
- *   g_in.status   bit0=构造, bit1=新输入到达 (Switcher 设, 本模块消费后清)
- *   g_out.status  bit0=保留, bit1=输出就绪   (本模块设, Switcher 取走后清)
- * ================================================================ */
+#include "std_module.h"
+//#include "app_adc_io.h"
 
 #pragma pack(4)
 
-/* AdcGroupMax = 30, 由 Switcher 从 Adc_Output_t.inputValue[] 搬运 */
+/* ---- 前置声明 ---- */
+
+#define	POWER_POTMAX	4
+
+//struct PowerCalc_Output;
+
+/* ---- 单炉头输入 — MODBUS 命令 ---- */
 typedef struct {
-    uint8_t  status;        /* bit0=构造, bit1=新输入到达 (Switcher 设, 本模块消费后清) */
-    uint8_t  res[3];        /* 32位对齐 */
-    uint32_t inputValue[30]; /* AdcGroupMax — 平均后的 ADC 值 */
-} Power_Input_t;             /* sizeof=124 */
+    uint16_t target_power;
+    uint8_t  power_on;
+} PowerComm_InHead_t;
+
 
 typedef struct {
-    uint8_t  status;        /* bit0=保留, bit1=输出就绪 (本模块设, Switcher 清) */
-    uint8_t  res[3];
-    uint8_t  overcurrent;   /* 任意通道过流 */
-    uint8_t  pot_detected;  /* 锅具检测完成 */
-    uint16_t reserved;
-} Power_Output_t;            /* sizeof=8 */
+	
+		uint16_t current;
+		uint16_t voltage;
+	
+		uint16_t igbt;
+		uint16_t bottom;
+	
+		uint16_t phase;
+		uint16_t phaseDown;
+	
+		uint16_t ceilQ;
+		uint16_t power;
+
+	
+}PowerAdc_InHead_t;	
+
+
+
+/* ---- 输入: 类型化指针 + 炉头数组 ---- */
+typedef struct {
+    PowerAdc_InHead_t        pAdc[POWER_POTMAX];          /* → AppAdc                       */
+//    struct PowerCalc_Output *pCalc;         /* → PowerCalc 反馈                */
+    PowerComm_InHead_t       head[POWER_POTMAX];       /* 每炉头独立命令                   */
+    
+} PowerBase_Input_t;
+
+/* ---- 单炉头输出 ---- */
+typedef struct {
+    int16_t ppg_delta;
+    uint8_t delta_valid;
+    uint8_t power_state;
+} PowerBase_OutHead_t;
+
+/* ---- 输出: 炉头数组 ---- */
+typedef struct PowerBase_Output {
+
+    PowerBase_OutHead_t  head[4];
+
+} PowerBase_Output_t;
 
 #pragma pack()
 
-/* ---- public interface ---- */
-
-void Power_GetIO(Power_Input_t **ppIn, Power_Output_t **ppOut);
-void Power_DoWork(void);
-
+/* ---- v2.2 统一接口 ---- */
+MODULE_IO_H(PowerBase);
 
 #endif /* APP_POWER_IO_H */

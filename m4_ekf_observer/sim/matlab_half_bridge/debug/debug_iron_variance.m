@@ -28,7 +28,7 @@ iron_files = {
     'capture_20260602_153424.csv'
 };
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 all_r = [];
 
 for fidx = 1:length(iron_files)

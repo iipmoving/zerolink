@@ -113,15 +113,16 @@ enum
 {																				//ADC1 group 对应的AD采集通道号，保存数据的序号索引
 
 	
-
-
+		AdcGroupVoltage,	
+		AdcGroupFan,
+		
 		AdcGroupPower1=0,		//MASTER CURRENT AD
 		AdcGroupPower2,			//SLAVE CURRENT AD	
 		AdcGroupPower3,			//MASTER CURRENT AD
 		AdcGroupPower4,			//SLAVE CURRENT AD		
 	
 	
-		AdcGroupVoltage,
+
 
 		AdcGroupT1A,					//谐振电流
 		AdcGroupT2A,					//slave
@@ -137,9 +138,7 @@ enum
 		AdcGroupIgbt2,
 		AdcGroupIgbt3,
 		AdcGroupIgbt4,		
-		
-		AdcGroupFan,
-		
+
 		AdcGroupCeilQ1,			//MASTER Q值 AD
 		AdcGroupCeilQ2,			//SLAVE Q值 AD	
 		AdcGroupCeilQ3,			//MASTER Q值 AD
@@ -233,7 +232,7 @@ void		API_ADC_DMA_RecoverTxa(void);				//恢复检锅DMA
 
 
 //void		APP_ADC_PanSwChange(uint32_t ch);			//切换检锅选择口
-uint32_t 	APP_ADC_GetPowerTxa(uint8_t ch);		//得到谐振电流计算的功率值
+//uint32_t 	APP_ADC_GetPowerTxa(uint8_t ch);		//得到谐振电流计算的功率值
 
 void CopyISRToRAM(void);
 

@@ -1,22 +1,20 @@
 #!/usr/bin/env python
-"""批量交叉验证: 全部 45 个 CSV 逐帧比对 C DLL vs MATLAB Golden"""
-import sys, os, json, math
+"""批量交叉验证: C DLL vs MATLAB Golden — 纯调用, 零公式逻辑"""
+import sys, os, json
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dll_test', 'test'))
-from ctypes_bridge import calculate_power_fpu, result_to_dict
+from ctypes_bridge import calculate_elec_params_20ms, elec_to_dict
 from csv_loader import load_cycles
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_DIR  = r'D:\OBSIDIAN\MOVING IH\低耦合程序架构\m4_ekf_observer\tools\ekf_tuner'
+CSV_DIR  = r'D:\OBSIDIAN\MOVING IH\低耦合程序架构\m4_ekf_observer\tools\ekf_tuner/captures'
 GOLDEN_PATH = os.path.join(BASE_DIR, 'golden_batch.json')
 REPORT_PATH = os.path.join(BASE_DIR, 'batch_validate_report.txt')
 
-C_uF = 0.9
-C_F  = C_uF * 1e-6
-
+# 允许误差 (% 或绝对)
 TOL = {
     "P_W": 2.0, "I_rms": 2.0, "I_peak": 2.0, "Vdc_mean": 2.0,
-    "phi_deg": 1.0, "f_sw_kHz": 1.0, "f_res_kHz": 2.0,
+    "phi_deg": 1.0, "f_sw_kHz": 1.0,
     "D_U_pct": 2.0, "DT1_us": 5.0, "DT2_us": 5.0,
     "cos_phi": 0.02, "L_uH": 5.0, "Q_factor": 5.0,
     "R_ohm": 5.0, "Z_mag_ohm": 5.0, "X_ohm": 10.0,
@@ -28,114 +26,15 @@ def load_golden():
         return json.load(f)
 
 
-def compute_MATLAB_derived(gc):
-    """KVL formula chain from golden intermediates"""
-    g = gc['golden']
-    I_peak = g['I_peak']
-    Vdc = g['Vdc_mean']
-    f_sw = g['f_sw_kHz']
-    phi = g['phi_deg']
-
-    omega_sw = 2 * math.pi * f_sw * 1000
-    V_C_peak = I_peak / (omega_sw * C_F)
-    L_uH = (Vdc / 2 + V_C_peak) / (I_peak * omega_sw) * 1e6
-    if L_uH < 0:
-        L_uH = 0
-
-    if L_uH > 0.001:
-        f_res = 1 / (2 * math.pi * math.sqrt(L_uH * 1e-6 * C_F)) / 1000
-    else:
-        f_res = f_sw
-
-    omega_res = 2 * math.pi * f_res * 1000
-    tan_phi = math.tan(math.radians(phi))
-    ratio = f_sw / f_res
-    denom = ratio - 1 / ratio
-    if abs(denom) > 0.001:
-        Q = tan_phi / denom
-    else:
-        Q = 0
-
-    if Q > 0.001:
-        R = omega_res * L_uH * 1e-6 / Q
-    else:
-        R = 0
-
-    X_L_sw = omega_sw * L_uH * 1e-6
-    X_C_sw = 1 / (omega_sw * C_F)
-    X = X_L_sw - X_C_sw
-    Z = math.sqrt(R * R + X * X)
-
-    return {
-        'L_uH': L_uH, 'f_res_kHz': f_res, 'Q_factor': Q,
-        'R_ohm': R, 'Z_mag_ohm': Z, 'X_ohm': X,
-    }
-
-
 def run_c_cycle(cur, hrt, vlt, inp):
-    """Run C DLL for one cycle"""
-    r_fpu = calculate_power_fpu(cur, hrt, vlt, inp)
-    r_fpu_d = result_to_dict(r_fpu)
+    """Call C DLL CalculateElecParams_20ms — single head, zero Python logic"""
+    current_bufs = [cur, None, None, None]
+    hrtim_bufs   = [hrt, None, None, None]
+    voltage_bufs = [vlt, None, None, None]
+    inputs       = [inp, None, None, None]
 
-    I_peak = r_fpu_d['I_peak']
-    I_rms = r_fpu_d['I_rms']
-    Vdc = r_fpu_d['Vdc_mean']
-    phi = r_fpu_d['phi_deg']
-    P_W = r_fpu_d['P_W']
-
-    period_cnt = inp['lowOff']
-    perAdc = inp['perAdc']
-    f_sw_kHz = 2000.0 * perAdc / period_cnt if (period_cnt > 0 and perAdc > 0) else 0
-
-    CU, CO, LN, LO = inp['highOn'], inp['highOff'], inp['lowOn'], inp['lowOff']
-    D_U_pct = (CO - CU) / period_cnt * 100.0 if period_cnt > 0 else 0
-    tpc = 0.5 / perAdc if perAdc > 0 else 0
-    DT1_us = (LN - CO) * tpc
-    dt2 = CU - LO
-    if dt2 < 0:
-        dt2 += period_cnt
-    DT2_us = dt2 * tpc
-    cos_phi = math.cos(math.radians(phi))
-
-    # KVL L formula chain
-    omega_sw = 2 * math.pi * f_sw_kHz * 1000
-    V_C_peak = I_peak / (omega_sw * C_F) if (omega_sw > 0 and C_F > 0) else 0
-    L_uH = (Vdc / 2 + V_C_peak) / (I_peak * omega_sw) * 1e6 if (I_peak > 0 and omega_sw > 0) else 0
-    if L_uH < 0:
-        L_uH = 0
-
-    if L_uH > 0.001:
-        f_res_kHz = 1.0 / (2.0 * math.pi * math.sqrt(L_uH * 1e-6 * C_F)) / 1000.0
-    else:
-        f_res_kHz = f_sw_kHz
-
-    omega_res = 2 * math.pi * f_res_kHz * 1000
-    tan_phi = math.tan(math.radians(phi))
-    ratio = f_sw_kHz / f_res_kHz
-    denom = ratio - 1.0 / ratio
-    if abs(denom) > 0.001:
-        Q = tan_phi / denom
-    else:
-        Q = 0
-
-    if Q > 0.001:
-        R_ohm = omega_res * L_uH * 1e-6 / Q
-    else:
-        R_ohm = 0
-
-    X_L_sw = omega_sw * L_uH * 1e-6
-    X_C_sw = 1.0 / (omega_sw * C_F) if (omega_sw > 0 and C_F > 0) else 0
-    X_ohm = X_L_sw - X_C_sw
-    Z_mag = math.sqrt(R_ohm * R_ohm + X_ohm * X_ohm)
-
-    return {
-        'P_W': P_W, 'I_rms': I_rms, 'I_peak': I_peak,
-        'Vdc_mean': Vdc, 'phi_deg': phi, 'cos_phi': cos_phi,
-        'f_sw_kHz': f_sw_kHz, 'f_res_kHz': f_res_kHz,
-        'D_U_pct': D_U_pct, 'DT1_us': DT1_us, 'DT2_us': DT2_us,
-        'L_uH': L_uH, 'Q_factor': Q, 'R_ohm': R_ohm,
-        'Z_mag_ohm': Z_mag, 'X_ohm': X_ohm,
-    }
+    elec = calculate_elec_params_20ms(current_bufs, hrtim_bufs, voltage_bufs, inputs)
+    return elec_to_dict(elec[0])
 
 
 def error_pct(m, c):
@@ -149,12 +48,11 @@ def error_abs(m, c):
 
 
 def test_file(csv_name, golden_cycles):
-    """Test one file: all cycles, all params"""
     csv_path = os.path.join(CSV_DIR, csv_name)
     if not os.path.exists(csv_path):
         return None, f"CSV not found: {csv_path}"
 
-    cycles, data = load_cycles(csv_path, min_len=15)
+    cycles, _data = load_cycles(csv_path, min_len=15)
     n = min(len(cycles), len(golden_cycles))
 
     all_errors = []
@@ -165,11 +63,8 @@ def test_file(csv_name, golden_cycles):
     for i in range(n):
         cur, hrt, vlt, inp, s, e = cycles[i]
         gc = golden_cycles[i]
-        g = gc['golden']
-
-        m_derived = compute_MATLAB_derived(gc)
-        m_all = {**g, **m_derived}
-        c_all = run_c_cycle(cur, hrt, vlt, inp)
+        m_all = gc['golden']           # MATLAB golden (from file)
+        c_all = run_c_cycle(cur, hrt, vlt, inp)  # C DLL
 
         cycle_errors = {}
         cycle_failed = False
@@ -194,7 +89,6 @@ def test_file(csv_name, golden_cycles):
         worst = max(cycle_errors.items(), key=lambda x: x[1])
         status = "PASS" if not cycle_failed else "FAIL"
 
-        # Per-cycle detail line
         line = (f"  C{i+1:3d} {status}: "
                 f"P={c_all['P_W']:7.1f}W  I_rms={c_all['I_rms']:5.2f}A  "
                 f"I_pk={c_all['I_peak']:5.1f}A  phi={c_all['phi_deg']:6.1f}deg  "
@@ -205,7 +99,7 @@ def test_file(csv_name, golden_cycles):
 
         if cycle_failed:
             fail_count += 1
-            detail_lines.append(f"    *** FAILED PARAMS ***")
+            detail_lines.append("    *** FAILED PARAMS ***")
             for param, err in cycle_errors.items():
                 if err > TOL[param]:
                     detail_lines.append(
@@ -220,7 +114,6 @@ def test_file(csv_name, golden_cycles):
 
 
 def param_summary_lines(all_errors):
-    """Generate per-parameter summary table lines"""
     if not all_errors:
         return ["  (no data)"]
     lines = []
@@ -244,8 +137,8 @@ def main():
         lines.append(s)
 
     p("=" * 80)
-    p("批量交叉验证报告: C DLL vs MATLAB Golden (KVL dI/dt 公式链)")
-    p(f"数据源: {CSV_DIR}")
+    p("Cross-Validation: C DLL (CalculateElecParams_20ms) vs MATLAB Golden")
+    p(f"Data: {CSV_DIR}")
     p("=" * 80)
 
     gj = load_golden()
@@ -279,7 +172,7 @@ def main():
         total_cycles += result['n_cycles']
         total_fails += result['fail_count']
 
-    # ======== Global Report ========
+    # Global Report
     p()
     p("=" * 80)
     p("GLOBAL REPORT")
@@ -299,7 +192,6 @@ def main():
     p(f"  Files: {total_passed_files}/{len(file_results)} all cycles PASS")
     p(f"  Total cycles: {total_cycles}, failed: {total_fails}")
 
-    # Global parameter statistics
     all_errors = []
     for result in file_results.values():
         all_errors.extend(result['errors'])
@@ -310,12 +202,7 @@ def main():
         for line in param_summary_lines(all_errors):
             p(line)
 
-    # Failed cycles detail
-    failed_items = []
-    for csv_name, result in file_results.items():
-        if not result['passed']:
-            failed_items.append((csv_name, result['fail_count']))
-
+    failed_items = [(n, r['fail_count']) for n, r in file_results.items() if not r['passed']]
     p()
     if failed_items:
         p("  FAILED FILES:")
@@ -329,7 +216,6 @@ def main():
     p("END OF REPORT")
     p("=" * 80)
 
-    # Write report
     report = '\n'.join(lines)
     with open(REPORT_PATH, 'w', encoding='utf-8') as f:
         f.write(report)

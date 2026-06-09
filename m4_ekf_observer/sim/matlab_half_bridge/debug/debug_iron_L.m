@@ -1,6 +1,6 @@
 % debug_iron_L — 深究铁锅单帧 φ 和 L 计算
 function debug_iron_L()
-csv_path = '../../tools/ekf_tuner/capture_20260602_153307.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_153307.csv';
 
 cal.ADC_BITS = 12; cal.ADC_STEPS = 4096; cal.VREF = 3.3;
 cal.V_SCALE = cal.VREF/cal.ADC_STEPS/(6.2e3/(270e3*3+6.2e3));

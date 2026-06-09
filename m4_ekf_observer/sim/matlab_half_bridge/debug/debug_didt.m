@@ -6,7 +6,7 @@ cal.VDC_SCALE = cal.V_SCALE;
 cal.HRTIM_CLK_MHZ = 144;
 C_FARAD = 0.94e-6;
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 
 % 挑选铁锅同频段(24kHz附近)不同Vdc的帧, 看波形线性段
 % 低V: 153307 f=2 (Vdc=88V L=112.8)

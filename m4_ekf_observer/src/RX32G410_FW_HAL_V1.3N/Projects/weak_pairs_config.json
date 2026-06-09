@@ -1,0 +1,14 @@
+{
+    "_comment": "__weak 回调配对检查配置 - m4_ekf_observer 项目",
+    "interface_map": "core/interface_map.h",
+    "scan_dirs": ["API", "APP", "BaseClass", "DRV", "INTERFACE", "LIB", "Users", "core"],
+    "public_api_excludes": [
+        "engine_.*",
+        ".*_OnTick",
+        ".*_OnSecondTick",
+        ".*_OnInit",
+        ".*_Inject",
+        "Error_Handler"
+    ],
+    "callback_name_pattern": "^\\w+_On\\w+$"
+}

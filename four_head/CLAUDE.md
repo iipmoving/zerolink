@@ -3,6 +3,53 @@
 > **新 AI / 新工程师**: 先读 `RESTART.md` — 30 秒速览 → 约束系统 → 接口表 → 工作流 → 快速参考卡。
 > 本文件为补充细节。RESTART.md 是唯一重启入口。
 
+## 🔧 CC Switch 管理
+
+> **本项目通过 CC Switch (v3.16.1+) 管理 Claude Code 供应商和配置。**
+
+### 供应商配置（共3个）
+
+> **⚠️ 必须开启 CC Switch 的「路由模式」**：设置 → 路由模式 → 开。否则 OpenAI 格式的供应商（阿里百炼、魔塔）会因为协议不匹配而 404。
+
+#### 1. DeepSeek（当前主力）
+| 字段 | 值 |
+|------|-----|
+| **API Base URL** | `https://api.deepseek.com/anthropic` |
+| **API Format** | Anthropic (原生兼容) |
+| **Model** | `deepseek-chat` 或 `deepseek-reasoner` |
+| **环境变量** | `DEEPSEEK_API_KEY` |
+
+#### 2. 阿里百炼（Qwen）→ 需开路由模式
+| 字段 | 值 |
+|------|-----|
+| **API Base URL** | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| **API Format** | OpenAI → Anthropic (路由模式转换) |
+| **Model** | `qwen-max` / `qwen-plus` / `qwen-turbo` |
+| **API Key** | `sk-6a2cc251667441cc9c8b976bd04e8d04` |
+
+#### 3. 魔塔 ModelScope → 需开路由模式 + 阿里云实名认证
+| 字段 | 值 |
+|------|-----|
+| **API Base URL** | `https://api-inference.modelscope.cn/v1` |
+| **API Format** | OpenAI → Anthropic (路由模式转换) |
+| **Model** | `Qwen/Qwen3-32B` |
+| **API Key** | `ms-a4deda30-f21a-47c4-86bb-df201ced5566` |
+| **前置条件** | ⚠️ 需阿里云实名认证：https://www.modelscope.cn/my/accountsettings |
+
+> 切换供应商：CC Switch → 左上角下拉菜单选择对应配置 → 自动切换 API Key 和 Model
+
+### Prompts 同步
+- CC Switch → 左侧「Prompts」→ 编辑/激活 → 自动同步到本文件
+- 回填保护已启用：CC Switch 不会覆盖你手动编辑的本地内容
+- 跨工具同步：同一份提示词可同步到 `AGENTS.md`(Codex)、`GEMINI.md`(Gemini)
+
+### 数据存储
+- 核心配置：`C:\Users\moving\.cc-switch\cc-switch.db`
+- 本地设置：`C:\Users\moving\.cc-switch\settings.json`
+- 自动备份：`C:\Users\moving\.cc-switch\backups\`（保留最近10个版本）
+
+---
+
 ## 🎯 最高优先级：方法论是唯一产出
 
 **本项目（四头电磁炉）的真正目的不是做出一个能用的电磁炉。**
@@ -208,7 +255,7 @@ Presentation Controls ← SlotElement/LEDElement/BlinkRule/ModeRule
 ### 7.2 层依赖审计
 
 ```bash
-python tools/check_deps.py ../src
+python tools/check_deps.py . --project four_head
 ```
 
 **不通过 = 不得提交。** 违规类型:
@@ -217,7 +264,36 @@ python tools/check_deps.py ../src
 - `hal/*.c` 包含 `core/` `app/` `drv/` `proto/` → 必须移除
 - `proto/*.c` 包含 `app/` `drv/` `hal/` → 必须移除
 
-### 7.3 消息通道一致性
+### 7.3 __weak 配对一致性
+
+```bash
+python tools/check_weak_pairs.py . --project four_head
+```
+
+**不通过 = 不得提交。** 检查项:
+- interface_map.h 每个 pair 的 WEAK/STRONG 成对存在
+- 签名匹配（参数数量/类型/顺序一致）
+
+### 7.4 结构体一致性
+
+```bash
+python tools/check_structs.py . --project four_head
+```
+
+**不通过 = 不得提交。** 检查项:
+- 各模块 types.h 与 cfg/structs.json 一致
+- serial 编号匹配，无废弃字段引用
+
+### 7.5 数据交换机 include 权限
+
+```bash
+python tools/check_include.py .
+```
+
+**不通过 = 不得提交。** 检查项:
+- `*_io.h` 只能被 data_switcher.c 和模块自身 include
+
+### 7.6 消息通道一致性
 
 ```bash
 python tools/check_msgs.py ../src
@@ -228,7 +304,7 @@ python tools/check_msgs.py ../src
 - 同名数值未被不同通道重复使用
 - `*_MSG_*_IN` / `*_MSG_*_OUT` 命名符合约定
 
-### 7.4 自检清单
+### 7.7 自检清单
 
 在标记任何任务为完成前，逐条确认:
 - [ ] 所有 `#include` 符合所在层的依赖规则？
@@ -239,7 +315,7 @@ python tools/check_msgs.py ../src
 - [ ] 跨模块结构体独立声明，interface_map.h 已更新？
 - [ ] HMI 规则变更: JSON 先改 → JS 测试通过 → 再写 C？
 
-### 7.5 编译验证
+### 7.8 编译验证
 
 ```
 armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 ... → 0 error, 0 warning

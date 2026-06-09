@@ -1,5 +1,5 @@
 % debug_vdc — check Vdc calibration
-csv_path = '../../tools/ekf_tuner/capture_20260602_092111.csv';
+csv_path = '../../tools/ekf_tuner/captures/capture_20260602_092111.csv';
 
 cal.ADC_BITS = 12; cal.ADC_STEPS = 4096; cal.VREF = 3.3;
 cal.V_SCALE = cal.VREF/cal.ADC_STEPS/(6.2e3/(270e3*3+6.2e3));

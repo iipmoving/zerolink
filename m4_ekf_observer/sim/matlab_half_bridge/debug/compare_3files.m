@@ -14,7 +14,7 @@ cal.HRTIM_CLK_MHZ = 144;
 cal.V_AC_RMS = 220;
 cal.V_AC_PK = 220 * sqrt(2);
 
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 csvs = {'capture_20260602_104849.csv', ...
         'capture_20260602_104850.csv', ...
         'capture_20260602_104852.csv'};

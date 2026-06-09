@@ -45,37 +45,11 @@
  * ========================================================== */
 __attribute__((weak)) uint16_t* Adc_GetCurrentAdc2Ptr(void) { return 0; }
 __attribute__((weak)) uint16_t* Adc_GetCurrentAdc3Ptr(void) { return 0; }
-/* === ADC 通道枚举 (app_power 本地副本, 索引 _adc->inputValue[]) === */
-enum {
-	AdcGroupT1A = 0,
-	AdcGroupT2A = 1,
-	AdcGroupT3A = 2,
-	AdcGroupT4A = 3,
-	AdcGroupPower1 = 4,
-	AdcGroupPower2 = 5,
-	AdcGroupPower3 = 6,
-	AdcGroupPower4 = 7,
-	AdcGroupVoltage = 8,
-	AdcGroupIgbt1 = 9,
-	AdcGroupIgbt2 = 10,
-	AdcGroupBottom1 = 11,
-	AdcGroupBottom2 = 12,
-	AdcGroupBottom3 = 13,
-	AdcGroupBottom4 = 14,
-	AdcGroupCeilQ1 = 15,
-	AdcGroupCeilQ2 = 16,
-	AdcGroupCeilQ3 = 17,
-	AdcGroupCeilQ4 = 18,
-	AdcGroupPhase1 = 19,
-	AdcGroupPhase2 = 20,
-	AdcGroupPhase3 = 21,
-	AdcGroupPhase4 = 22,
-};
-/* getADCinputValue — 已删除, 用 _adc->inputValue[ch] 直接索引 */
 
 
 
-__attribute__((weak)) uint32_t Adc_GetPowerTxa(uint8_t ch) { return 0; }
+
+
 __attribute__((weak)) uint16_t* Adc_GetHrtimSyncBuffAdr(void) { return 0; }
 __attribute__((weak)) uint8_t Adc_IsTxaDmaStart(void) { return 0; }
 __attribute__((weak)) void Adc_TxaAvgReset(uint8_t ch) {}
@@ -671,11 +645,23 @@ enum
 
 
 
+/* ---- v2.2 Data Switcher 输入/输出类型 (app_power 本地定义) ---- */
+//typedef struct {
+//    uint8_t  status;
+//    uint8_t  res[3];
+//    uint32_t inputValue[30];       /* ADC 原始值数组, 索引 AdcGroupXxx */
+//} Power_Input_t;
+
+//typedef struct {
+//    uint8_t status;
+//    uint8_t res[3];
+//} Power_Output_t;
+
 AppPowerDef						PowerMem[POTNUM];						//炉头2
-static Power_Input_t  g_in;
-static Power_Output_t g_out;                                          /* v2.0 Data Switcher 输出槽 */
-static const Power_Input_t *_adc;                                     /* 指向 g_in, Switcher 填入数据后消费 */
-PowerInputDef					PowerInput[POTNUM];					//输入变量
+static PowerBase_Input_t  g_inPara;				// 输入缓存
+static PowerBase_Output_t g_outPara;      //输出缓存                                    /* v2.0 Data Switcher 输出槽 */
+                                  /* 指向 g_in, Switcher 填入数据后消费 */
+PowerInputDef					PowerInput[POTNUM];					//输入变量(通讯输入）
 AppPowerStaticDef			PowerStaticReg[POTNUM];			//定义两个炉寄存器空间
 AppPowerKeepDef				PowerKeepReg[POTNUM];			//定义两个炉寄存器空间(不清零）
 
@@ -982,6 +968,12 @@ uint8_t	APP_POWER_GetResumeFlag(void);		//得到功率切换标志
 
 uint16_t 		Pan_ADC_AdcDmaBuff[Pan_ADC_DMA_BUFF_NUM];
 uint16_t*			Pan_ADC_AdcFmacBuff;
+
+/* ===================================================================
+ *  SECTION 1: API调用 (API/Hardware Calls)
+ *  函数直接调用 API_HRTIM / API_ADC / API_DMA / API_FMAC / API_GPIO 等硬件接口
+ *  待用户剥离到独立 API 层模块
+ * =================================================================== */
 
 int16_t* 	APP_POWER_GetPanDmaBuffAddress(void)
 {
@@ -1460,6 +1452,12 @@ void	APP_POWER_PanStartPluse(void)		//产生起振脉冲，和功率控制分离
 
 
 //******************************************************************
+/* ===================================================================
+ *  SECTION 2: 纯计算 (Pure Calculation)
+ *  函数只访问内存/寄存器数据 — 不调用任何 API_* 硬件函数
+ *  包含: PID 控制 / 功率管理 / 相位限制 / 浪涌检测 / 锅具检测 / PID
+ * =================================================================== */
+
 // 函数名	：void PowerControlFun(uint8_t chn)
 // 作者		：
 // 功能		：根据序号得到类地址。
@@ -4149,6 +4147,12 @@ void	s_pwm_on()
  
 
 
+/* ===================================================================
+ *  SECTION 4: 子类 — Half-Bridge PowerCalc
+ *  半桥功率计算: PPG 增减控制 + 相位管理 + 窗口积分预留
+ *  全桥策略 (power_calc_full.c) 待后续添加
+ * =================================================================== */
+
 INT16U	i_ppg_control(INT8U t_pan_cur_change)
 {
 	INT16U t_corrent_ppg;
@@ -5254,6 +5258,12 @@ uint16_t PowerStepChange(AppPowerDef* powerCh)
 	
 }	
 
+/* ===================================================================
+ *  SECTION 3: 中断回调 (ISR Callbacks)
+ *  从中断上下文直接调用的函数
+ *  包含: HRTIM CMP / ADC AWD / DMA PAN / WatchDog / PPG Step Change
+ * =================================================================== */
+
 void 	AdcIrqHandleWatchDogLock(void)		//这个要单独处理，两个炉头
 {
 		for(uint8_t i=0;i<POTNUM;i++)			//关闭所有炉头 
@@ -6318,8 +6328,25 @@ void		API_POWER_PanCheckPluse(void)
 	
 }	
 
+void		Power_Adc_Input(void)
+{
+    /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
+    for (uint8_t ch = 0; ch < POTNUM; ch++) {
 
 
+				PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
+        PowerMem[ch].staticReg->current16 = 		g_inPara.pAdc[ch].current;
+				PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
+
+
+        PowerMem[ch].input->status.voltageAd = g_inPara.pAdc[ch].voltage>> 4;
+        PowerMem[ch].staticReg->PowerTxaFact =	g_inPara.pAdc[ch].power;
+        PowerMem[ch].staticReg->phaseValue = g_inPara.pAdc[ch].phase;;
+        PowerMem[ch].staticReg->limitQSum = g_inPara.pAdc[ch].current;;
+        PowerMem[ch].staticReg->PowerTxaFact >>= 6;
+    }
+
+}
 
 
 
@@ -6364,47 +6391,44 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
     /* 谐振电流 (平均有功电流, 16位) */
     ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;
 }
-/* === v2.0 Data Switcher interface ================================= */
-void Power_GetIO(Power_Input_t **ppIn, Power_Output_t **ppOut)
+/* ====== v2.2 MODULE_SKELETON + MODULE_EXPORT ======
+ * APP_Power_GetIO → Switcher 注册入口
+ * DoWork 内部: InputCallback (weak 空壳) → ProcessInput → OutputCallback (weak 空壳)
+ * 输入: g_in (Power_Input_t) ← Switcher 填入 ADC raw
+ * 输出: g_out (Power_Output_t) → Switcher 读取状态
+ * ================================================================ */
+
+MODULE_SKELETON(APP_Power);
+
+static void Init(void)
 {
-	*ppIn  = &g_in;
-	*ppOut = &g_out;
+    g_input.para  = &g_inPara;					//实例化
+    g_output.para = &g_outPara;
 }
 
-void Power_DoWork(void)
+static void ProcessInput(void)
 {
-	uint8_t ch;
+    uint8_t ch;
 
-	g_out.status &= ~0x02;                          /* 每帧先清就绪标志 */
+    /* ---- 输入段: 检查新数据 ---- */
 
-	if (!(g_in.status & 0x02)) return;              /* 无新输入, 本帧不做功 */
 
-	_adc = &g_in;                                   /* 绑定输入槽 */
+    g_output.info.status &= ~ST_NEW;
 
-	/* INPUT: 从 g_in 搬运到 PowerMem (原 AppAdc_OnDataReady 逻辑) */
-	for (ch = 0; ch < POTNUM; ch++) {
-		PowerControl = &PowerMem[ch];
 
-#ifdef CurrentFromTxa
-		PowerControl->staticReg->current16 = _adc->inputValue[AdcGroupT1A+ch];
-		PowerControl->input->status.currentAd = PowerControl->staticReg->current16 >> 2;
-#else
-		PowerControl->staticReg->current16 = _adc->inputValue[AdcGroupPower1+ch];
-		PowerControl->input->status.currentAd = PowerControl->staticReg->current16 >> 4;
-#endif
+		if(g_input.info.status & ST_NEW)
+		{
+			Power_Adc_Input();					//从缓存区获得ADC输入值
+		}
 
-		PowerControl->input->status.voltageAd = _adc->inputValue[AdcGroupVoltage] >> 4;
-		PowerControl->staticReg->PowerTxaFact = Adc_GetPowerTxa(PotCh1+ch);
-		PowerControl->staticReg->phaseValue = _adc->inputValue[AdcGroupPhase1+ch];
-		PowerControl->staticReg->limitQSum = _adc->inputValue[AdcGroupCeilQ1+ch];
-		PowerControl->staticReg->PowerTxaFact >>= 6;
-	}
 
-	g_in.status &= ~0x02;                           /* 输入已消费 */
+    /* ---- 计算段 + 输出段 ---- */
+    PowerTypeFun();
 
-	/* COMPUTE + OUTPUT */
-	PowerTypeFun();                                 /* 现有调度入口 */
-	g_out.status |= 0x02;                           /* 有新产出时置位 */
+
+    g_output.info.status |= ST_OUT;
 }
+
+MODULE_EXPORT(APP_Power);
 
 //**********************************end of file********************************

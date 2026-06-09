@@ -1,6 +1,6 @@
 % batch_iron2 — 铁锅第二轮数据批量阻抗法
 function batch_iron2()
-base = '../../tools/ekf_tuner/';
+base = '../../tools/ekf_tuner/captures/captures/';
 csvs = {
     'capture_20260602_153307.csv'
     'capture_20260602_153311.csv'

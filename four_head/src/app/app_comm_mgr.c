@@ -37,7 +37,7 @@ typedef struct {
 static InData_t  s_in;
 static OutData_t s_out;
 
-MODULE_SKELETON();
+MODULE_SKELETON(AppCommMgr);
 
 /* ========== 协议层抽象 ========== */
 #define PROTO_PARSE_OK         0      /* 解析成功 (与 PROTO_PARSE_OK 对齐) */
@@ -57,7 +57,7 @@ __weak uint16_t Proto_BuildWriteSingle(uint8_t slave, uint16_t reg,
                                        uint16_t val, uint8_t *buf)
 { (void)slave; (void)reg; (void)val; (void)buf; return 0u; }
 
-/* __weak: 仅 DRV 层方向保留，APP→APP 走 Switcher 路由 */
+/* @V1_VOIDPTR: DRV 层方向 __weak 回调, 待 DRV 迁移至 MODULE_SKELETON */
 __weak void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
 { (void)param; (void)data_ptr; }
 
@@ -160,7 +160,6 @@ static void handle_response(const uint8_t *rx_data, uint16_t frame_len)
         o->slave_addr = slave;
         o->online    = 1;
         for (i = 0; i < COMM_REG_COUNT; i++) o->regs[i] = ctx->regs[i];
-        g_output.info.status |= ST_OUT;
     }
 }
 
