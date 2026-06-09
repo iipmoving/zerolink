@@ -336,9 +336,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>RX32G410,DEBUG_POWER_OUTx,SimZerox,I2C2_PORT,PrintMessage,Fmac9,CurrentFromTxa,COMM_UART,TxaFmac,DEBUG_POWER_OUT_CONSTX</Define>
+              <Define>RX32G410,DEBUG_POWER_OUT,SimZero,I2C2_PORT,PrintMessage,Fmac9,CurrentFromTxa,COMM_UARTx,TxaFmac,DEBUG_POWER_OUT_CONSTX</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\..\..\..\include;..\..\..\..\..\app;..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\modbus\inc;..\..\BaseClass\inc\IH_ElecParams;..\..\core</IncludePath>
+              <IncludePath>..\..\..\..\..\include;..\..\..\..\..\app;..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\modbus\inc;..\..\BaseClass\inc\IH_ElecParams;..\..\core;..\..\..\..\..\base_class\inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -596,6 +596,62 @@
               <FileName>DRV_GPIO.C</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\DRV\SRC\DRV_GPIO.C</FilePath>
+            </File>
+            <File>
+              <FileName>drv_hrtim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\DRV\SRC\drv_hrtim.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>0</IncludeInBuild>
+                  <AlwaysBuild>0</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
             </File>
           </Files>
         </Group>
@@ -889,6 +945,11 @@
               <FileName>ih_elec_params.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\BaseClass\src\ih_elec_params.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_hrtim_consumer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\base_class\drv_hrtim_consumer.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1236,7 +1297,63 @@
                   <RVCTZI>0</RVCTZI>
                   <RVCTOtherData>0</RVCTOtherData>
                   <ModuleSelection>0</ModuleSelection>
-                  <IncludeInBuild>1</IncludeInBuild>
+                  <IncludeInBuild>0</IncludeInBuild>
+                  <AlwaysBuild>0</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
+              <FileName>app_power_drv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\APP\POWER\src\app_power_drv.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>0</IncludeInBuild>
                   <AlwaysBuild>0</AlwaysBuild>
                   <GenerateAssemblyFile>2</GenerateAssemblyFile>
                   <AssembleAssemblyFile>2</AssembleAssemblyFile>
@@ -1285,6 +1402,31 @@
               <FileName>adc_sensor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\app\adc_sensor.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_power_claude.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\LIB\APP\app_power_claude.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\app\power_pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_protect.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\app\power_protect.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_pan_if.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\app\power_pan_if.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_output.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\app\power_output.c</FilePath>
             </File>
           </Files>
         </Group>

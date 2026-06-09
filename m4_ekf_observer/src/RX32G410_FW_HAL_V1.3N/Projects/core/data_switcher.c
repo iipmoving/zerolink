@@ -24,10 +24,16 @@ void APP_Power_GetIO(Para_Grp_t **ppIn,
                      Para_Grp_t **ppOut,
                      void      (**ppDoWork)(void));
 
+/* ---- DrvHrtim_GetIO (base_class/drv_hrtim_consumer.c MODULE_EXPORT) ---- */
+void DrvHrtim_GetIO(Para_Grp_t **ppIn,
+                    Para_Grp_t **ppOut,
+                    void      (**ppDoWork)(void));
+
 /* ===== 模块槽位枚举 ===== */
 typedef enum {
     SLOT_ADC       = 0,
     SLOT_APP_POWER = 1,
+    SLOT_DRV       = 2,
     SLOT_COUNT
 } SwitcherSlot_t;
 
@@ -61,6 +67,10 @@ void Switcher_Init(void)
     APP_Power_GetIO(&s_slot[SLOT_APP_POWER].pIn,
                     &s_slot[SLOT_APP_POWER].pOut,
                     &s_slot[SLOT_APP_POWER].pDoWork);
+
+    DrvHrtim_GetIO(&s_slot[SLOT_DRV].pIn,
+                   &s_slot[SLOT_DRV].pOut,
+                   &s_slot[SLOT_DRV].pDoWork);
 }
 
 void 		ADC_to_Power_Link(void)
@@ -96,7 +106,7 @@ void APP_Power_InputCallback(void)
 
 
 
-		if(s_slot[SLOT_APP_POWER].pOut->info.status&=ST_NEW)
+		if(s_slot[SLOT_ADC].pOut->info.status&=ST_NEW)
 		{
 		
 				//中间层从各个模块对数据进行搬运
@@ -127,9 +137,25 @@ void APP_Power_InputCallback(void)
  * ================================================================ */
 void Switcher_Run_Slot1(void)
 {
-    for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-        if (s_slot[i].pDoWork) {
-            s_slot[i].pDoWork();
-        }
+    /* Slot 0: ADC */
+    s_slot[SLOT_ADC].pDoWork();
+
+    /* Slot 1: APP_Power (InputCallback pulls ADC data from Slot 0) */
+    s_slot[SLOT_APP_POWER].pDoWork();
+
+    /* Middleware: APP_Power → DrvHrtim (hw_cmd) */
+    {
+        PowerBase_Output_t *app_out = (PowerBase_Output_t *)s_slot[SLOT_APP_POWER].pOut->para;
+        memcpy(s_slot[SLOT_DRV].pIn->para, &app_out->hw_cmd, sizeof(PowerHw_Command_t));
+        s_slot[SLOT_DRV].pIn->info.status |= ST_NEW;
+    }
+
+    /* Slot 2: DrvHrtim */
+    s_slot[SLOT_DRV].pDoWork();
+
+    /* Middleware: DrvHrtim → APP_Power (hw_status feedback) */
+    {
+        PowerBase_Input_t *app_in = (PowerBase_Input_t *)s_slot[SLOT_APP_POWER].pIn->para;
+        memcpy(&app_in->hw_status, s_slot[SLOT_DRV].pOut->para, sizeof(PowerHw_Status_t));
     }
 }

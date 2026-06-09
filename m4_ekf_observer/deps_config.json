@@ -3,11 +3,11 @@
   "scan_dirs": ["app", "base_class", "proto", "core", "src"],
   "rules": {
     "app": {
-      "allowed": ["app/", "core/", "proto/", "<"],
+      "allowed": ["app/", "core/", "proto/", "include/", "<"],
       "forbidden": ["base_class/", "src/"]
     },
     "base_class": {
-      "allowed": ["base_class/", "core/", "<"],
+      "allowed": ["base_class/", "core/", "include/", "<"],
       "forbidden": ["app/", "proto/"]
     },
     "proto": {

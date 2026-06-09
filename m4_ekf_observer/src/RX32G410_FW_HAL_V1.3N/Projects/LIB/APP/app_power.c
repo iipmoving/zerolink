@@ -6418,6 +6418,7 @@ static void ProcessInput(void)
 
 		if(g_input.info.status & ST_NEW)
 		{
+			g_input.info.status &= ~ST_NEW;	
 			Power_Adc_Input();					//从缓存区获得ADC输入值
 		}
 

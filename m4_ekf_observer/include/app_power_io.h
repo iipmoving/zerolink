@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include "std_module.h"
+#include "app_power_hw_io.h"
 //#include "app_adc_io.h"
 
 #pragma pack(4)
@@ -52,9 +53,9 @@ typedef struct {
 /* ---- 输入: 类型化指针 + 炉头数组 ---- */
 typedef struct {
     PowerAdc_InHead_t        pAdc[POWER_POTMAX];          /* → AppAdc                       */
-//    struct PowerCalc_Output *pCalc;         /* → PowerCalc 反馈                */
     PowerComm_InHead_t       head[POWER_POTMAX];       /* 每炉头独立命令                   */
-    
+    PowerHw_Status_t         hw_status;                 /* DRV 反馈 (10ms)                 */
+
 } PowerBase_Input_t;
 
 /* ---- 单炉头输出 ---- */
@@ -68,6 +69,7 @@ typedef struct {
 typedef struct PowerBase_Output {
 
     PowerBase_OutHead_t  head[4];
+    PowerHw_Command_t    hw_cmd;                       /* → DRV 命令 (10ms)               */
 
 } PowerBase_Output_t;
 
