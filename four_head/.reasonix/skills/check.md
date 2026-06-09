@@ -1,36 +1,33 @@
 ---
 name: check
-description: "Run all methodology compliance checks on four_head project — layer deps, message channels, coding conventions, compile. Use after every code change. Triggers on: check, 检查, 验证, audit, verify, 审计, 合规检查."
+description: "Run all methodology compliance checks — layer deps, message channels, paradigm audit, coding conventions, compile. Use after every code change. Triggers on: check, 检查, 验证, audit, verify, 审计, 合规检查."
 ---
 
-# /check — 一键合规审计 (four_head)
+# /check — 一键合规审计
 
 Run all methodology checks and report pass/fail with violation locations.
 
-**核心**: `core/std_module.h`
-
-**Project**: four_head (SC32L14T, Cortex-M0+, ARMCC V5.06)
-**Methodology**: 零耦合嵌入式架构 v2.0
+**核心**: `core/std_module.h` — PULL 范式
 
 ---
 
 ## 工作目录约定
 
-所有命令在 `four_head/` 根目录执行。
+在项目根目录执行。
 
 ---
 
 ## 检查序列
 
-执行 5 项检查。**不要在第一项失败时停止** — 全部跑完再出报告。
+执行 6 项检查。**不要在第一项失败时停止** — 全部跑完再出报告。
 
 ### Step 1: 层依赖审计
 
 ```bash
-python tools/check_deps.py src
+python tools/check_deps.py .
 ```
 
-检查 `src/` 下所有 `#include`，对照层白名单。
+检查所有 `#include`，对照层白名单。
 
 | 违规 | 检测 |
 |------|------|
@@ -39,64 +36,58 @@ python tools/check_deps.py src
 | `hal/*.c` 包含 `core/` `app/` `drv/` `proto/` | FAIL |
 | `proto/*.c` 包含 `app/` `drv/` `hal/` | FAIL |
 
-### Step 2: 消息通道一致性
+### Step 2: 范式合规审计
 
 ```bash
-python tools/check_msgs.py src
+python tools/check_paradigm.py .
 ```
 
-验证每条 Msg_Post/Send/Register 成对存在，ID 不冲突。
+检查每个模块是否正确使用 v2.2 PULL 范式：
 
-### Step 3: 编码规范审计
+| 检查项 | 违规 |
+|--------|------|
+| MODULE_SKELETON 带 name 参数 | 空 `MODULE_SKELETON()` |
+| MODULE_EXPORT 与 SKELETON 配对 | 有 SKELETON 无 EXPORT, 或反过来 |
+| 手动 GetIO 实现 | 自己写 `XXX_GetIO()` 而不是 `MODULE_EXPORT(XXX)` |
+| .h 手动声明 GetIO | 手写 `void Xxx_GetIO(...)` 而不是 `MODULE_IO_H(Xxx)` |
 
-逐文件检查以下项，报告 `[WARN]` 位置：
-
-| 检查项 | 方法 | 违规示例 |
-|--------|------|---------|
-| 裸 `__weak` 关键字 | `grep -n "__weak "` | `__weak void Foo(void)` → 应 `__attribute__((weak))` |
-| __weak + void* 审计 | `python tools/check_deps.py src` （自动审计） | APP→APP / 无强符号 / _OnOutput 空壳 / APP→DRV 传指针 |
-| 缺 _Constructor | `grep "_Constructor" {module}.c` | 每个模块必须有一处 |
-| include guard 未注释 | 检查 app/drv/proto .h | `#define` 应改为 `//#define` |
-| 跨模块 struct 无 pack(4) | grep `typedef struct` 前 pack(4) | struct 未对齐 |
-| 文件编码 | `file --mime-encoding {file}` | 非 UTF-8 → WARN |
-
-**数据传递铁律**：
-- APP 层允许零个 `__attribute__((weak))` — 所有输出走 Switcher 路由
-- APP→DRV 禁止传 `void*` 或结构体指针 — 只允许基本类型/枚举值
-- `void*` 参数无法在编译期检查类型，实际指向什么结构体靠记忆
-- 所有 `_OnOutput` 必须有实际数据操作（`memcpy` / `=` / 函数调用），不得是 `(void)param` 空壳
-- 中间层（Switcher）完成枚举→DRV 参数映射，APP 不认知 DRV 结构体
-
-报告格式：
-```
---- 3/5 编码规范审计 ---
-[PASS] 所有文件使用 __attribute__((weak))
-[WARN] src/app/app_hmi.h: 12 — 改用 //#define 注释 include guard
-[PASS] 所有模块有 _Constructor()
-[PASS] 跨模块 struct 有 #pragma pack(4)
-```
-
-### Step 4: 结构体一致性（如 cfg/structs.json 存在）
+### Step 3: 输出回调审计
 
 ```bash
-python ../methodology-seed-v2.0/tools/check_structs.py .
+python tools/check_output_callback.py .
+```
+
+检查 v1.x 遗留模式：
+
+| 检查项 | 违规 |
+|--------|------|
+| `_onOutput` 标识符 | 需 `@OUTPUT_CALLBACK` 白名单 |
+| `__weak OnOutput` 定义 | 不应存在 |
+| `void*` 回调 (在 MODULE_SKELETON 文件) | 需 `@V1_VOIDPTR` 白名单 |
+| APP→DRV `__weak` 传结构体指针 | 禁止 |
+| `__weak` 函数名不以 Callback 结尾 | 需重命名或 `@ALLOW_NON_CALLBACK_WEAK` |
+
+### Step 4: 消息通道一致性（如有消息系统）
+
+```bash
+python tools/check_msgs.py .
+```
+
+验证每条 Msg_Post/Send/Register 成对存在，ID 不冲突。无消息系统的项目跳过。
+
+### Step 5: 结构体一致性（如 cfg/structs.json 存在）
+
+```bash
+python tools/check_structs.py .
 ```
 
 如 `cfg/structs.json` 不存在则报告 `[SKIP]`。
 
-### Step 5: 编译验证
-
-从 `Project/` 目录执行：
+### Step 6: 编译验证
 
 ```bash
-cd Project
-armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 \
-  -I "../src/vendor/FWLib/SC32F1XXX_Lib/inc" \
-  -I "../src/vendor/CMSIS" \
-  -I "../src/vendor/MCU_Drivers" \
-  -I "../src/app" -I "../src" -I "../src/hal" \
-  -I "../src/drv" -I "../src/proto" -I "../src/cfg" \
-  <modified.c> -o <output.o>
+# 用项目对应的编译器命令
+armcc --cpu Cortex-M4 --c99 -I"include" -I"core" -c <modified.c>
 ```
 
 如无编译器则 `[SKIP]`。
@@ -107,13 +98,14 @@ armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 \
 
 ```
 ========================================
-  CHECK SUMMARY — four_head
+  CHECK SUMMARY — m4_ekf_observer
 ========================================
-  1/5 check_deps.py          [PASS]      0 violations
-  2/5 check_msgs.py          [PASS]      0 orphan msgs
-  3/5 编码规范审计             [PASS]      0 warnings
-  4/5 check_structs.py       [SKIP]      No cfg/structs.json
-  5/5 compile                [PASS]      0 errors, 0 warnings
+  1/6 check_deps.py          [PASS]      0 violations
+  2/6 check_paradigm.py      [PASS]      0 violations
+  3/6 check_output_callback  [PASS]      0 violations
+  4/6 check_msgs.py          [SKIP]      No msg system
+  5/6 check_structs.py       [PASS]      0 violations
+  6/6 compile                [PASS]      0 errors, 0 warnings
 ----------------------------------------
   Result: 0 violations — CLEAN
 ========================================
@@ -121,21 +113,16 @@ armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 \
 
 ---
 
-## 编码基本规范（每次提交前自检）
+## 编码基本规范
 
 - [ ] 所有文件为 **UTF-8 without BOM**？
 - [ ] 无裸 `__weak` — 全部使用 `__attribute__((weak))`？
-- [ ] 4 空格缩进，无 Tab？
-- [ ] 每个模块有 `static void _Constructor(void)`？
+- [ ] 每个模块有 `MODULE_SKELETON(name)` + `MODULE_EXPORT(name)`？
 - [ ] 跨模块 struct 有 `#pragma pack(4)` + `res[]` 填充到 4 倍数？
-- [ ] 函数/变量/常量带模块前缀？
-- [ ] app/drv/proto 的 `.h` 使用 `//#define`（L0 阻断）？
 - [ ] APP 层不 include DRV/HAL？
-- [ ] 在 git reset 前 stash 或建备份分支？
-- [ ] 中文注释说明复杂逻辑？
-
----
+- [ ] 模块通过 InputCallback 拉数据，不用 __weak 输出给别的 APP 模块？
+- [ ] 所有 `__attribute__((weak))` 函数以 `Callback` 后缀结尾？
 
 ## Quick Mode
 
-`--quick` 或 "快速检查" → 跳过 Step 5 编译，只跑 1-4。
+`--quick` 或 "快速检查" → 跳过 Step 6 编译，只跑 1-5。

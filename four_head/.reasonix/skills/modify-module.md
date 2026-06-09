@@ -1,39 +1,93 @@
 ---
 name: modify-module
-description: "Convert an existing module from v1.x to v2.0 Data Switcher architecture. 6-step SOP: find entry → trace path → extract I/O → build skeleton → fill logic → wire Switcher. Triggers on: modify module, refactor module, upgrade module, modify-module, 转换模块, 重构模块, 迁移模块."
+description: "Migrate an existing module to v2.2 PULL paradigm (std_module.h). Step 0: backup → new-module SKILL template → incremental migration. Triggers on: modify module, refactor module, upgrade module, migrate module, 修改模块, 重构模块, 迁移模块, 转换模块."
 ---
 
-# /modify-module — v1.x → v2.0 转换向导
+# /modify-module — v1.x → v2.2 迁移向导
 
-将现有模块改造为符合 v2.0 数据交换机架构。
+将现有模块改造为符合 v2.2 PULL 数据交换机架构（`std_module.h` 模式）。
 
 **核心**: `core/std_module.h` — **模块的骨架宏就是范式**
-
-**Project**: four_head (SC32L14T, Cortex-M0+, ARMCC V5.06)
-**Methodology**: 零耦合嵌入式架构 v2.0
+**范式**: `MODULE_SKELETON(name)` → `Init()` → `ProcessInput()` → `MODULE_EXPORT(name)`
 
 ---
 
-## 核心原则
+## 铁则 (读三遍)
+
+> ⚠️ **禁止直接修改原文件。禁止在原文件加 MODULE_SKELETON。**
+>
+> 这是本技能唯一不可违反的规则。已因此翻车: 在原文件插骨架宏导致 GetIO/DoWork 混乱、
+> 变量名冲突、多次编辑失败。走标准流程。
+
+## Step 0: 改名备份 → new-module 模板 → 逐段搬功能
+
+```bash
+# 0a. 改名备份旧文件 (禁止在原文件修改)
+mv src/{layer}/{module}.c src/{layer}/{module}_v1.c.bak
+
+# 0b. 如果有旧 .h, 也改名
+mv include/{module}.h include/{module}_v1.h.bak
+
+# 0c. 调 new-module SKILL 生成空模板
+#     (给出模块名、层、输入数据来源)
+#     执行后得到: src/{layer}/{module}.c  (空白模板)
+```
+
+### 为什么不能在原文件改？
+
+| 问题 | 后果 |
+|------|------|
+| 几千行大文件中间插骨架宏 | 宏展开位置不对导致 `g_input`/`g_output` 未定义 |
+| 旧 `g_in`/`g_out` 和范式 `g_input`/`g_output` 同名异义 | 变量名极易混淆, 该读 new 时读了 old |
+| 旧 Power_DoWork 和 DoWork 共存 | 不知道哪个是入口 |
+| 手动 GetIO 和 MODULE_EXPORT 冲突 | 链接错误, 查半天才找到原因 |
+
+正确流程:
+
+```
+旧文件 (几千行)          →   old_module_v1.c.bak   (不动)
+                           + new_module.c          (空模板, 从零搭)
+                           + 从备份逐段搬功能      (搬一段删一段)
+                           + 功能等价后删备份
+```
+
+### 其他原则
 
 - **每个模块独立改造** — 一次改一个，不改调用方
-- **多个入口 = 多个输入回调** — 每个外部调用方对应一个 `_OnInput_` 函数
-- **向后兼容靠双写** — 过渡期 g_out 与旧 __weak 同时写，最后统一收口
-- **先搭骨架后填肉** — 先定好 _io.h + 标准函数，再移业务逻辑
+- **向后兼容靠双写** — 过渡期 g_output.para 与旧 __weak 同时写
+- **先搭骨架后填肉** — 先定好 io.h 结构体 + 骨架宏, 再移业务逻辑
+- **单向调用** — 模块通过 InputCallback (强符号) 拉数据, 不定义 __weak 输出给别的 APP 模块
+
+---
+
+## Step 0: 备份 + 生成模板
+
+```bash
+# 0a. 改名备份旧文件
+mv src/{layer}/{module}.c src/{layer}/{module}_v1.c.bak
+
+# 0b. 如果有旧 .h, 也改名
+mv src/{layer}/{module}.h src/{layer}/{module}_v1.h.bak
+
+# 0c. 调 new-module SKILL 生成模板
+#     (给出模块名、层、输入数据来源)
+```
+
+> 不要想"只加几行骨架宏没事" — 已经因此翻过车。走标准流程。
 
 ---
 
 ## Step 1: 找入口 — 识别模块的所有外部调用点
 
 ```bash
-# 1a. 找 Init/Run 调用者
-grep -rn "Module_Init\|Module_Run" src/main.c src/app/ src/drv/
+# 1a. 找 Init/Run 调用者 (在旧备份文件里搜)
+grep -rn "Module_Init\|Module_Run" src/main.c src/app/
 
 # 1b. 找 __weak 输入回调（本模块的强符号 = 别人调我）
-grep -n "^void Module_On\|^void App.*_On\|^void Drv.*_On" src/{layer}/{module}.c
+grep -n "^void Module_On\|^void App.*_On\|^void Drv.*_On" src/{layer}/{module}_v1.c.bak
 
 # 1c. 找 __weak 输出桩（本模块定义的空壳 = 我调别人）
-grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}.c
+grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}_v1.c.bak
 ```
 
 **输出**: 一张调用关系表
@@ -41,25 +95,8 @@ grep -n "__weak\|__attribute__((weak))" src/{layer}/{module}.c
 | 入口类型 | 函数名 | 谁调我 | 传什么数据 | 对应动作 |
 |---------|--------|--------|-----------|---------|
 | 周期入口 | `Module_Run()` | main.c slot N | 无参数 | → `DoWork()` |
-| 输入回调 | `Module_OnXxx()` | other_module.c | param+data_ptr | → `OnInput_Xxx()` |
-| 输出桩 | `Other_OnYyy()` | (本模块调别人) | param+data_ptr | → 改写 `g_out` |
-
----
-
-## Step 1.5: 检残留 — 清除旧 __weak 输出回调
-
-```bash
-# 检查本模块是否定义了发给其他 APP 模块的 __weak 回调
-grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
-```
-
-**规则**: APP→APP 方向不得有 __weak 输出回调。发现则改为写 `g_output` + `ST_OUT`，由 Switcher 路由。
-
-合法例外:
-- DRV→APP 方向（如 drv_key → AppHmi_OnKey）— 通过 Switcher 的 `OnOutput` 强符号路由
-- APP→DRV 方向（如 AppHmi_OnOutput → DrvDisplay_OnRefresh）— Switcher 直接调 DRV 强符号
-
-**如果确实需要 APP→APP 输出回调，必须先向用户说明理由并等待确认，不得自行添加。**
+| 输入回调 | `Module_OnXxx()` | other_module.c | param+data_ptr | → InputCallback 强符号 |
+| 输出桩 | `Other_OnYyy()` | (本模块调别人) | param+data_ptr | → 改写 `g_output.para` |
 
 ---
 
@@ -72,7 +109,7 @@ grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
    ↓
 传什么: uint16_t param, void *data_ptr
    ↓       param = head_idx (低8位)
-   ↓       data_ptr → PowerCtrl_t { onoff, target_power, power_level, ... }
+   ↓       data_ptr → PowerCtrl_t { onoff, target_power, ... }
    ↓
 本模块: Module_OnXxx()
    ↓
@@ -88,7 +125,7 @@ grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
    ↓
 传什么: PowerOutput_t { head_idx, power_watt }
    ↓
-接收方: other_module.c — STRONG 强符号
+接收方: other_module.c — 改走 InputCallback 强符号
 ```
 
 **输出**: 每路 I/O 的参数字段清单
@@ -103,205 +140,158 @@ grep -n "__attribute__((weak))\|__weak" src/{layer}/{module}.c
 
 ---
 
-## Step 3: 提取输入输出参数 — 设计 Input_t / Output_t
+## Step 3: 设计 Input_t / Output_t 结构体
 
-基于 Step 2 的字段清单，按数据源分组为 `_Input_t`，按目的地分组为 `_Output_t`。
+基于 Step 2 的字段清单, 设计跨模块 I/O 结构体。
 
 **设计规则**:
 
 | 规则 | 说明 |
 |------|------|
-| 每个输入源一个子结构体 | PowerCtrl 一组, SystemError 一组, RegData 一组 |
-| 每个子结构体配一个 valid 标志 | `ctrl_valid`, `err_valid`, `reg_valid` — DoWork 靠此判断 |
-| status 字节嵌在首部 | `uint8_t status` + `uint8_t res[3]` |
 | `#pragma pack(4)` 包裹 | 32 位对齐 |
-| `sizeof()` 为 4 的倍数 | 末尾 `uint8_t resN[N]` 补齐 |
+| `status` 字节在首部 | `uint8_t status` + `uint8_t res[3]` (与 Info_Header 兼容) |
+| 末尾 `resN[]` 补齐 | `sizeof()` 为 4 的倍数 |
+| 每个输入源一个子结构体 | PowerCtrl 一组, SystemError 一组, ... |
 
 ```c
-/* include/{module}_io.h — 模板 */
-
+/* include/{module}_io.h */
 #ifndef MODULE_IO_H
 #define MODULE_IO_H
 
 #include <stdint.h>
+#include "std_module.h"
+
 #pragma pack(4)
 
-/* ---- 输入槽（本模块消费） ---- */
-
 typedef struct {
-    uint8_t  head_idx;
-    uint16_t value;
-    uint8_t  flag;
-} Module_SourceA_InputItem_t;
-
-typedef struct {
-    uint8_t  status;         /* bit0=已构造, bit1=新输入到达 (Switcher 设, 本模块清) */
+    uint8_t  status;
     uint8_t  res[3];
-
-    uint8_t  srcA_valid;     /* 1=本帧有新的 SourceA 数据 */
-    uint8_t  res2[3];        /* 对齐 */
-
-    Module_SourceA_InputItem_t  srcA;
-} Module_Input_t;
-
-/* ---- 输出槽（本模块产出） ---- */
+    /* ... 输入字段 ... */
+} {Module}_Input_t;
 
 typedef struct {
-    uint8_t  head_idx;
-    uint16_t result;
-} Module_OutputItem_t;
-
-typedef struct {
-    uint8_t  status;         /* bit0=已构造, bit1=新输出就绪 (本模块设, Switcher 清) */
+    uint8_t  status;
     uint8_t  res[3];
-
-    uint8_t  has_output;     /* 本帧有产出 */
-    uint8_t  res2[3];
-
-    Module_OutputItem_t  out;
-} Module_Output_t;
+    /* ... 输出字段 ... */
+} {Module}_Output_t;
 
 #pragma pack()
 
-/* ---- 公开接口 ---- */
-void Module_GetIO(Module_Input_t **ppIn, Module_Output_t **ppOut);
-void Module_DoWork(void);
+/* GetIO 声明 (由 MODULE_EXPORT 生成) */
+MODULE_IO_H({Module});
 
-/* 输入回调 — 每个数据源一个 */
-void Module_OnInput_SourceA(uint8_t head_idx, uint16_t value, uint8_t flag);
-
-#endif /* MODULE_IO_H */
+#endif
 ```
 
 ---
 
-## Step 4: 搭骨架 — 创建标准函数
+## Step 4: 搭骨架 — 在模板 .c 中写入
 
-在 `.c` 文件中添加以下函数。**先不修改业务逻辑**，只搭框架。
+在 new-module SKILL 生成的空模板 .c 中填入:
 
-### 4.1 IO 槽 + 构造函数
+### 4.1 引用 + 数据槽
 
 ```c
-/* .c 文件顶部新增 */
+#include "std_module.h"
 #include "../include/{module}_io.h"
+#include <string.h>
 
-/* IO 槽 */
-static Module_Input_t  g_in;
-static Module_Output_t g_out;
+static {Module}_Input_t  s_in;
+static {Module}_Output_t s_out;
 
-/* 构造函数 — 首次 DoWork 自检调用 */
-static void _Constructor(void)
+MODULE_SKELETON({Module});
+```
+
+### 4.2 Init
+
+```c
+static void Init(void)
 {
-    memset(&g_in,  0, sizeof(g_in));
-    memset(&g_out, 0, sizeof(g_out));
-    /* ... 原有初始化逻辑移到这里 ... */
+    memset(&s_in,  0, sizeof(s_in));
+    memset(&s_out, 0, sizeof(s_out));
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
+    /* 原有初始化逻辑 */
 }
 ```
 
-### 4.2 GetIO
+### 4.3 ProcessInput — 三段式
 
 ```c
-void Module_GetIO(Module_Input_t **ppIn, Module_Output_t **ppOut)
+static void ProcessInput(void)
 {
-    if (ppIn)  *ppIn  = &g_in;
-    if (ppOut) *ppOut = &g_out;
-}
-```
-
-### 4.3 输入回调 — 每路一个
-
-```c
-void Module_OnInput_SourceA(uint8_t head_idx, uint16_t value, uint8_t flag)
-{
-    g_in.srcA_valid = 1;
-    g_in.srcA.head_idx = head_idx;
-    g_in.srcA.value    = value;
-    g_in.srcA.flag     = flag;
-}
-```
-
-**关键**: 输入回调只写 `g_in`，不做业务逻辑。业务逻辑统一在 `DoWork` 的输入段处理。
-
-### 4.4 DoWork — 三段式骨架
-
-```c
-void Module_DoWork(void)
-{
-    /* --- 构造：懒惰初始化 --- */
-    { static uint8_t s_init = 0; if (!s_init) { _Constructor(); s_init = 1; } }
-
-    /* ★ 每帧先清输出标志 */
-    g_out.status &= ~0x02;
-    g_out.has_output = 0;
-
-    /* ====== 输入段：消费 g_in ====== */
-    if (g_in.status & 0x02) {
-
-        if (g_in.srcA_valid) {
-            /* ... 将 g_in.srcA 应用到内部状态 ... */
-            g_in.srcA_valid = 0;
-        }
-
-        g_in.status &= ~0x02;     /* 消费完毕 */
+    /* ====== 输入段 ====== */
+    if (g_input.info.status & ST_NEW) {
+        {Module}_Input_t *in = ({Module}_Input_t *)g_input.para;
+        /* 消费输入 */
+        g_input.info.status &= ~ST_NEW;
     }
 
-    /* ====== 计算段：原业务逻辑 ====== */
-    /* ... 原 Module_Run() / Module_OnXxx() 的计算部分移到这里 ... */
+    /* ====== 计算段 ====== */
+    /* 原业务逻辑 */
 
-    /* ====== 输出段：写 g_out ====== */
-    if (g_out.has_output) {
-        g_out.status |= 0x02;     /* 有产出 */
-    }
+    /* ====== 输出段 ====== */
+    g_output.info.status |= ST_OUT;
 }
 ```
 
-### 4.5 保留旧入口（过渡期双写）
+### 4.4 导出
 
 ```c
-/* 旧周期入口 → 委托 DoWork */
-void Module_Run(void) { Module_DoWork(); }
-
-/* 旧输入回调 → 写 g_in + 保留旧路径（可选） */
-void Module_OnXxx(uint16_t param, void *data_ptr)
-{
-    /* v2.0: 写 g_in */
-    Module_OnInput_SourceA(/* 解包参数 */);
-
-    /* v1.0: 保留旧逻辑（可选，过渡期用）*/
-    /* ... */
-}
+MODULE_EXPORT({Module});
 ```
 
 ---
 
-## Step 5: 填逻辑 — 移业务代码入 DoWork
+## Step 5: 填逻辑 — 从备份文件逐段搬功能
 
 | 旧代码位置 | 新位置 | 改动 |
 |-----------|--------|------|
-| `Module_OnXxx()` 的输入处理 | `DoWork()` 输入段 | 从 `g_in` 读，不用解包 `void*` |
-| `Module_Run()` 的计算 | `DoWork()` 计算段 | 原样搬入 |
-| `OtherModule_OnYyy()` 输出 | `DoWork()` 输出段 → 写 `g_out` | 替换直接调用为 `g_out.field = ...` |
+| `Module_OnXxx()` 的输入处理 | `ProcessInput()` 输入段 | 从 `g_input.para` 读 |
+| `Module_Run()` 的计算 | `ProcessInput()` 计算段 | 原样搬入 |
+| `OtherModule_OnYyy()` 输出 | `ProcessInput()` 输出段 → 写 `g_output.para` | 替换为写结构体字段 |
+
+搬一段测试一段, 不要一次搬完。
 
 ---
 
-## Step 6: 验证
+## Step 6: 注册 Switcher
+
+在 `core/data_switcher.c` 中添加:
+
+```c
+#include "../include/{module}_io.h"
+
+/* 在 Switcher_Init 中 */
+{Module}_GetIO(&s_slot[SLOT_{MODULE}].pIn,
+               &s_slot[SLOT_{MODULE}].pOut,
+               &s_slot[SLOT_{MODULE}].pDoWork);
+```
+
+---
+
+## Step 7: 清理 + 验证
 
 ```bash
-# 1. 本模块通过编译
-# 2. 旧调用方不受影响（旧入口仍存在）
-# 3. layer deps 不增加
-python tools/check_all.py
+# 1. 编译通过 (0e0w)
+# 2. 层依赖检查
+python tools/check_deps.py src
+# 3. 范式合规检查
+python tools/check_paradigm.py .
+# 4. 功能验证通过后, 删备份
+rm src/{layer}/{module}_v1.c.bak
 ```
 
 ---
 
 ## 检查清单
 
-- [ ] Step 1: 所有入口已识别（周期 + 事件 + 输出）
-- [ ] Step 2: 所有 I/O 参数字段已提取
-- [ ] Step 3: `_io.h` 已创建（pack(4) + status + res[] 补齐）
-- [ ] Step 4: `g_in` / `g_out` / `_Constructor()` / `GetIO()` / `DoWork()` 已添加
-- [ ] Step 4: 每个旧输入回调对应一个 `_OnInput_` 新函数
-- [ ] Step 5: 旧 __weak 输出桩已替换为 `g_out` 写
-- [ ] Step 5: `DoWork()` 三段完整：输入→计算→输出
-- [ ] Step 6: `check_all.py` → 全部 PASS
+- [ ] Step 0: 旧文件已改名备份, 不在原文件空改
+- [ ] Step 0: 通过 new-module SKILL 生成空模板
+- [ ] Step 1-3: I/O 表 + 结构体已设计
+- [ ] Step 4: `MODULE_SKELETON(name)` + `Init()` + `ProcessInput()` + `MODULE_EXPORT(name)`
+- [ ] Step 4: `{Module}_InputCallback` 用于输入路由（强符号在中间层覆盖）
+- [ ] Step 4: `{Module}_OutputCallback` 保留弱符号（仅即时场景用）
+- [ ] Step 5: 功能逐段搬入, 搬一段测一段
+- [ ] Step 6: Switcher 注册已添加
+- [ ] Step 7: 编译 0e0w + check tool 全部通过
