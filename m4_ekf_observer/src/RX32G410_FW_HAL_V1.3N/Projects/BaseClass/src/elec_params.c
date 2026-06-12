@@ -206,15 +206,9 @@ typedef struct {
 
 // ========== 暂态工作区类型 (实例由 shareBuff 外部传入) ==========
 typedef struct {
-    float I_pk[PERIO_CNT];
-    float Vdc_f[PERIO_CNT];
-    float f_sw[PERIO_CNT];
-    float L_raw[PERIO_CNT];
-    float I_valid[PERIO_CNT];
-    float P_arr[PERIO_CNT];
-    float V_med[PERIO_CNT];
-    float I_med_arr[PERIO_CNT];
-} ElecParams_Ws;
+    float f_sw[PERIO_CNT];      // 开关频率，用于中值
+    float P_arr[PERIO_CNT];     // 有功功率，用于中值
+} ElecParams_Ws;                // 2×20 = 160 bytes
 
 // ========== 纯计算函数 ====================================================
 // 不引用本模块的 MODULE_INPUT/MODULE_OUTPUT 类型，只依赖 Calculator → ElecParams 输入 LINK
