@@ -266,23 +266,21 @@ static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
 {
     if (result == NULL || cycles == NULL ) return 0;
     memset(result, 0, sizeof(ElecParams_CalcResult));
-//		result->valid=0;
-    // ---- 单循环：逐周期提取 + 全部计算 (i=1..19, 第0个用最小值代) ----
+
+    // ---- 单循环：逐周期提取 + 累加（i=1..19, 高压段平均替代中值）----
     uint8_t valid_cnt = 0;
+    float I_sum = 0.0f, L_sum = 0.0f, Vdc_sum = 0.0f;
     float phi_sum = 0.0f;
-    uint8_t phi_n = 0;
-    uint8_t pn = 0;
-    uint8_t vn = 0, im_n = 0;
-    float Vdc_min = 0.0f, I_pk_min = 0.0f;
+    uint8_t phi_n = 0, vn = 0, pn = 0;
 
     for (uint8_t i = 1; i < PERIO_CNT; i++) {
         const ElecParams_CycleInput *c = &cycles[i];
 
         // ADC 值 → 实际物理量转换
-        ws->I_pk[i]  = (float)c->peak_current  * IH_I_SCALE;
+        float I_pk = (float)c->peak_current  * IH_I_SCALE;
         float v_avg = (c->voltage_count >= IH_HV_WIN_CNT_MIN)
             ? (float)c->voltage_sum / (float)c->voltage_count : 0.0f;
-        ws->Vdc_f[i] = v_avg * IH_VDC_SCALE;
+        float Vdc = v_avg * IH_VDC_SCALE;
 
         float loff = (float)c->hrtim.lowOff;
         ws->f_sw[i] = (loff > 0.0f) ? (HRTIM_CLK_HZ / loff) : 0.0f;
@@ -291,39 +289,26 @@ static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
         float delta = (float)c->zero_cross_high - (float)c->hrtim.highOn;
         float phi_i = (cond > 0.0f) ? (delta / cond * 180.0f) : 0.0f;
 
-        // ---- 跟踪最低值（用于第0个占位）----
-        if (c->voltage_count >= IH_HV_WIN_CNT_MIN && ws->Vdc_f[i] > 0.0f &&
-            (Vdc_min == 0.0f || ws->Vdc_f[i] < Vdc_min)) {
-            Vdc_min = ws->Vdc_f[i];
-        }
-        if (ws->I_pk[i] > 0.0f && (I_pk_min == 0.0f || ws->I_pk[i] < I_pk_min)) {
-            I_pk_min = ws->I_pk[i];
-        }
-
-        // ---- ws->L_raw: 只从高电压段有效周期 ----
-        if (ws->I_pk[i] > 0.0f && ws->f_sw[i] > 0.0f && c->voltage_count >= IH_HV_WIN_CNT_MIN) {
+        // ---- L_raw: 只从高电压段有效周期（累加求平均）----
+        if (I_pk > 0.0f && ws->f_sw[i] > 0.0f && c->voltage_count >= IH_HV_WIN_CNT_MIN) {
             float omega = 2.0f * (float)M_PI * ws->f_sw[i];
-            float Vcp  = ws->I_pk[i] / (omega * IH_C_FARAD);
-            float num  = ws->Vdc_f[i] * 0.5f + Vcp;
-            float den  = ws->I_pk[i] * omega;
+            float Vcp  = I_pk / (omega * IH_C_FARAD);
+            float num  = Vdc * 0.5f + Vcp;
+            float den  = I_pk * omega;
             if (den > 1e-12f) {
                 float Lv = (num / den) * 1e6f;
                 if (Lv > 0.0f) {
-                    ws->I_valid[valid_cnt] = ws->I_pk[i];
-                    ws->L_raw[valid_cnt]   = Lv;
+                    I_sum += I_pk;
+                    L_sum += Lv;
                     valid_cnt++;
                 }
             }
         }
 
-        // ---- I_peak_A: 有电流的周期参与中值 ----
-        if (ws->I_pk[i] > 0.0f) {
-            ws->I_med_arr[im_n++] = ws->I_pk[i];
-        }
-
-        // ---- Vdc_mean: 有电压的周期参与中值 ----
+        // ---- Vdc_mean: 高电压段累加求平均 ----
         if (c->voltage_count >= IH_HV_WIN_CNT_MIN) {
-            ws->V_med[vn++] = ws->Vdc_f[i];
+            Vdc_sum += Vdc;
+            vn++;
         }
 
         // ---- φ: 只取高电压段平均 ----
@@ -341,39 +326,13 @@ static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
     }
     if (valid_cnt < 1) return 0;  // 无有效数据
 
-    // ---- 第0个用最小值替代，补全中值数组 ----
-    ws->I_pk[0]       = I_pk_min;
-    ws->Vdc_f[0]      = Vdc_min;
-    ws->f_sw[0]       = median_f(ws->f_sw + 1, PERIO_CNT - 1);
-    if (I_pk_min > 0.0f)  ws->I_med_arr[im_n++] = I_pk_min;
-    if (Vdc_min > 0.0f)   ws->V_med[vn++] = Vdc_min;
-
-    // ---- I_peak 阈值过滤 (原地复用 ws->I_valid, ws->L_raw) ----
-    float I_med_val = median_f(ws->I_valid, valid_cnt);
-    float I_thr = I_med_val * IH_I_PEAK_MIN_RATIO;
-    uint8_t kept = 0;
-    for (uint8_t i = 0; i < valid_cnt; i++) {
-        if (ws->I_valid[i] >= I_thr) { ws->I_valid[kept] = ws->I_valid[i]; ws->L_raw[kept] = ws->L_raw[i]; kept++; }
-    }
-    if (kept < 1) { kept = valid_cnt; }
-
-    // ---- L_ref = L[argmax(I_peak)], 权重修正 (结果写回 ws->L_raw) ----
-    uint8_t i_max = 0;
-    for (uint8_t i = 1; i < kept; i++) { if (ws->I_valid[i] > ws->I_valid[i_max]) { i_max = i; } }
-    float L_ref_v = ws->L_raw[i_max];
-    float I_max_v = ws->I_valid[i_max];
-    for (uint8_t i = 0; i < kept; i++) {
-        float ratio = ws->I_valid[i] / I_max_v;
-        ws->L_raw[i] = L_ref_v + (ws->L_raw[i] - L_ref_v) * (ratio * ratio);
-    }
-
-    // ---- 聚合结果 -----------------------------------------------------
-    if (im_n > 0) result->I_peak_A = median_f(ws->I_med_arr, im_n);
-    if (vn > 0)   result->Vdc_mean = median_f(ws->V_med, vn);
-    result->f_sw_Hz = median_f(ws->f_sw, PERIO_CNT);
-    result->L_uH    = median_f(ws->L_raw, kept);
-    result->phi_deg = (phi_n > 0) ? (phi_sum / phi_n) : 0.0f;
-    result->P_W     = median_f(ws->P_arr, pn);
+    // ---- 聚合结果（平均替代中值）-----------------------------------------
+    result->I_peak_A = I_sum / (float)valid_cnt;
+    result->Vdc_mean = (vn > 0) ? (Vdc_sum / (float)vn) : 0.0f;
+    result->f_sw_Hz  = median_f(ws->f_sw + 1, PERIO_CNT - 1);
+    result->L_uH     = L_sum / (float)valid_cnt;
+    result->phi_deg  = (phi_n > 0) ? (phi_sum / (float)phi_n) : 0.0f;
+    result->P_W      = median_f(ws->P_arr, pn);
     // ---- 谐振参数计算 -------------------------------------------------
     // f_res = 1/(2π√(LC)) — 谐振频率
     float LC = (result->L_uH * 1e-6f) * IH_C_FARAD;  // L(μH→H) × C(F)
