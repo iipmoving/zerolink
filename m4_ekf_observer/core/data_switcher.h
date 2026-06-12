@@ -10,10 +10,17 @@
 #ifndef DATA_SWITCHER_H
 #define DATA_SWITCHER_H
 
-#include "std_module.h"  /* Para_Grp_t */
+#include "std_module.h"  /* Para_Grp_t, ModuleSlotDef */
+
+/* ===== 槽位宏 — 强制 Slot 枚举与 GetIO 函数名对齐 ===== */
+#define SLOT(mod)  SLOT_##mod
+
+#define SLOT_GETIO(mod)                                                      \
+    mod##_GetIO(&s_slot[SLOT(mod)].pIn,                                      \
+                &s_slot[SLOT(mod)].pOut,                                      \
+                &s_slot[SLOT(mod)].pDoWork)
 
 void Switcher_Init(void);
 void Switcher_Run_Slot1(void);
-void Switcher_Register(void (*pDoWork)(void), Para_Grp_t *pOut);
 
 #endif /* DATA_SWITCHER_H */
