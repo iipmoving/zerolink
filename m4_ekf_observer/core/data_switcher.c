@@ -19,6 +19,7 @@
 #include "../include/app_adc_io.h"
 #include "../include/calculator_io.h"
 #include "../include/elec_params_io.h"
+#include "../include/app_power_io.h"
 
 /* ---- APP_Power_GetIO 外部声明 (MODULE_EXPORT 在 app_power.c 生成) ---- */
 void APP_Power_GetIO(Para_Grp_t **ppIn,
@@ -80,6 +81,23 @@ void APP_Power_InputCallback(void)
                sizeof(pwr_in->inputValue));
         pwr_in->status |= 0x02;
     }
+
+    /* ---- 从 Calculator power_direct LINK PULL 数据 ---- */
+    Calculator_Output *calc_out = (Calculator_Output *)s_slot[SLOT_Calculator].pOut->para;
+    if (calc_out && (calc_out->power_direct.status & ST_NEW)) {
+        PowerBase_Input *pwr_full = (PowerBase_Input *)s_slot[SLOT_APP_Power].pIn->para;
+        if (pwr_full) {
+            for (uint8_t h = 0; h < POWER_POTMAX; h++) {
+                pwr_full->calc.params[h].resonant_current = calc_out->power_direct.params[h].resonant_current;
+                pwr_full->calc.params[h].phase_angle      = calc_out->power_direct.params[h].phase_angle;
+                pwr_full->calc.params[h].voltage           = calc_out->power_direct.params[h].voltage;
+                pwr_full->calc.params[h].valid             = calc_out->power_direct.params[h].valid;
+            }
+            pwr_full->calc.status |= ST_NEW;
+        }
+        calc_out->power_direct.status &= ~ST_NEW;
+    }
+
     s_slot[SLOT_APP_Power].pIn->info.status |= ST_NEW;
 }
 

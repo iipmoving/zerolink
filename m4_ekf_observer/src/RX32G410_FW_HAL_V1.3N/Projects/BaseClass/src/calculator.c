@@ -37,6 +37,16 @@ typedef struct {
 static MODULE_INPUT(Calculator)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
 
+/* ---- Calculator → PowerBase 直接参数累加器 ---- */
+typedef struct {
+    uint32_t resonant_current_sum;   // peak_current 累加和
+    uint32_t voltage_sum;            // voltage_sum 累加和
+    uint16_t voltage_count_sum;      // voltage_count 累加和
+    uint16_t count;                  // 周期计数
+    int32_t  phase_sum;              // 相位角累加和 (0.01° × count)
+} PowerDirectAcc_t;
+static PowerDirectAcc_t s_power_acc[CALC_POTMAX];
+
 /* ---- v2.2 框架层骨架（使用标准宏）---- */
 MODULE_SKELETON(Calculator);
 
@@ -67,6 +77,19 @@ static void ProcessInput(void)
 				}
 				else
 				{
+						// 完成 Calculator→PowerBase 直接参数平均值
+						uint8_t max_h = pIn->input_params->max_count;
+						for (uint8_t i = 0; i < max_h; i++) {
+						    if (s_power_acc[i].count > 0) {
+						        pOut->power_direct.params[i].resonant_current = (int32_t)(s_power_acc[i].resonant_current_sum / s_power_acc[i].count);
+						        pOut->power_direct.params[i].voltage = (s_power_acc[i].voltage_count_sum > 0) ? (int32_t)(s_power_acc[i].voltage_sum * 100 / s_power_acc[i].voltage_count_sum) : 0;
+						        pOut->power_direct.params[i].phase_angle = s_power_acc[i].phase_sum / s_power_acc[i].count;
+						        pOut->power_direct.params[i].valid = 1;
+						    }
+						    memset(&s_power_acc[i], 0, sizeof(PowerDirectAcc_t));
+						}
+						pOut->power_direct.status |= ST_NEW;
+
 						pOut->elec_params.shareBuff=(uint32_t*)*(pIn->input_params->hrtim_values);	
 						 pOut->elec_params.status |= ST_NEW;			//20ms ELEC计算一次
 				}
@@ -100,6 +123,19 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
 		MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.elec_params.params[i][cycle_idx];
 
 		CalculatePower(current_point,hrtim_point,voltage_point,params_point,elec_params);
+
+		// 累加 Calculator → PowerBase 直接参数
+		if (elec_params->peak_current > 0) {
+		    s_power_acc[i].resonant_current_sum += elec_params->peak_current;
+		    int32_t cond = (int32_t)params_point->highOff - (int32_t)params_point->highOn;
+		    if (cond > 0) {
+		        int32_t delta = (int32_t)elec_params->zero_cross_high - (int32_t)params_point->highOn;
+		        s_power_acc[i].phase_sum += delta * 18000 / cond;
+		    }
+		    s_power_acc[i].voltage_sum += elec_params->voltage_sum;
+		    s_power_acc[i].voltage_count_sum += elec_params->voltage_count;
+		    s_power_acc[i].count++;
+		}
 					
     }
 

@@ -107,6 +107,23 @@ typedef struct {
     uint16_t voltage_count;             // 电压采样点数
 } MODULE_OUTPUT_PARAMS(Calculator, ElecParams);  // 32 bytes
 
+/* ---- Calculator → PowerBase: 直接参数 (每炉头平均) ---- */
+typedef struct {
+    int32_t resonant_current;        // 峰值电流平均值 (ADC值)
+    int32_t phase_angle;             // 相位角 (0.01°)
+    int32_t voltage;                 // 电压平均值 (ADC值)
+    uint8_t valid;
+    uint8_t res[3];
+} MODULE_OUTPUT_PARAMS(Calculator, PowerBase);
+
+/* Calculator → PowerBase: 输出 LINK */
+typedef struct {
+    uint8_t  status;
+    uint8_t  max_count;
+    uint8_t  res[2];
+    MODULE_OUTPUT_PARAMS(Calculator, PowerBase) params[CALC_POTMAX];
+} MODULE_OUTPUT_LINK(Calculator, PowerBase);
+
 /* ---- 单炉头输出 (PowerResult) ---- */
 typedef struct {
     uint8_t   status;             // ST_NEW (产出后置位, Consumer 消费后清除)
@@ -122,6 +139,7 @@ typedef struct {
 /* ---- 输出: 炉头数组 ---- */
 typedef struct Calculator_Output {
     MODULE_OUTPUT_LINK(Calculator, ElecParams) elec_params;
+    MODULE_OUTPUT_LINK(Calculator, PowerBase)  power_direct;
 }MODULE_OUTPUT(Calculator);
 
 /* ---- v2.2 统一接口声明 ---- */
