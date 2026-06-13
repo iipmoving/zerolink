@@ -1,0 +1,533 @@
+{
+  "schema_version": "1.0",
+  "project": {
+    "name": "four_head",
+    "paths": {
+      "io_dir": "include",
+      "core_dir": "core",
+      "app_dir": "app",
+      "base_class_dir": "base_class",
+      "proto_dir": "proto"
+    },
+    "std_module_path": "core/std_module.h",
+    "pack": 4,
+    "comment_guard": true,
+    "output_root": "../four_head/src"
+  },
+  "modules": [
+    {
+      "id": "drvkey",
+      "name": "DrvKey",
+      "layer": "drv",
+      "source_file": "drv/drv_key.c",
+      "comment": "按键扫描与事件分发 — 输出按键事件到 Hmi/Cooking/SegAlign"
+    },
+    {
+      "id": "appcommmgr",
+      "name": "AppCommMgr",
+      "layer": "app",
+      "source_file": "app/app_comm_mgr.c",
+      "comment": "Modbus 通信轮询调度器 — 分发寄存器数据到 Power/Cooking/Protect"
+    },
+    {
+      "id": "appprotect",
+      "name": "AppProtect",
+      "layer": "app",
+      "source_file": "app/app_protect.c",
+      "comment": "故障保护逻辑 — 从 CommMgr 获取寄存器，输出故障状态到 Power"
+    },
+    {
+      "id": "appcooking",
+      "name": "AppCooking",
+      "layer": "app",
+      "source_file": "app/app_cooking.c",
+      "comment": "烹饪流程控制 — 从 Key/CommMgr 输入，输出烹饪状态到 Power"
+    },
+    {
+      "id": "apppower",
+      "name": "AppPower",
+      "layer": "app",
+      "source_file": "app/app_power.c",
+      "comment": "功率控制 PID — 聚合 CommMgr/Protect/Cooking 输入，输出功率命令到 CommMgr 和状态到 Hmi"
+    },
+    {
+      "id": "apphmi",
+      "name": "AppHmi",
+      "layer": "app",
+      "source_file": "app/app_hmi.c",
+      "comment": "人机交互逻辑 — 从 Key/Power 输入，输出显示到 Display 和蜂鸣到 Buzzer"
+    },
+    {
+      "id": "appsegalign",
+      "name": "AppSegAlign",
+      "layer": "app",
+      "source_file": "app/app_seg_align.c",
+      "comment": "段码对齐处理 — 从 Key 输入，无输出"
+    },
+    {
+      "id": "drvdisplay",
+      "name": "DrvDisplay",
+      "layer": "drv",
+      "source_file": "drv/drv_display.c",
+      "comment": "显示驱动 — 从 Hmi 接收显示数据，驱动段码/LED"
+    },
+    {
+      "id": "drvbuzzer",
+      "name": "DrvBuzzer",
+      "layer": "drv",
+      "source_file": "drv/drv_buzzer.c",
+      "comment": "蜂鸣器驱动 — 从 Hmi 接收蜂鸣命令 (@OUTPUT_CALLBACK 即时路由)"
+    },
+    {
+      "id": "drvcommmgr",
+      "name": "DrvCommMgr",
+      "layer": "drv",
+      "source_file": "drv/drv_comm_mgr.c",
+      "comment": "通信驱动管理 — 从 Power 接收功率命令，发送 Modbus"
+    }
+  ],
+  "pipes": [
+    {
+      "id": "pipe_drvkey_apphmi",
+      "from": "DrvKey",
+      "to": "AppHmi",
+      "callback_type": "pull",
+      "comment": "按键事件 → HMI",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_drvkey_appcooking",
+      "from": "DrvKey",
+      "to": "AppCooking",
+      "callback_type": "pull",
+      "comment": "按键事件 → Cooking",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_drvkey_appsegalign",
+      "from": "DrvKey",
+      "to": "AppSegAlign",
+      "callback_type": "pull",
+      "comment": "按键事件 → SegAlign",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_appcommmgr_apppower",
+      "from": "AppCommMgr",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Power",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs",
+          "type": "uint16_t[22]",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_appcommmgr_appcooking",
+      "from": "AppCommMgr",
+      "to": "AppCooking",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Cooking",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs",
+          "type": "uint16_t[22]",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_appcommmgr_appprotect",
+      "from": "AppCommMgr",
+      "to": "AppProtect",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Protect",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs",
+          "type": "uint16_t[22]",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_appprotect_apppower",
+      "from": "AppProtect",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "故障状态 → Power",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "fault",
+          "type": "uint16_t",
+          "comment": "故障位集合 ProtectFault_t"
+        }
+      ]
+    },
+    {
+      "id": "pipe_appcooking_apppower",
+      "from": "AppCooking",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "烹饪状态 → Power",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引"
+        },
+        {
+          "name": "cooking_state",
+          "type": "uint8_t",
+          "comment": "烹饪状态 COOKING_STATE_*"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        },
+        {
+          "name": "cooking_time",
+          "type": "uint32_t",
+          "comment": "烹饪时间 ms"
+        }
+      ]
+    },
+    {
+      "id": "pipe_apppower_drvcommmgr",
+      "from": "AppPower",
+      "to": "DrvCommMgr",
+      "callback_type": "pull",
+      "comment": "功率命令 → DrvCommMgr",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        }
+      ]
+    },
+    {
+      "id": "pipe_apppower_apphmi",
+      "from": "AppPower",
+      "to": "AppHmi",
+      "callback_type": "pull",
+      "comment": "功率状态 → Hmi",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        }
+      ]
+    },
+    {
+      "id": "pipe_apphmi_drvdisplay",
+      "from": "AppHmi",
+      "to": "DrvDisplay",
+      "callback_type": "pull",
+      "comment": "显示数据 → DrvDisplay (段码/LED)",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "hot_head_idx",
+          "type": "int8_t",
+          "comment": "热点炉头索引 (-1=无)"
+        },
+        {
+          "name": "seg_chars",
+          "type": "uint8_t[8]",
+          "comment": "8位段码字符"
+        },
+        {
+          "name": "seg_blink",
+          "type": "uint8_t[4]",
+          "comment": "炉头闪烁控制"
+        },
+        {
+          "name": "seg_mode",
+          "type": "uint8_t",
+          "comment": "显示模式"
+        },
+        {
+          "name": "leds_power",
+          "type": "uint8_t",
+          "comment": "电源 LED"
+        },
+        {
+          "name": "leds_timer",
+          "type": "uint8_t",
+          "comment": "定时 LED"
+        },
+        {
+          "name": "leds_pause",
+          "type": "uint8_t",
+          "comment": "暂停 LED"
+        },
+        {
+          "name": "leds_child_lock",
+          "type": "uint8_t",
+          "comment": "童锁 LED"
+        },
+        {
+          "name": "leds_head_select",
+          "type": "uint8_t[4]",
+          "comment": "炉头选择 LED"
+        },
+        {
+          "name": "leds_power_level",
+          "type": "uint8_t[10]",
+          "comment": "功率档位 LED"
+        }
+      ]
+    },
+    {
+      "id": "pipe_apphmi_drvbuzzer",
+      "from": "AppHmi",
+      "to": "DrvBuzzer",
+      "callback_type": "pull",
+      "comment": "蜂鸣命令 → DrvBuzzer (@OUTPUT_CALLBACK 即时路由, 不走 Switcher)",
+      "out_link": {
+        "style": "pointer"
+      },
+      "in_link": {
+        "style": "pointer"
+      },
+      "fields": [
+        {
+          "name": "sound_type",
+          "type": "uint8_t",
+          "comment": "蜂鸣类型: 1=短按, 2=长按, 3=成功, 4=失败, 5=报警"
+        }
+      ]
+    }
+  ],
+  "slot_order": [
+    "AppCommMgr",
+    "AppPower",
+    "AppProtect",
+    "AppCooking",
+    "AppHmi",
+    "AppSegAlign",
+    "DrvKey",
+    "DrvCommMgr",
+    "DrvBuzzer",
+    "DrvDisplay"
+  ]
+}

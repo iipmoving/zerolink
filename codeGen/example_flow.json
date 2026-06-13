@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0",
+
+  "project": {
+    "name": "IH_Project",
+    "comment": "四头电磁炉 v2.3 LINK+PARAMS 示例",
+
+    "paths": {
+      "io_dir":    "include",
+      "core_dir":  "core",
+      "app_dir":   "app",
+      "base_class_dir": "base_class",
+      "proto_dir": "proto"
+    },
+
+    "std_module_path": "core/std_module.h",
+    "pack": 4,
+    "comment_guard": true
+  },
+
+  "modules": [
+    {
+      "id": "app_adc",
+      "name": "AppAdc",
+      "layer": "app",
+      "source_file": "app/adc_sensor.c",
+      "comment": "ADC 采样与预处理"
+    },
+    {
+      "id": "calculator",
+      "name": "Calculator",
+      "layer": "base_class",
+      "source_file": "base_class/src/calculator.c",
+      "comment": "HRTIM 时序 → 电参数计算"
+    },
+    {
+      "id": "elec_params",
+      "name": "ElecParams",
+      "layer": "base_class",
+      "source_file": "base_class/src/elec_params.c",
+      "comment": "电参数计算 (L, f_res, Q, R, P)"
+    },
+    {
+      "id": "app_power",
+      "name": "AppPower",
+      "layer": "app",
+      "source_file": "app/app_power.c",
+      "comment": "功率控制 PID"
+    }
+  ],
+
+  "pipes": [
+    {
+      "id": "pipe_01_adc2calc",
+      "from": "AppAdc",
+      "to": "Calculator",
+      "callback_type": "pull",
+      "comment": "ADC 原始数据 → Calculator",
+
+      "out_link": {
+        "style": "pointer"
+      },
+
+      "fields": [
+        { "name": "resonant_current",  "type": "uint16_t**", "comment": "谐振电流 ADC 数组" },
+        { "name": "hrtim_values",      "type": "uint16_t**", "comment": "HRTIM 时间戳数组" },
+        { "name": "voltage_data",      "type": "uint16_t**", "comment": "母线电压数组" },
+        { "name": "params",            "type": "PowerCalculatorInputDef*", "comment": "工作周期参数" }
+      ]
+    },
+    {
+      "id": "pipe_02_calc2elec",
+      "from": "Calculator",
+      "to": "ElecParams",
+      "callback_type": "pull",
+      "comment": "Calculator 输出 20 周期原始数据 → ElecParams",
+
+      "out_link": {
+        "style": "array",
+        "array_size": 80
+      },
+
+      "fields": [
+        { "name": "hrtim",               "type": "ElecParams_HrtimState", "comment": "HRTIM 时序状态" },
+        { "name": "peak_current",        "type": "uint16_t", "comment": "峰值电流 ADC" },
+        { "name": "active_current_sum_high", "type": "uint32_t", "comment": "上管电流积分" },
+        { "name": "active_current_sum_low",  "type": "uint32_t", "comment": "下管电流积分" },
+        { "name": "voltage_sum",         "type": "uint32_t", "comment": "电压累加值" },
+        { "name": "zero_cross_high",     "type": "uint16_t", "comment": "上管过零点" },
+        { "name": "zero_cross_low",      "type": "uint16_t", "comment": "下管过零点" },
+        { "name": "peak_point",          "type": "uint16_t", "comment": "峰值采样索引" },
+        { "name": "voltage_count",       "type": "uint16_t", "comment": "电压采样计数" }
+      ]
+    },
+    {
+      "id": "pipe_03_calc2power",
+      "from": "Calculator",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "Calculator 直接参数 → AppPower",
+
+      "out_link": {
+        "style": "array",
+        "array_size": 4
+      },
+
+      "fields": [
+        { "name": "resonant_current", "type": "int32_t", "comment": "电流峰值平均" },
+        { "name": "phase_angle",      "type": "int32_t", "comment": "相位角 (0.01°)" },
+        { "name": "voltage",          "type": "int32_t", "comment": "电压平均" },
+        { "name": "valid",            "type": "uint8_t", "comment": "有效标志" },
+        { "name": "res",              "type": "uint8_t[3]", "comment": "对齐" }
+      ]
+    },
+    {
+      "id": "pipe_04_elec2power",
+      "from": "ElecParams",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "ElecParams 计算结果 → AppPower",
+
+      "out_link": {
+        "style": "array",
+        "array_size": 4
+      },
+
+      "fields": [
+        { "name": "I_peak_A",   "type": "int32_t", "comment": "峰值电流 (A×100)" },
+        { "name": "Vdc_mean",   "type": "int32_t", "comment": "母线电压平均 (V×100)" },
+        { "name": "phi_deg",    "type": "int32_t", "comment": "相位角 (°×100)" },
+        { "name": "f_sw_Hz",    "type": "int32_t", "comment": "开关频率 (Hz)" },
+        { "name": "L_uH",       "type": "int32_t", "comment": "等效电感 (μH×100)" },
+        { "name": "f_res_kHz",  "type": "int32_t", "comment": "谐振频率 (kHz×100)" },
+        { "name": "Q_factor",   "type": "int32_t", "comment": "品质因数 (×100)" },
+        { "name": "R_ohm",      "type": "int32_t", "comment": "等效电阻 (Ω×100)" },
+        { "name": "I_rms",      "type": "int32_t", "comment": "电流有效值 (A×100)" },
+        { "name": "P_W",        "type": "int32_t", "comment": "功率 (W)" },
+        { "name": "Z_mag_ohm",  "type": "int32_t", "comment": "阻抗模 (Ω×100)" },
+        { "name": "X_ohm",      "type": "int32_t", "comment": "电抗 (Ω×100)" },
+        { "name": "L_stable",   "type": "int32_t", "comment": "电感稳定值" },
+        { "name": "L_fast",     "type": "int32_t", "comment": "电感快速跟踪值" },
+        { "name": "event",      "type": "uint8_t", "comment": "事件标志" },
+        { "name": "valid",      "type": "uint8_t", "comment": "有效标志" }
+      ]
+    }
+  ],
+
+  "slot_order": ["AppAdc", "Calculator", "ElecParams", "AppPower"]
+}
