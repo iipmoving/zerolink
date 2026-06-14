@@ -23,10 +23,18 @@ code_gen.py — v2.3 LINK+PARAMS 框架代码自动生成器 主入口
 import argparse
 import json
 import os
+import re
+import shutil
 import sys
 from gen_io_h import generate_io_h
 from gen_switcher import generate_switcher
 from gen_module_c import generate_module_c, generate_module_h
+
+
+def _pascal_to_snake(name: str) -> str:
+    """PascalCase → snake_case: AppAdc → app_adc"""
+    s1 = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
 def load_json(path: str) -> dict:
@@ -35,17 +43,26 @@ def load_json(path: str) -> dict:
         return json.load(f)
 
 
+def _backup(path: str):
+    """若文件已存在，备份为 path.bak（覆盖已有 .bak）"""
+    if os.path.isfile(path):
+        shutil.copy2(path, path + ".bak")
+        print(f"  [BACKUP] {path}.bak")
+
+
 def save_json(path: str, data: dict):
-    """保存 JSON 文件"""
+    """保存 JSON 文件（先备份）"""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    _backup(path)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"  [SAVE] {path}")
 
 
 def save_file(path: str, content: str):
-    """保存生成文件"""
+    """保存生成文件（先备份）"""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    _backup(path)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"  [GEN] {path}")
@@ -83,6 +100,7 @@ def cmd_gen(args):
     modules = config.get("modules", [])
     pipes = config.get("pipes", [])
     slot_order = config.get("slot_order", [m["name"] for m in modules])
+    slot_chains = config.get("slot_chains", [])
 
     io_dir    = paths.get("io_dir", "include")
     core_dir  = paths.get("core_dir", "core")
@@ -111,14 +129,14 @@ def cmd_gen(args):
         io_out = os.path.join(output_root, io_dir)
         for mod in modules:
             content = generate_io_h(mod, pipes, project)
-            fname = f"{mod['name'].lower()}_io.h"
+            fname = f"{_pascal_to_snake(mod['name'])}_io.h"
             save_file(os.path.join(io_out, fname), content)
 
     # ---- 2. 生成 data_switcher.c ----
     if not args.only_io and not args.only_modules:
         print("\n--- data_switcher.c ---")
         core_out = os.path.join(output_root, core_dir)
-        content = generate_switcher(modules, pipes, slot_order, project)
+        content = generate_switcher(modules, pipes, slot_order, project, slot_chains)
         save_file(os.path.join(core_out, "data_switcher.c"), content)
 
     # ---- 3. 生成模块 .c + .h ----
@@ -126,7 +144,7 @@ def cmd_gen(args):
         print("\n--- 模块 .c / .h ---")
         for mod in modules:
             mod_out = _mod_output_dir(mod)
-            c_path = os.path.join(mod_out, f"{mod['name'].lower()}.c")
+            c_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.c")
 
             # 生成 .c (检测现有文件，保留用户区)
             content_c = generate_module_c(mod, pipes, project, c_path)
@@ -134,7 +152,7 @@ def cmd_gen(args):
 
             # 生成 .h
             content_h = generate_module_h(mod)
-            save_file(os.path.join(mod_out, f"{mod['name'].lower()}.h"), content_h)
+            save_file(os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.h"), content_h)
 
     print(f"\n[DONE] 生成完成!")
 

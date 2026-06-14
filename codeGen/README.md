@@ -175,75 +175,58 @@ void MyControlLoop(void) {
 
 ---
 
-## JSON 配置格式
+## JSON 配置标准（核心契约）
+
+> **`config_schema.json`** 是本工具的**唯一数据格式标准**。GUI、code_gen.py、AI Skills 全部遵守此契约。
+> 任何 AI 生成 project.json 时，应以 `config_schema.json` 为最终依据进行校验。
+
+### 标准文件
+
+| 文件 | 作用 |
+|------|------|
+| [`config_schema.json`](config_schema.json) | **机器可读的 JSON Schema** — 可用工具自动校验 |
+| 本文档 | 人类阅读的格式说明，内容与 Schema 一致 |
+
+### 校验方法
+
+```bash
+# 使用 Python 校验 project.json 是否符合标准
+python -c "
+import json, jsonschema
+jsonschema.validate(json.load(open('project.json')), json.load(open('codeGen/config_schema.json')))
+"
+# 注: pip install jsonschema 后可用
+```
+
+### 顶层结构
 
 ```json
 {
   "schema_version": "1.0",
-
-  "project": {
-    "name": "项目名",
-    "paths": {
-      "io_dir": "include",
-      "core_dir": "core",
-      "app_dir": "app",
-      "base_class_dir": "base_class",
-      "proto_dir": "proto"
-    },
-    "std_module_path": "core/std_module.h",
-    "pack": 4,
-    "output_root": "../target_dir"
-  },
-
-  "modules": [
-    {
-      "id": "模块名_lowercase",
-      "name": "PascalCase模块名",
-      "layer": "app | drv | base_class | proto | core",
-      "source_file": "layer/文件名.c",
-      "comment": "模块职责描述"
-    }
-  ],
-
-  "pipes": [
-    {
-      "id": "pipe_唯一标识",
-      "from": "Producer模块名",
-      "to": "Consumer模块名",
-      "callback_type": "pull | edge | field_copy",
-      "comment": "管道描述",
-
-      "out_link": {
-        "style": "array | pointer | pointer_array",
-        "array_size": 4
-      },
-      "in_link": {
-        "style": "array | pointer | pointer_array",
-        "array_size": 4
-      },
-
-      "fields": [
-        { "name": "字段名",     "type": "uint16_t",     "comment": "字段说明" },
-        { "name": "数组字段",   "type": "uint16_t[4]",  "comment": "批量数据" },
-        { "name": "指针字段",   "type": "uint16_t*",    "comment": "缓冲区指针" }
-      ]
-    }
-  ],
-
-  "slot_order": ["模块A", "模块B", "模块C"]
+  "project":    { /* 项目设置 + 输出路径 */ },
+  "modules":    [ /* 模块定义列表 */ ],
+  "pipes":      [ /* 管道定义列表 */ ],
+  "slot_order": [ /* 模块执行顺序 */ ]
 }
 ```
 
-### 字段说明
+### 关键约束速查
 
-| 字段 | 说明 |
-|------|------|
-| `module.id` | 全小写标识符 |
-| `module.name` | PascalCase，对应 `MODULE_SKELETON(name)` |
-| `module.layer` | 决定输出目录映射 |
-| `pipe.callback_type` | `pull`=指针直穿, `edge`=边沿触发, `field_copy`=逐字段搬运 |
-| `pipe.out_link.style` | `array`=定长数组, `pointer`=单指针, `pointer_array`=指针数组 |
-| `pipe.fields[].type` | 类型表达式，数组用 `type[n]` |
+| 路径 | 字段 | 约束 |
+|------|------|------|
+| `modules[].id` | 标识符 | 全小写 snake_case，如 `app_adc` |
+| `modules[].name` | 模块名 | PascalCase，对应 `MODULE_SKELETON(name)`，如 `AppAdc` |
+| `modules[].layer` | 层级 | 枚举: `app` `drv` `base_class` `hal` `proto` `core` |
+| `modules[].comment` | 职责 | **不可为空** — GUI 上唯一理解模块的文本线索 |
+| `pipes[].id` | 管道标识 | `pipe_{from}_{to}` 全小写，全局唯一 |
+| `pipes[].from/to` | 连接 | 必须匹配 `modules[].name`（PascalCase） |
+| `pipes[].callback_type` | 传递方式 | `pull`(默认) / `edge` / `field_copy` |
+| `pipes[].out_link.style` | 输出样式 | `pointer`(单指针) / `array`(定长数组) / `pointer_array`(指针数组) |
+| `pipes[].in_link.style` | 输入样式 | 通常与 `out_link.style` 一致 |
+| `pipes[].fields[].name` | 字段名 | snake_case |
+| `pipes[].fields[].type` | 类型 | 完整 C 类型表达式，数组用 `type[n]`，如 `uint16_t[4]` |
+| `pipes[].fields[].comment` | 说明 | **不可为空** — 用户理解管道的唯一线索 |
+| `slot_order[]` | 执行序 | 包含所有 `modules[].name`，**不得遗漏** |
 
 ---
 

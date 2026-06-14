@@ -11,13 +11,34 @@ gen_switcher.py — v2.3 data_switcher.c 生成器
 """
 
 
+import os
+import re
+
+
+def _pascal_to_snake(name: str) -> str:
+    """PascalCase → snake_case: AppAdc → app_adc"""
+    s1 = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
 def _resolve_io_path(module_name: str, project: dict) -> str:
-    """计算 io.h 在 data_switcher.c 中的 #include 路径"""
+    """计算 io.h 在 data_switcher.c 中的 #include 路径
+
+    根据 core_dir 和 io_dir 计算相对路径。
+    文件名采用 snake_case: AppAdc → app_adc_io.h
+    """
+    core_dir = project.get("paths", {}).get("core_dir", "core")
     io_dir = project.get("paths", {}).get("io_dir", "include")
-    return f"{io_dir}/{module_name.lower()}_io.h"
+    output_root = project.get("output_root", ".")
+    snake = _pascal_to_snake(module_name)
+
+    abs_core = os.path.normpath(os.path.join(output_root, core_dir))
+    abs_io = os.path.normpath(os.path.join(output_root, io_dir))
+    rel = os.path.relpath(abs_io, abs_core).replace("\\", "/")
+    return f"{rel}/{snake}_io.h"
 
 
-def generate_switcher(modules: list, pipes: list, slot_order: list, project: dict) -> str:
+def generate_switcher(modules: list, pipes: list, slot_order: list, project: dict, slot_chains: list = None) -> str:
     """生成 data_switcher.c"""
     lines = []
 
@@ -129,39 +150,42 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
         lines.append("}")
         lines.append("")
 
-    # Switcher_Run_Slot[N] — 独立执行链
+    # Switcher_Slot_{Module} — 单模块独立执行
     lines.append("/* ================================================================")
-    lines.append(" * Switcher_Run_Slot[N] — 独立执行链")
-    lines.append(" *")
-    lines.append(" * 每个函数对应一个模块的 DoWork，用户自由组合调用顺序：")
-    lines.append(" *")
-    lines.append(" *   // 示例: 自定义 1ms 控制流水线")
-    lines.append(" *   void MyControlLoop(void) {")
-    for i, s in enumerate(slot_order):
-        lines.append(f" *       Switcher_Run_Slot{i}();  // {s}")
-    lines.append(" *   }")
-    lines.append(" *")
-    lines.append(" * 或按需只执行部分链路：")
-    lines.append(" *   if (adc_ready) Switcher_Run_Slot0();")
-    lines.append(" *   if (power_on)  Switcher_Run_Slot3();")
+    lines.append(" * Switcher_Slot_{Module} — 单模块独立执行")
     lines.append(" * ================================================================ */")
     lines.append("")
-    for i, s in enumerate(slot_order):
-        lines.append(f"void Switcher_Run_Slot{i}(void) {{ s_slot[SLOT_{s}].pDoWork(); }}")
+    for s in slot_order:
+        lines.append(f"void Switcher_Slot_{s}(void) {{ s_slot[SLOT_{s}].pDoWork(); }}")
     lines.append("")
 
     # Switcher_Run_All — 批量执行
     lines.append("/* ================================================================")
     lines.append(" * Switcher_Run_All — 一次执行全部模块 (批量模式)")
-    lines.append(" *")
-    lines.append(" * 用于控制周期长的场景 (如 20ms 周期), 一次跑完所有槽。")
-    lines.append(" * 相当于按序调用全部 Switcher_Run_Slot[N]。")
     lines.append(" * ================================================================ */")
     lines.append("void Switcher_Run_All(void)")
     lines.append("{")
-    for i in range(len(slot_order)):
-        lines.append(f"    Switcher_Run_Slot{i}();")
+    for s in slot_order:
+        lines.append(f"    Switcher_Slot_{s}();")
     lines.append("}")
     lines.append("")
+
+    # ---- SLOT 调用链条 (来自 slot_chains 配置) ----
+    if slot_chains:
+        lines.append("/* ================================================================")
+        lines.append(" * Switcher_Run_{name} — SLOT 调用链条 (由 project.json slot_chains 定义)")
+        lines.append(" * ================================================================ */")
+        lines.append("")
+        for chain in slot_chains:
+            cname = chain["name"]
+            ccomment = chain.get("comment", "")
+            cmodules = chain["modules"]
+            lines.append(f"/* {cname} — {ccomment} */")
+            lines.append(f"void Switcher_Run_{cname}(void)")
+            lines.append("{")
+            for m in cmodules:
+                lines.append(f"    Switcher_Slot_{m}();")
+            lines.append("}")
+            lines.append("")
 
     return "\n".join(lines)

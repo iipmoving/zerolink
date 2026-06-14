@@ -15,14 +15,20 @@ gen_io_h.py — v2.3 LINK+PARAMS io.h 生成器
 """
 
 import os
+import re
 
 
-def _rel_include(io_dir: str, target_path: str) -> str:
-    """计算 io.h 中 #include 的相对路径"""
-    # 标准化路径
+def _rel_include(io_dir: str, target_path: str, base_dir: str = None) -> str:
+    """计算 io.h 中 #include 的相对路径
+
+    两个路径都相对于 base_dir（默认为 CWD）。
+    base_dir 通常是 output_root，保证路径解析准确。
+    """
     io = io_dir.replace("\\", "/").strip("/")
     tgt = target_path.replace("\\", "/").strip("/")
-    # 计算相对路径
+    if base_dir:
+        io = os.path.join(base_dir, io).replace("\\", "/")
+        tgt = os.path.join(base_dir, tgt).replace("\\", "/")
     try:
         rel = os.path.relpath(tgt, io)
         return rel.replace("\\", "/")
@@ -40,9 +46,11 @@ def _link_style_to_c(style: str, array_size: int = 0) -> str:
         return "*params"
 
 
-def _include_guard(module_name: str, layer: str, comment_guard: bool) -> str:
-    """生成 include guard（APP/PROTO 层注释掉 #define）"""
+def _include_guard(module_name: str, layer: str, comment_guard: bool, is_io_h: bool = False) -> str:
+    """生成 include guard（APP/PROTO 层注释掉 #define，仅限普通模块 .h）"""
     guard = f"{module_name.upper()}_IO_H"
+    if is_io_h:
+        return f"#ifndef {guard}\n#define {guard}\n"
     if layer in ("app", "proto") and comment_guard:
         return (f"#ifndef {guard}\n"
                 f"//#define {guard}   /* L0 阻断: 禁用 include guard */\n")
@@ -50,36 +58,54 @@ def _include_guard(module_name: str, layer: str, comment_guard: bool) -> str:
         return f"#ifndef {guard}\n#define {guard}\n"
 
 
-def _gen_params_fields(fields: list) -> str:
-    """从 fields[] 生成 PARAMS 结构体字段"""
+def _gen_params_fields(fields: list, indent: int = 4) -> str:
+    """从 fields[] 生成 PARAMS 结构体字段（支持递归嵌套 struct）"""
     import re
     if not fields:
-        return "    uint8_t  res[4];       /* TODO: 填写数据字段 */"
+        return " " * indent + "uint8_t  res[4];       /* TODO: 填写数据字段 */"
     lines = []
+    prefix = " " * indent
     for f in fields:
-        raw_type = f['type']
-        name = f['name']
+        raw_type = f.get('type', 'uint16_t')
+        name = f.get('name', 'field')
         comment = f.get("comment", "")
 
-        # 处理数组类型: "uint8_t[3]" → base="uint8_t", suffix="[3]"
-        m = re.match(r'^(\w+(?:\s+\w+)?)\s*\[(\d+)\]$', raw_type)
-        if m:
-            base_type = m.group(1)
-            arr_suffix = f"[{m.group(2)}]"
+        # 递归处理嵌套结构体
+        if raw_type == "struct" and f.get("fields"):
+            sub = _gen_params_fields(f["fields"], indent + 4)
+            if comment:
+                lines.append(f"{prefix}struct {{  /* {comment} */")
+            else:
+                lines.append(f"{prefix}struct {{")
+            lines.append(sub)
+            lines.append(f"{prefix}}} {name};")
         else:
-            base_type = raw_type
-            arr_suffix = ""
+            # 处理数组类型: "uint8_t[3]" → base="uint8_t", suffix="[3]"
+            m = re.match(r'^(\w+(?:\s+\w+)?)\s*\[(\d+)\]$', raw_type)
+            if m:
+                base_type = m.group(1)
+                arr_suffix = f"[{m.group(2)}]"
+            else:
+                base_type = raw_type
+                arr_suffix = ""
 
-        if comment:
-            lines.append(f"    {base_type} {name}{arr_suffix};     /* {comment} */")
-        else:
-            lines.append(f"    {base_type} {name}{arr_suffix};")
+            if comment:
+                lines.append(f"{prefix}{base_type} {name}{arr_suffix};     /* {comment} */")
+            else:
+                lines.append(f"{prefix}{base_type} {name}{arr_suffix};")
     return "\n".join(lines)
+
+
+def _pascal_to_snake(name: str) -> str:
+    """PascalCase → snake_case: AppAdc → app_adc"""
+    s1 = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
 def generate_io_h(module: dict, pipes: list, project: dict) -> str:
     """生成模块的 io.h 内容"""
     mod_name = module["name"]
+    snake_name = _pascal_to_snake(mod_name)
     layer = module.get("layer", "app")
     comment = module.get("comment", "")
     io_dir = project.get("paths", {}).get("io_dir", "include")
@@ -92,13 +118,13 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
     # 本模块作为 Consumer 的管道 (input)
     in_pipes  = [p for p in pipes if p["to"] == mod_name]
 
-    # 计算 std_module.h 相对路径
-    std_rel = _rel_include(io_dir, std_module_path)
+    # std_module.h 用裸文件名（编译器 -I 路径处理目录）
+    std_rel = os.path.basename(std_module_path)
 
     # ====== 构建文件内容 ======
     lines = []
     lines.append("/**")
-    lines.append(f" * @file    {mod_name.lower()}_io.h")
+    lines.append(f" * @file    {snake_name}_io.h")
     lines.append(f" * @brief   {mod_name} Data Switcher IO interface (v2.3 LINK+PARAMS)")
     lines.append(f" * @layer   {layer}")
     if comment:
@@ -120,7 +146,7 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
     # Include guard
     guard_name = f"{mod_name.upper()}_IO_H"
     lines.append("")
-    lines.append(_include_guard(mod_name, layer, comment_guard).rstrip())
+    lines.append(_include_guard(mod_name, layer, comment_guard, is_io_h=True).rstrip())
 
     # Includes
     lines.append("")
@@ -131,6 +157,21 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
     if pack:
         lines.append("")
         lines.append(f"#pragma pack({pack})")
+
+    # ========== 模块专属类型 typedef (独立于管道) ==========
+    if module.get("types"):
+        for t in module["types"]:
+            t_name = t["name"]
+            t_comment = t.get("comment", "")
+            t_fields = t.get("fields", [])
+            lines.append("")
+            lines.append(f"/* ================================================================")
+            lines.append(f" * {t_name} — {t_comment}")
+            lines.append(f" * ================================================================ */")
+            lines.append("")
+            lines.append(f"typedef struct {{")
+            lines.append(_gen_params_fields(t_fields))
+            lines.append(f"}} {t_name};")
 
     # ========== OUTPUT 部分 (本模块是 Producer) ==========
     if out_pipes:
@@ -232,7 +273,7 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
         lines.append(f"typedef struct {{")
         for pipe in in_pipes:
             p_name = pipe["from"]
-            lines.append(f"    MODULE_INPUT_LINK({p_name}, {mod_name})  {p_name}_params;  /* 从 {p_name} 来 */")
+            lines.append(f"    MODULE_INPUT_LINK({p_name}, {mod_name}) *{p_name}_params;  /* 指向 {p_name} 输出的 LINK 列 */")
         lines.append(f"}} MODULE_INPUT({mod_name});")
     else:
         lines.append("")
