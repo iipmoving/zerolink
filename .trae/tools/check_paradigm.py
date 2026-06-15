@@ -24,23 +24,13 @@ SKIP_DIRS = {'.git', 'tools', '__pycache__', 'include', 'ProjectsOld',
              'ref-programs', 'chip-docs', 'sim', 'archive', 'memory', 'docs'}
 SKIP_FILES = {'std_module.h', 'data_switcher.h', 'data_switcher.c'}
 
-# Pattern: MODULE_SKELETON(name) — capture the name parameter
 SKELETON_RE = re.compile(r'MODULE_SKELETON\s*\(\s*(\w*)\s*\)')
-
-# Pattern: MODULE_EXPORT(name)
 EXPORT_RE = re.compile(r'MODULE_EXPORT\s*\(\s*(\w+)\s*\)')
-
-# Pattern: Manual GetIO definition (not inside MODULE_EXPORT)
-MANUAL_GETIO_RE = re.compile(
-    r'void\s+(\w+)_GetIO\s*\([^)]*\)\s*\{'
-)
-
-# MODULE_SKELETON without name parameter
+MANUAL_GETIO_RE = re.compile(r'void\s+(\w+)_GetIO\s*\([^)]*\)\s*\{')
 SKELETON_EMPTY_RE = re.compile(r'MODULE_SKELETON\s*\(\s*\)')
 
 
 def _strip_comments(content):
-    """Strip C comments but preserve line numbers."""
     result = list(content)
     i = 0
     n = len(content)
@@ -62,17 +52,21 @@ def _strip_comments(content):
     return ''.join(result)
 
 
+def _find_line(content, pattern):
+    idx = content.find(pattern)
+    if idx < 0:
+        return 0
+    return content[:idx].count('\n') + 1
+
+
 def check_file(fpath, rel):
-    """Check a single file for paradigm compliance."""
     violations = []
 
-    # Only scan .c/.C/.h files
     if not (fpath.endswith('.c') or fpath.endswith('.C') or fpath.endswith('.h')):
         return violations
     if os.path.basename(fpath) in SKIP_FILES:
         return violations
 
-    # Skip non-module files (main.c, isr files, etc.)
     basename = os.path.basename(fpath)
     if basename in ('main.c', 'rx32g4xx_it.c', 'data_type.h'):
         return violations
@@ -84,75 +78,53 @@ def check_file(fpath, rel):
     is_c_file = fpath.endswith('.c') or fpath.endswith('.C')
 
     if is_c_file:
-        # Rule 1: MODULE_SKELETON(name) must be present with non-empty name
-        # (only for files that contain business logic — skip pure data files)
         has_skeleton = bool(SKELETON_RE.search(scan))
         has_empty = bool(SKELETON_EMPTY_RE.search(scan))
 
         if has_empty:
             lineno = _find_line(content, 'MODULE_SKELETON')
-            violations.append(
-                f"{rel}:{lineno}: VIOLATION — MODULE_SKELETON() without name parameter. "
-                f"Must be MODULE_SKELETON(ModuleName)"
-            )
+            violations.append(f"{rel}:{lineno}: VIOLATION — MODULE_SKELETON() without name parameter. Must be MODULE_SKELETON(ModuleName)")
         elif has_skeleton:
-            # Rule 2: MODULE_EXPORT must also be present
             if not EXPORT_RE.search(scan):
                 exp_name = SKELETON_RE.search(scan).group(1)
-                violations.append(
-                    f"{rel}:{_find_line(content, 'MODULE_SKELETON')}: "
-                    f"VIOLATION — MODULE_SKELETON({exp_name}) without MODULE_EXPORT({exp_name})"
-                )
+                violations.append(f"{rel}:{_find_line(content, 'MODULE_SKELETON')}: VIOLATION — MODULE_SKELETON({exp_name}) without MODULE_EXPORT({exp_name})")
 
-            # Rule 3: No manual GetIO implementation (MODULE_EXPORT is the only allowed way)
             export_names = {m.group(1) for m in EXPORT_RE.finditer(scan)}
             for m in MANUAL_GETIO_RE.finditer(scan):
                 func_name = m.group(1)
                 if func_name in export_names:
-                    continue  # This GetIO is from MODULE_EXPORT macro, not manual
+                    continue
                 lineno = content[:m.start()].count('\n') + 1
-                violations.append(
-                    f"{rel}:{lineno}: "
-                    f"VIOLATION — manual '{func_name}_GetIO' implementation found. "
-                    f"Must use MODULE_EXPORT({func_name}) instead"
-                )
+                violations.append(f"{rel}:{lineno}: VIOLATION — manual '{func_name}_GetIO' implementation found. Must use MODULE_EXPORT({func_name}) instead")
 
-        # Rule 3b: If MODULE_EXPORT is present without MODULE_SKELETON, that's odd
         if not has_skeleton and not has_empty:
             for m in EXPORT_RE.finditer(scan):
                 exp_name = m.group(1)
-                violations.append(
-                    f"{rel}:{_find_line(content, f'MODULE_EXPORT({exp_name})')}: "
-                    f"VIOLATION — MODULE_EXPORT({exp_name}) without MODULE_SKELETON. "
-                    f"MODULE_SKELETON must come before MODULE_EXPORT"
-                )
+                violations.append(f"{rel}:{_find_line(content, f'MODULE_EXPORT({exp_name})')}: VIOLATION — MODULE_EXPORT({exp_name}) without MODULE_SKELETON. MODULE_SKELETON must come before MODULE_EXPORT")
 
-    # .h files: check for MODULE_IO_H vs manual GetIO declaration
     if fpath.endswith('.h'):
-        # Only check io.h files
         if '_io' not in basename:
             return violations
-        # Check that GetIO declarations use MODULE_IO_H
-        manual_decl = re.search(
-            r'void\s+(\w+)_GetIO\s*\([^)]*\)\s*;', scan
-        )
+        manual_decl = re.search(r'void\s+(\w+)_GetIO\s*\([^)]*\)\s*;', scan)
         has_io_h = bool(re.search(r'MODULE_IO_H\s*\(', scan))
         if manual_decl and not has_io_h:
             for m in manual_decl.finditer(scan):
-                violations.append(
-                    f"{rel}:{_find_line(content, m.group(1) + '_GetIO')}: "
-                    f"VIOLATION — manual GetIO declaration. Use MODULE_IO_H({m.group(1)})"
-                )
+                violations.append(f"{rel}:{_find_line(content, m.group(1) + '_GetIO')}: VIOLATION — manual GetIO declaration. Use MODULE_IO_H({m.group(1)})")
+
+    # v2.3 — ProcessInput must use data struct LINK status, not g_input.info.status
+    if is_c_file and has_skeleton:
+        if 'g_input.info.status' in scan or 'g_output.info.status' in scan:
+            lines = content.split('\n')
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith('//') or stripped.startswith('/*') or stripped.startswith('*'):
+                    continue
+                if 'g_input.info.status' in line:
+                    violations.append(f"{rel}:{i}: v2.3 VIOLATION — Use data struct LINK status, not g_input.info.status. Use in->input->status (single LINK) or in->xxx.status (multi-LINK)")
+                if 'g_output.info.status' in line:
+                    violations.append(f"{rel}:{i}: v2.3 VIOLATION — Use data struct LINK status, not g_output.info.status. Use out->head.status or out->xxx.status (data level)")
 
     return violations
-
-
-def _find_line(content, pattern):
-    """Find line number of first occurrence of `pattern` in `content`."""
-    idx = content.find(pattern)
-    if idx < 0:
-        return 0
-    return content[:idx].count('\n') + 1
 
 
 def check_project(project_root):

@@ -83,7 +83,7 @@ g_output.info.status  bit0=ST_INIT (Constructor 置)
 
 ```
 g_input ST_NEW (外部输入):
-  1. Consumer 回调被 Switcher 调用 → memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW  (consumer 自设)
+  1. Consumer 回调被 Switcher 调用 → 指针直穿（消费者 LINK 指针 = 生产者输出地址，零拷贝）→ g_input.info.status |= ST_NEW  (consumer 自设)
   2. ProcessInput 检查 ST_NEW=1 → 消费 → g_input.info.status &= ~ST_NEW                                   (consumer 自清)
 ```
 
@@ -92,7 +92,7 @@ g_input ST_NEW (外部输入):
 ```
 1. Producer ProcessInput: 计算 → 写 g_output.para (不置状态位)
 2. Switcher 显式路由: 检查 producer g_output.para 标志 → 调 consumer 回调
-3. Consumer 回调: memcpy(g_input.para, pOut->para, ...) → g_input.info.status |= ST_NEW
+3. Consumer 回调: 消费者输入 LINK 指针 = 生产者输出地址 (直穿，零拷贝) → g_input.info.status |= ST_NEW
 4. Consumer ProcessInput: 检查 ST_NEW → 消费 → g_input.info.status &= ~ST_NEW
 ```
 
@@ -144,7 +144,7 @@ typedef struct {
 
 ```c
 // ===== module_a.c =====
-#include "core/std_module.h"
+#include "std_module.h"
 #include "../include/module_a_io.h"            // 自己的 IO 接口
 
 static ModuleAInData_t  s_in;
@@ -189,8 +189,10 @@ MODULE_EXPORT(ModuleA);
 /* ---- Consumer 回调: Switcher 在 Producer DoWork 后显式调用 ---- */
 void ModuleA_On{Producer}Data(Para_Grp_t *pOut)
 {
-    /* consumer 自己 memcpy — Switcher 不搬运数据 */
-    memcpy(g_input.para, pOut->para, sizeof(ModuleAInData_t));
+    /* v2.3 指针直穿: 生产者 OUTPUT_LINK 地址 → 消费者 INPUT_LINK 指针
+     * 用 (void*) 跨类型转换 (两类型布局一致但 C 类型不同) */
+    MODULE_INPUT(ModuleA) *in = (MODULE_INPUT(ModuleA) *)g_input.para;
+    in->input = (void*)pOut->para;
     g_input.info.status |= ST_NEW;
 }
 ```
@@ -203,7 +205,9 @@ void ModuleA_On{Producer}Data(Para_Grp_t *pOut)
 
 ### 5.1 定位
 
-**全项目唯一有权 include 所有 `_io.h` 的文件。** 模块之间互不知道对方存在。
+**全项目唯一有权 include 所有模块 `_io.h` 的文件。** Switcher 是所有跨模块数据调用的唯一通道。
+
+模块之间互不知道对方存在，不得直接 include 其他模块的 `.h`（包括 `_io.h` 和普通 `.h`）。
 
 **Switcher 不做数据搬运。** Switcher 的职责是：
 1. 按调度次序依次调用各模块 `DoWork()`
@@ -211,6 +215,8 @@ void ModuleA_On{Producer}Data(Para_Grp_t *pOut)
 3. Consumer 回调内部自己 memcpy + 置 ST_NEW
 
 ### 5.2 初始化：Switcher_Init()
+
+v2.2 风格（`Switcher_Register` 间接注册）：
 
 ```c
 // ===== data_switcher.c =====
@@ -228,6 +234,37 @@ void Switcher_Init(void)
     // ... 所有模块
 }
 ```
+
+v2.3 风格（`ModuleSlotDef` 数组 + `SLOT_GETIO` 宏，强制 GetIO 与槽位命名对齐）：
+
+```c
+/* data_switcher.h */
+#define SLOT(mod)  SLOT_##mod
+
+#define SLOT_GETIO(mod)                                                      \
+    mod##_GetIO(&s_slot[SLOT(mod)].pIn,                                      \
+                &s_slot[SLOT(mod)].pOut,                                      \
+                &s_slot[SLOT(mod)].pDoWork)
+
+/* data_switcher.c — 槽位枚举用 SLOT() 宏 */
+typedef enum {
+    SLOT(APP_Adc)    = 0,
+    SLOT(PowerBase)  = 1,
+    SLOT(Calculator) = 2,
+    SLOT(COUNT)
+} SwitcherSlot_t;
+
+static ModuleSlotDef s_slot[SLOT_COUNT];
+
+void Switcher_Init(void)
+{
+    SLOT_GETIO(APP_Adc);
+    SLOT_GETIO(PowerBase);
+    SLOT_GETIO(Calculator);
+}
+```
+
+`SLOT_GETIO(mod)` 展开为 `mod##_GetIO(&s_slot[SLOT_##mod].pIn, ...)`，强制模块 GetIO 函数名与 SLOT 枚举值使用同一标识符。模块名 = 槽位名，消除命名错位。`SLOT(x)` 宏用于枚举定义，`SLOT_GETIO(mod)` 用于注册。
 
 ### 5.3 运行时：Switcher_Run() — PULL 路由
 
@@ -333,16 +370,29 @@ static void ProcessInput(void)
 
 ## 八、include 权限规则
 
+**Switcher 是所有跨模块调用的唯一通道。** 任何模块不得直接引用其他模块的类型定义。
+
 | 文件 | 权限 | 审计 |
 |------|------|------|
-| **Switcher.c** | 全路径 `#include "../include/xxx_io.h"` | 允许 |
+| **Switcher.c** | 全路径 `#include "../include/xxx_io.h"` | 允许 — 唯一合法跨模块引用点 |
 | **模块 .c** | `#include "../include/xxx_io.h"` | 禁止 — `check_include.py` 阻断 |
 | **模块 .c** | `#include "module_a.h"` | 允许 — 只能引自己的头文件 |
 | **模块 .c** | `#include "../include/module_a_io.h"` | 允许 — 只能引自己的 `_io.h` |
+| **任何 `.h`** | `#include "other_module.h"` | **禁止** — 头文件自治规则，任何 `.h` 不得 include 其他模块的 `.h` |
 
-`check_include.py` 扫描逻辑：
+### 头文件自治规则
+
+任何模块的 `.h` 文件（包括 `_io.h` 和普通 `.h`）**不得 `#include` 其他模块的 `.h`**。需要引用其他模块的数据类型时：
+
+1. 在自己 `_io.h` 中自包含定义输入结构体
+2. 布局与生产者输出兼容（字段顺序/大小一致）
+3. InputCallback 用指针直穿（生产者 LINK 地址赋给消费者输入指针），不依赖对方类型定义
+
+### check_include.py 扫描逻辑
+
 - 非 `Switcher.c` 中检测到全路径 `#include "../include/"` → 阻断
 - 模块 .c 引用了非自己的 `_io.h` → 阻断
+- 任何 `.h` 文件中检测到 `#include` 其他模块的 `.h` → 阻断
 
 ---
 
@@ -354,12 +404,34 @@ static void ProcessInput(void)
 文件:       include/module_a_io.h   module_a.h   module_a.c
 类型:       ModuleA_InData_t        ModuleA_OutData_t
 函数:       ModuleA_GetIO()         ModuleA_DoWork()
-Consumer:   ModuleA_On{Producer}Data(Para_Grp_t *pOut)
+InputCallback 宏:  INPUT_CALLBACK(Producer, Consumer)   → 展开 Consumer_InputCallback
+InputCallback 槽:  INPUT_GET_SLOT(Producer, Consumer)   → in->Producer_params = &out->Consumer_params
 变量:       g_input                 g_output
-结构体成员:  snake_case 单词，不加模块前缀 (power, mode, voltage，不是 a_power)
+槽位枚举:   SLOT(ModuleName)         — 宏定义槽位，与模块名对齐
+注册入口:   SLOT_GETIO(ModuleName)   — 展开为 ModuleName_GetIO(&s_slot[SLOT_ModuleName]...)
 ```
 
-`{Consumer}_On{Producer}Data` — 消费者名+数据源，清晰表达数据流向。
+### 管道配对命名
+
+```
+Producer 输出 LINK 成员名:  {Consumer}_params     (out->ElecParams_params)
+Consumer 输入 LINK 成员名:  {Producer}_params     (in->Calculator_params)
+```
+
+**双向对称**: 直穿赋值就是 `in->Calculator_params = (void*)&out->ElecParams_params`。
+
+当 Producer 有多个 Consumer 时，次管道保留具名（如 `power_direct`），仍遵守 `{Consumer}_params` 优先原则。
+
+### InputCallback 宏速查
+
+| 宏 | 参数 | 检查点 | 展开内容 |
+|----|------|--------|---------|
+| `INPUT_CALLBACK(producer, consumer)` | 2 | — | `void consumer_InputCallback(void)` |
+| `INPUT_GET_SLOT(producer, consumer)` | 2 | ProcessInput | 取 slot 指针 + 直穿赋值 |
+| `INPUT_LINK_PULL(producer, consumer, member)` | 3 | 回调内 | 直穿 + null/ST_NEW 检查 |
+| `INPUT_EDGE_PULL(producer, consumer, member)` | 3 | 回调内 | 直穿 + ST_OUT 边沿 + 自动清除 |
+
+详见 `09-std-module.md §4` 的完整用法和展开示例。
 
 ---
 
@@ -396,4 +468,4 @@ check_output_callback.py →  _onOutput/ST_OUT 检测 + @OUTPUT_CALLBACK 白名�
 
 ---
 
-*方法论版本: v2.2, 2026-06-06*
+*方法论版本: v2.3, 2026-06-10*

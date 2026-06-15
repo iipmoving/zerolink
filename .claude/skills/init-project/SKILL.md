@@ -13,7 +13,7 @@ folder structure, CLAUDE.md, specs, tools, structs.json, interface_map.h, deps_c
 
 ## The Job
 
-Guide the user through creating a new embedded project that is **immediately ready** for methodology-compliant coding. After completion, `python tools/check_deps.py --self-test` passes and the project can accept its first module.
+Guide the user through creating a new embedded project that is **immediately ready** for methodology-compliant coding. After completion, `python ../.claude/tools/check_deps.py --self-test` passes and the project can accept its first module.
 
 **Do NOT** start implementing modules or business logic. This SKILL only sets up the project scaffold.
 
@@ -267,7 +267,7 @@ Write-Host "=== Pre-commit: Methodology Checks ===" -ForegroundColor Cyan
 
 # 1. Layer dependency audit
 Write-Host "[1] check_deps.py ... " -NoNewline
-$result = & python tools/check_deps.py ./ 2>&1
+$result = & python ../.claude/tools/check_deps.py ./ 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAIL" -ForegroundColor Red
     Write-Host $result
@@ -279,7 +279,7 @@ if ($LASTEXITCODE -ne 0) {
 # 2. __weak pair consistency
 if (Test-Path "cfg/interface_map.h") {
     Write-Host "[2] check_weak_pairs.py ... " -NoNewline
-    $result = & python tools/check_weak_pairs.py ./ 2>&1
+    $result = & python ../.claude/tools/check_weak_pairs.py ./ 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAIL" -ForegroundColor Red
         Write-Host $result
@@ -294,7 +294,7 @@ if (Test-Path "cfg/interface_map.h") {
 # 3. Struct consistency
 if (Test-Path "cfg/structs.json") {
     Write-Host "[3] check_structs.py ... " -NoNewline
-    $result = & python tools/check_structs.py ./ 2>&1
+    $result = & python ../.claude/tools/check_structs.py ./ 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAIL" -ForegroundColor Red
         Write-Host $result
@@ -309,7 +309,7 @@ if (Test-Path "cfg/structs.json") {
 # 4. Data Switcher include permission (conditional)
 if ((Test-Path "include/") -and (Get-ChildItem "include/" -Filter "*_io.h" -Recurse)) {
     Write-Host "[4] check_include.py ... " -NoNewline
-    $result = & python tools/check_include.py ./ 2>&1
+    $result = & python ../.claude/tools/check_include.py ./ 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAIL" -ForegroundColor Red
         Write-Host $result
@@ -348,7 +348,7 @@ echo -e "\033[36m=== Pre-commit: Methodology Checks ===\033[0m"
 
 # 1. Layer dependency audit
 echo -n "[1] check_deps.py ... "
-if python tools/check_deps.py ./ 2>&1; then
+if python ../.claude/tools/check_deps.py ./ 2>&1; then
     echo -e "\033[32mPASS\033[0m"
 else
     echo -e "\033[31mFAIL\033[0m"
@@ -358,7 +358,7 @@ fi
 # 2. __weak pair consistency
 if [ -f "cfg/interface_map.h" ]; then
     echo -n "[2] check_weak_pairs.py ... "
-    if python tools/check_weak_pairs.py ./ 2>&1; then
+    if python ../.claude/tools/check_weak_pairs.py ./ 2>&1; then
         echo -e "\033[32mPASS\033[0m"
     else
         echo -e "\033[31mFAIL\033[0m"
@@ -371,7 +371,7 @@ fi
 # 3. Struct consistency
 if [ -f "cfg/structs.json" ]; then
     echo -n "[3] check_structs.py ... "
-    if python tools/check_structs.py ./ 2>&1; then
+    if python ../.claude/tools/check_structs.py ./ 2>&1; then
         echo -e "\033[32mPASS\033[0m"
     else
         echo -e "\033[31mFAIL\033[0m"
@@ -384,7 +384,7 @@ fi
 # 4. Data Switcher include permission (conditional)
 if [ -d "include/" ] && ls include/*_io.h >/dev/null 2>&1; then
     echo -n "[4] check_include.py ... "
-    if python tools/check_include.py ./ 2>&1; then
+    if python ../.claude/tools/check_include.py ./ 2>&1; then
         echo -e "\033[32mPASS\033[0m"
     else
         echo -e "\033[31mFAIL\033[0m"
@@ -418,7 +418,7 @@ After all files are in place, run the self-test suite:
 
 ```bash
 cd PROJECT_DIR
-python tools/check_deps.py --self-test
+python ../.claude/tools/check_deps.py --self-test
 ```
 
 Expected: `SELF_TEST: N/N PASSED` (all tests pass).
@@ -431,7 +431,7 @@ If --self-test fails:
 If check_deps --self-test passes, also verify generate_structs is functional:
 
 ```bash
-python tools/generate_structs.py --check
+python ../.claude/tools/generate_structs.py --check
 ```
 
 Expected: `OK: ... struct(s) up-to-date with structs.json` (0 diff).
@@ -459,7 +459,7 @@ Created:
   cfg/interface_map.h     ✓
   core/std_module.h       ✓
   deps_config.json        ✓
-  tools/check_*.py        ✓  (5 tools)
+  tools/check_*.py        ✓  (in `.claude/tools/`)
   .git/hooks/pre-commit   ✓  (.ps1 + .sh)
   src/main.c (skeleton)   ✓
 
@@ -471,7 +471,7 @@ Next steps:
   3. Define cfg/structs.json with your first cross-module struct
   4. Create your first module: app/{module_name}.h + .c
   5. Register __weak pairs in cfg/interface_map.h
-  6. Run: python tools/check_deps.py ./ to verify
+  6. Run: python ../.claude/tools/check_deps.py ./ to verify
 ```
 
 ---
@@ -485,6 +485,7 @@ Before declaring completion:
 - [ ] CLAUDE.md copied and filled with project name
 - [ ] 4 spec files copied to .claude/specs/
 - [ ] structs.json copied to cfg/ (serial: 0)
+- [ ] data-contract.md created as docs/data-contract.md (template: methodology-seed/10-data-contract.md)
 - [ ] interface_map.h copied to cfg/
 - [ ] core/std_module.h copied to core/
 - [ ] 5 tools copied to tools/ (check_deps, check_weak_pairs, check_structs, check_include, generate_structs)

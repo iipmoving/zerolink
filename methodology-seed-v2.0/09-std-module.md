@@ -17,21 +17,24 @@ v2.1 之前，每个模块手动编写：
 
 ## 二、三要素
 
-`#include "core/std_module.h"` 提供一个模块所需的全部基础设施：
+`#include "std_module.h"` 提供一个模块所需的全部基础设施：
+
+> v2.3 新增: `STD_MODULE_ENABLE_ISR=1` 时 MODULE_SKELETON/MODULE_EXPORT 额外生成 ISR 通路（独立 g_isr_input/g_isr_output + ISR_DoWork）。ISR 默认关闭，零开销。
 
 ### 2.1 统一参数组 `Para_Grp_t`
 
 ```c
 enum {
-    ST_INIT  = 0x01,   /* bit0: 已初始化 (Constructor 置位) */
-    ST_NEW   = 0x02,   /* bit1: 新输入到达 (consumer 回调置，ProcessInput 消费后自清) */
+    ST_INIT  = 0x01,   /* bit0: 已初始化 */
+    ST_NEW   = 0x02,   /* bit1: 新输入到达 (中间层在 InputCallback 中置位) */
+    ST_OUT   = 0x04,   /* bit2: 输出就绪 (触发 OutputCallback, 一般不用) */
 };
 
 typedef struct {
-    uint8_t status;   /* ST_INIT, ST_NEW */
-    uint8_t res1;
-    uint8_t route;    /* 路由标识 */
-    uint8_t res2;
+    uint8_t status;   /* 组合 ST_INIT | ST_NEW | ST_OUT */
+    uint8_t inMax;    /* 输入 LINK 数量 (MODULE_INPUT 的 LINK 列数) */
+    uint8_t route;    /* 路由标识 — 多炉头/多模式时区分数据路径 */
+    uint8_t outMax;   /* 输出 LINK 数量 (MODULE_OUTPUT 的 LINK 列数) */
 } Info_Header;
 
 typedef struct {
@@ -56,14 +59,70 @@ typedef struct {
 ### 2.3 `MODULE_EXPORT(module_name)` — 导出接口
 
 展开为：
-- `{Module}_GetIO(pIn, pOut, pDoWork)` — 暴露指针 + DoWork 函数指针
+- `{Module}_GetIO(pIn, pOut, pDoWork)` — 暴露主循环指针 + DoWork 函数指针
+- `{Module}_GetISR_IO(pIn, pOut, pDoWork)` — 仅 STD_MODULE_ENABLE_ISR=1 时生成，暴露 ISR 通路指针（独立 g_isr_input/g_isr_output + ISR_DoWork）
 
 ---
 
 ## 三、模块标准结构
 
+> **编码前先做数据契约**: 在 `docs/data-contract.md` 中定义模块 I/O 结构体对齐，见 `10-data-contract.md`。确保上下游模块的输入输出结构体布局一致，可实现指针直穿（零拷贝）。
+
+> **🚫 头文件自治规则**: 任何模块的 `.h`（包括 `_io.h` 和普通 `.h`）**不得 `#include` 其他模块的 `.h`**。需要引用其他模块的数据类型时，在 `_io.h` 中自包含定义自己的输入结构体，布局与生产者输出兼容。InputCallback 通过指针直穿访问数据，不依赖对方类型定义。
+
+### 3.1 I/O 结构体 — 三层定义 (v2.3 LINK+PARAMS)
+
+**管道配对模式**: Consumer 定义自己的 INPUT 类型 (自包含, 不引用 Producer), 布局与 Producer OUTPUT 一致。中间层用 `(void*)` 连接。
+
 ```c
-#include "core/std_module.h"
+/* ===== {module}_io.h ===== */
+
+/* --- 输入: 从 Producer 接收 (自包含, 布局兼容) --- */
+
+/* 数据参数: 字段顺序/类型/大小与 Producer OUTPUT_PARAMS 一致 */
+typedef struct {
+    uint16_t field1;
+    uint16_t field2;
+    uint8_t  valid;
+    uint8_t  res[3];
+} MODULE_INPUT_PARAMS(Producer, {Module});
+
+/* 输入管道: 与 MODULE_OUTPUT_LINK(Producer, {Module}) 配对 */
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    MODULE_INPUT_PARAMS(Producer, {Module}) params[POT_MAX];
+} MODULE_INPUT_LINK(Producer, {Module});
+
+/* 输入聚合: InputCallback 直穿赋值 input 指针 */
+typedef struct {
+    MODULE_INPUT_LINK(Producer, {Module})* input;   // ← 指针
+} MODULE_INPUT({Module});
+
+/* --- 输出: 发给 Consumer --- */
+
+/* 数据参数 */
+typedef struct {
+    uint16_t result;
+    uint8_t  valid;
+    uint8_t  res[5];
+} MODULE_OUTPUT_PARAMS({Module}, Consumer);
+
+/* 输出管道: 与 MODULE_INPUT_LINK({Module}, Consumer) 配对 */
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    MODULE_OUTPUT_PARAMS({Module}, Consumer) params[POT_MAX];
+} MODULE_OUTPUT_LINK({Module}, Consumer);
+
+/* 输出聚合 */
+typedef struct {
+    MODULE_OUTPUT_LINK({Module}, Consumer)  {Consumer}_params;   // ← 以消费者命名
+} MODULE_OUTPUT({Module});
+```
+
+### 3.2 源文件骨架
+#include "std_module.h"
 #include "{module}.h"     /* 可选 — 私有常量 */
 #include <string.h>
 
@@ -71,15 +130,15 @@ typedef struct {
 typedef struct {
     uint8_t  field;
     uint16_t value;
-} {Module}_InData_t;
+} MODULE_INPUT({Module});
 
 typedef struct {
     uint8_t  head;
     uint16_t result;
-} {Module}_OutData_t;
+} MODULE_OUTPUT({Module});
 
-static {Module}_InData_t  s_in;
-static {Module}_OutData_t s_out;
+static {Module}_Input  s_in;
+static {Module}_Output s_out;
 
 /* ---- 骨架: name 必须与 MODULE_EXPORT 一致 ---- */
 MODULE_SKELETON({Module});
@@ -93,24 +152,30 @@ static void Init(void)
     g_output.para = &s_out;
 }
 
-/* ---- 处理逻辑 (DoWork 每帧调) ---- */
+/* ---- 处理逻辑 (DoWork 每帧调) — v2.3 使用数据层 status ---- */
 static void ProcessInput(void)
 {
-    {Module}_InData_t  *in  = ({Module}_InData_t *)g_input.para;
-    {Module}_OutData_t *out = ({Module}_OutData_t *)g_output.para;
+    {Module}_Input  *in  = ({Module}_Input *)g_input.para;
+    {Module}_Output *out = ({Module}_Output *)g_output.para;
 
     /* ====== 输入段 ====== */
-    if (g_input.info.status & ST_NEW) {
+    /* v2.3: status 在数据层 LINK 结构体首字节, 不在 g_input.info.status */
+    /* 单输入 LINK: 直接检查 LINK 成员首字节的 status */
+    if (in->input->status & ST_NEW) {
+        in->input->status &= ~ST_NEW;
         /* 消费 in->xxx */
-        g_input.info.status &= ~ST_NEW;
     }
+
+    /* 多输入 LINK: 每个 LINK 独立检查 */
+    // if (in->adc.status  & ST_NEW) { ... in->adc.status  &= ~ST_NEW; }
+    // if (in->comm.status & ST_NEW) { ... in->comm.status &= ~ST_NEW; }
 
     /* ====== 计算段 ====== */
     out->result = calc(in);
 
     /* ====== 输出段 ====== */
-    /* 只写 g_output.para + 置 ST_OUT — Switcher 负责路由 */
-    g_output.info.status |= ST_OUT;
+    /* v2.3: 置输出 LINK 的 status, 由 Switcher 或下游模块读取 */
+    out->{Consumer}_params.status |= ST_NEW;
 }
 
 /* ---- 导出: GetIO ---- */
@@ -119,44 +184,140 @@ MODULE_EXPORT({Module});
 
 ---
 
-## 四、数据流 (v2.2 PULL — InputCallback 主路由)
+## 四、数据流 (v2.3 PULL — InputCallback 宏 + 命名约定)
+
+### 4.1 管道配对命名约定 (v2.3)
 
 ```
-模块名 = "Power" 的实例:
+Producer 输出 LINK 成员名:  {Consumer}_params     (out->ElecParams_params)
+Consumer 输入 LINK 成员名:  {Producer}_params     (in->Calculator_params)
+```
+
+```
+typedef struct {
+    MODULE_OUTPUT_LINK(Calculator, ElecParams) ElecParams_params;   // ← 以消费者命名
+    MODULE_OUTPUT_LINK(Calculator, PowerBase)  power_direct;        // ← 次管道保留具名
+} MODULE_OUTPUT(Calculator);
+
+typedef struct {
+    MODULE_INPUT_LINK(Calculator, ElecParams)* Calculator_params;   // ← 以生产者命名
+} MODULE_INPUT(ElecParams);
+```
+
+Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 = Consumer 名。双向对称，直穿赋值就是 `in->Calculator_params = (void*)&out->ElecParams_params`。
+
+### 4.2 InputCallback 宏
+
+`data_switcher.h` 提供三个宏，覆盖所有 InputCallback 模式：
+
+```c
+/* 函数壳: INPUT_CALLBACK(Calculator, ElecParams) { ... }
+ * 展开: void ElecParams_InputCallback(void) { ... } */
+#define INPUT_CALLBACK(producer, consumer) \
+    void consumer##_InputCallback(void)
+
+/* 取 slot 指针 + 直穿: 检查放 ProcessInput */
+#define INPUT_GET_SLOT(producer, consumer) \
+    MODULE_OUTPUT(producer) *out = \
+        (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
+    MODULE_INPUT(consumer)   *in  = \
+        (MODULE_INPUT(consumer)   *)s_slot[SLOT(consumer)].pIn->para; \
+    in->producer##_params = (void*)&out->consumer##_params
+
+/* 单管道直穿+回调内检查 (ST_NEW 触发) */
+#define INPUT_LINK_PULL(producer, consumer, link_member) \
+    do { \
+        MODULE_OUTPUT(producer) *__p_out = (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
+        if (__p_out && (__p_out->link_member.status & ST_NEW)) { \
+            MODULE_INPUT(consumer) *__p_in = (MODULE_INPUT(consumer) *)s_slot[SLOT(consumer)].pIn->para; \
+            if (__p_in) { \
+                __p_in->producer##_params = (void*)&__p_out->link_member; \
+                s_slot[SLOT(consumer)].pIn->info.status |= ST_NEW; \
+            } \
+        } \
+    } while (0)
+
+/* 单管道边沿触发 (ST_OUT, 自动清除实现 0→1 边沿检测) */
+#define INPUT_EDGE_PULL(producer, consumer, link_member) \
+    do { \
+        MODULE_OUTPUT(producer) *__p_out = (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
+        if (__p_out && (__p_out->link_member.status & ST_OUT)) { \
+            __p_out->link_member.status &= ~ST_OUT; \
+            MODULE_INPUT(consumer) *__p_in = (MODULE_INPUT(consumer) *)s_slot[SLOT(consumer)].pIn->para; \
+            if (__p_in) { \
+                __p_in->producer##_params = (void*)&__p_out->link_member; \
+                s_slot[SLOT(consumer)].pIn->info.status |= ST_NEW; \
+            } \
+        } \
+    } while (0)
+```
+
+### 4.3 三种 InputCallback 写法
+
+**写法 A — 单管道直穿 (推荐, 检查放 ProcessInput):**
+```c
+INPUT_CALLBACK(Calculator, ElecParams)
+{
+    INPUT_GET_SLOT(Calculator, ElecParams);
+}
+```
+展开:
+```c
+void ElecParams_InputCallback(void) {
+    Calculator_Output *out = (Calculator_Output *)...;
+    ElecParams_Input  *in  = (ElecParams_Input  *)...;
+    in->Calculator_params = (void*)&out->ElecParams_params;
+}
+```
+
+**写法 B — 多管道组合 (一个回调连接多个数据源):**
+```c
+INPUT_CALLBACK(Calculator, PowerBase)
+{
+    /* 自定义逻辑 */
+    memcpy(...);
+
+    /* 从 Calculator 直穿拉数据 */
+    INPUT_GET_SLOT(Calculator, PowerBase);
+
+    /* 从 ElecParams 直穿拉数据 */
+    ElecParams_Output *ep_out = (ElecParams_Output *)s_slot[SLOT_ElecParams].pOut->para;
+    PowerBase_Input *pwr_in = (PowerBase_Input *)s_slot[SLOT_APP_Power].pIn->para;
+    pwr_in->Calculator_params = (void*)&ep_out->{Consumer}_params;
+
+    s_slot[SLOT_APP_Power].pIn->info.status |= ST_NEW;
+}
+```
+
+**写法 C — 管道直穿+回调内检查 (INPUT_LINK_PULL):**
+```c
+INPUT_CALLBACK(Calculator, ElecParams)
+{
+    INPUT_LINK_PULL(Calculator, ElecParams, ElecParams_params);
+}
+```
+
+### 4.4 数据流图 (v2.3)
+
+```
+模块名 = "ElecParams" 的实例:
 
 Module.DoWork:
-  ① Power_InputCallback()    ← 弱符号空壳, 中间层覆盖强符号注入数据
-     ├─ (weak) 默认空函数 — 无输入时不做事
-     └─ (strong) 中间层覆盖: 读 s_slot[SLOT_ADC].pOut->para,
-                     写入 s_slot[SLOT_POWER].pIn->para, 置 ST_NEW
+  ① ElecParams_InputCallback()    ← INPUT_CALLBACK(Calculator, ElecParams) 宏展开
+      └─ INPUT_GET_SLOT(Calculator, ElecParams)
+         └─ in->Calculator_params = (void*)&out->ElecParams_params
+            └─ 指针直穿, 零拷贝, 别名 = Calculator 的 ElecParams_params LINK
 
   ② ProcessInput()           ← 消费 g_input → 计算 → 写 g_output
-     ├─ 输入段: 检查 ST_NEW, 读 g_input.para
+     ├─ 输入段: 检查 in->Calculator_params->status & ST_NEW
      ├─ 计算段: 业务逻辑
-     └─ 输出段: 写 g_output.para + 置 ST_OUT
-
-  ③ Power_OutputCallback(&g_output)  ← 弱符号, 一般不用
-     └─ (weak) 默认空函数 — 仅 ProcessInput 中途需要即时输出时覆盖
+     └─ 输出段: 写 out->PowerBase_params / {Consumer}_params.status |= ST_OUT
 ```
 
 **关键**:
 - **单向调用原则**: 模块不定义 `__weak` 输出给其他 APP 模块, 只写 `g_output.para`
-- **InputCallback 是主路由**: 中间层覆盖强符号拉数据, 模块本身不知道数据来源
-- **OutputCallback 是例外**: 仅即时场景（蜂鸣器反馈等）使用, 且一般不用
-- **无 `{Module}_On{Producer}Data` 模式**: v2.2 废弃了 Switcher 显式调 consumer 回调的模式, 统一为 InputCallback 弱符号
-
-典型 InputCallback 实现 (在中间层/路由文件中):
-
-```c
-void Power_InputCallback(void)
-{
-    Adc_Output_t  *adc = (Adc_Output_t *)s_slot[SLOT_ADC].pOut->para;
-    Power_Input_t *pwr = (Power_Input_t *)s_slot[SLOT_POWER].pIn->para;
-
-    memcpy(pwr, adc->measured_data, sizeof(pwr->measured_data)); /* 或逐字段赋值 */
-    s_slot[SLOT_POWER].pIn->info.status |= ST_NEW;
-}
-```
+- **InputCallback 是数据入口单点**: INPUT_GET_SLOT 直穿赋值, 零拷贝
+- **OutputCallback 是例外**: 仅即时场景（蜂鸣器反馈等）使用, 一般不用
 
 ---
 
@@ -284,7 +445,7 @@ rm src/{layer}/{module}_v1.c.bak
 
 ### 8.2 迁移步骤 (搬入功能后)
 
-1. `#include "core/std_module.h"` 替换手动声明的 `g_in`/`g_out`
+1. `#include "std_module.h"` 替换手动声明的 `g_in`/`g_out`
 2. `MODULE_SKELETON(name)` 替换手动 `Constructor()`/`DoWork()` 骨架
 3. `Init()` 绑定 `g_input.para` / `g_output.para`
 4. `ProcessInput()` 搬入原 `DoWork()` 的三段式逻辑
@@ -295,11 +456,121 @@ rm src/{layer}/{module}_v1.c.bak
 ### 8.3 验证
 
 ```bash
-python tools/check_paradigm.py .   # MODULE_SKELETON + MODULE_EXPORT 配对
-python tools/check_output_callback.py .  # 无未批准的 _onOutput/ST_OUT
-python tools/check_deps.py .       # 层依赖
+python ../.claude/tools/check_paradigm.py .   # MODULE_SKELETON + MODULE_EXPORT 配对
+python ../.claude/tools/check_output_callback.py .  # 无未批准的 _onOutput/ST_OUT
+python ../.claude/tools/check_deps.py .       # 层依赖
 ```
 
 ---
 
-*方法论版本: v2.2, 2026-06-06*
+## 九、v2.3 新增: ISR 实时通路 (PendSV)
+
+### 9.1 编译开关
+
+```c
+#define STD_MODULE_ENABLE_ISR  1     // .c 文件顶部，包含 std_module.h 之前
+#include "std_module.h"
+```
+
+默认 `STD_MODULE_ENABLE_ISR=0`，宏展开与 v2.2 完全一致，零开销。
+
+### 9.2 ISR 模块骨架变化
+
+ISR=1 时 `MODULE_SKELETON` 额外生成：
+- `g_isr_input` / `g_isr_output` — 独立槽位，不与主循环冲突
+- `ISR_ProcessInput()` — 模块实现
+- `{Module}_ISR_InputCallback()` / `{Module}_ISR_OutputCallback()` — weak 空壳
+- `ISR_DoWork()` — PendSV 入口（`!g_init_done` 时跳过，不负责初始化）
+- `g_isr_busy` — 重入保护
+
+### 9.3 ISR 模块标准结构
+
+```c
+#define STD_MODULE_ENABLE_ISR  1
+#include "std_module.h"
+#include "pendsv_switcher.h"      /* g_isr_source, ISR_SOURCE_* */
+#include <string.h>
+
+/* ---- 数据结构 ---- */
+typedef struct { /* ... */ } MODULE_INPUT(MyISR);
+typedef struct { /* ... */ } MODULE_OUTPUT(MyISR);
+static MyISR_Input  s_in;
+static MyISR_Output s_out;
+
+MODULE_SKELETON(MyISR);
+
+static void Init(void) {
+    memset(&s_in,  0, sizeof(s_in));
+    memset(&s_out, 0, sizeof(s_out));
+    g_input.para       = &s_in;     /* 主循环通路 */
+    g_output.para      = &s_out;
+    g_isr_input.para   = &s_in;     /* ISR 通路 */
+    g_isr_output.para  = &s_out;
+}
+
+/* ---- ISR 三段式 (PendSV 中执行) ---- */
+static void ISR_ProcessInput(void) {
+    MyISR_Input  *in  = (MyISR_Input  *)g_isr_input.para;
+    MyISR_Output *out = (MyISR_Output *)g_isr_output.para;
+    /* 输入段: 收集数据 */
+    /* 计算段: 根据 g_isr_source 区分处理 */
+    /* 输出段: 置 ST_OUT */
+}
+
+/* ---- 主循环三段式 (可选, 无 ISR 需求可留空) ---- */
+static void ProcessInput(void) { }
+
+/* ---- 导出 (同时生成 GetIO + GetISR_IO) ---- */
+MODULE_EXPORT(MyISR);
+```
+
+### 9.4 PendSV 路由
+
+**data_switcher.c**（主循环调度）不变，只注册 `GetIO`。
+
+**pendsv_switcher.c**（ISR 通路调度）单独注册 `GetISR_IO`：
+
+```c
+#if STD_MODULE_ENABLE_ISR
+#include "pendsv_switcher.h"
+
+void Switcher_Init_ISR(void) {
+    Switcher_PendSV_Init();
+
+    Para_Grp_t *pIn, *pOut;
+    void (*pISR_DoWork)(void);
+    MyISR_GetISR_IO(&pIn, &pOut, &pISR_DoWork);
+    Switcher_RegisterISRModule(pISR_DoWork);
+    /* ... 更多 ISR 模块 */
+}
+#endif
+```
+
+### 9.5 ISR 触发 (isr_triggers.c)
+
+```c
+void ADC_IRQHandler(void) {
+    /* 清标志 */
+    Switcher_TriggerPendSV(ISR_SOURCE_ADC);
+}
+
+void TIM1_IRQHandler(void) {
+    /* 清标志 */
+    Switcher_TriggerPendSV(ISR_SOURCE_TIMER);
+}
+```
+
+ISR 只做两件事: 清标志 + `Switcher_TriggerPendSV`。所有业务逻辑移到 PendSV_Handler 中。
+
+### 9.6 设计约束
+
+| 规则 | 原因 |
+|------|------|
+| ISR 通路不负责初始化 | `ISR_DoWork` 在 `!g_init_done` 时返回，避免与主循环竞态 |
+| 主循环和 ISR 数据独立 | `g_input`/`g_output` 与 `g_isr_input`/`g_isr_output` 分开，无需锁 |
+| PendSV 优先级最低 | 在所有 ISR 完成后才执行，天然不嵌套 |
+| 一个模块的 ISR 和主循环可共享同一结构体 | Init 中 `g_input.para = g_isr_input.para` 自选 |
+
+---
+
+*方法论版本: v2.3, 2026-06-10*

@@ -50,7 +50,8 @@
 | C4 | `07-struct-generation.md` | 5 min | 跨模块结构体怎么一致性管理？ |
 | C5 | `08-data-switcher.md` | 4 min | 结构化数据怎么路由？Switcher 怎么接线？ |
 | C6 | `09-std-module.md` | 6 min | **v2.1 核心**: `MODULE_SKELETON` + `MODULE_EXPORT` — 骨架宏就是范式 |
-| C7 | `core/std_module.h` (项目内) | 3 min | 宏定义源码参考 |
+| C7 | `10-data-contract.md` | 4 min | 数据交互说明书：编码前对齐模块 I/O，指针直传 |
+| C8 | `core/std_module.h` (项目内) | 3 min | 宏定义源码参考 |
 
 ### HMI/UI 扩展（灯板等 JSON 驱动项目，+16 分钟）
 
@@ -84,8 +85,8 @@
    - `code-style.md` — 代码规范
 4. 复制 `templates/structs.json` 到 `cfg/structs.json` — 跨模块结构体数据源
 5. 配置 `tools/check_deps.py` 的层规则（如层名不同则修改）
-6. 运行 `python tools/check_deps.py --self-test`
-7. 运行 `python tools/generate_structs.py --check` — 验证结构体生成工具链
+6. 运行 `python ../.claude/tools/check_deps.py --self-test`
+7. 运行 `python ../.claude/tools/generate_structs.py --check` — 验证结构体生成工具链
 
 ### 阶段 1: JSON 规则 + JS 引擎 `[HMI]`
 1. 定义 JSON Schema（global/zone/process/actions/elements/patterns）
@@ -100,9 +101,16 @@
 
 ### 阶段 2.5: 结构体注册 + 生成 `[通用]`
 1. 编辑 `cfg/structs.json` — 定义所有跨模块结构体（参照 `07-struct-generation.md`）
-2. 运行 `python tools/generate_structs.py` — 生成各模块 `types.h`
-3. 运行 `python tools/check_structs.py` — 验证一致性
+2. 运行 `python ../.claude/tools/generate_structs.py` — 生成各模块 `types.h`
+3. 运行 `python ../.claude/tools/check_structs.py` — 验证一致性
 4. **门禁**: `check_structs.py` PASS + `types.h` 已生成
+
+### 阶段 2.7: 数据交互说明书 `[通用]`
+在模块分解前，先创建 `docs/data-contract.md`：
+1. 列出所有模块及其数据依赖
+2. 对齐每条数据流的 I/O 结构体（生产者输出 ≡ 消费者输入）
+3. 确保模块组内全部指针直传
+4. **门禁**: 每条数据流的结构体对齐已确认，不需要字段级复制
 
 ### 阶段 3: 单体 C 引擎 + 黄金输出录制 `[HMI]`
 1. 在单一 `app_hmi.c` 中实现完整状态机
@@ -136,16 +144,16 @@
 ### 通用（所有项目）
 
 ```bash
-python tools/check_deps.py         # 层依赖审计 → 必须 0 violations
-python tools/check_weak_pairs.py   # __weak 配对一致性 → 必须 0 violations
-python tools/check_structs.py      # 结构体一致性 → 必须 PASS
+python ../.claude/tools/check_deps.py         # 层依赖审计 → 必须 0 violations
+python ../.claude/tools/check_weak_pairs.py   # __weak 配对一致性 → 必须 0 violations
+python ../.claude/tools/check_structs.py      # 结构体一致性 → 必须 PASS
 armcc -c ... → 0 error, 0 warning  # 独立编译 (含 L0 头文件私有化验证)
 ```
 
 ### 数据交换机项目附加
 
 ```bash
-python tools/check_include.py      # _io.h 全路径 include 权限 → 必须 0 violations
+python ../.claude/tools/check_include.py      # _io.h 全路径 include 权限 → 必须 0 violations
 ```
 
 ### HMI/灯板项目附加

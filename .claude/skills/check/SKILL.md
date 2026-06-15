@@ -38,8 +38,8 @@ If unable to detect, ask the user which project and where the tools are.
 python <tools_dir>/check_deps.py <project_dir> [--project <name>]
 ```
 
-- four_head: `python ../methodology-seed-v2.0/tools/check_deps.py . --project four_head`
-- m4_ekf_observer: `python ../methodology-seed-v2.0/tools/check_deps.py . --project m4-ekf`
+- four_head: `python ../.claude/tools/check_deps.py . --project four_head`
+- m4_ekf_observer: `python ../.claude/tools/check_deps.py . --project m4-ekf`
 
 **Report format:**
 ```
@@ -65,8 +65,8 @@ Parse the script's stdout/stderr. Non-zero exit = `[FAIL]`.
 python <tools_dir>/check_weak_pairs.py <project_dir> [--project <name>]
 ```
 
-- four_head: `python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project four_head`
-- m4_ekf_observer: `python ../methodology-seed-v2.0/tools/check_weak_pairs.py . --project m4-ekf`
+- four_head: `python ../.claude/tools/check_weak_pairs.py . --project four_head`
+- m4_ekf_observer: `python ../.claude/tools/check_weak_pairs.py . --project m4-ekf`
 
 **Report format:**
 ```
@@ -236,6 +236,8 @@ If the user says `--quick` or "快速检查" or "quick check", skip the compile 
 - [ ] APP 层不 include DRV/HAL？
 - [ ] 在 git reset 前 stash 或建备份分支？
 - [ ] 中文注释说明复杂逻辑？
+- [ ] 任何 `.h` 不 `#include` 其他模块的 `.h`（头文件自治规则）？
+- [ ] 跨模块数据路由只通过 Switcher？（非 Switcher.c 不 include 其他模块 `_io.h`，检测到阻断）
 
 ---
 

@@ -24,6 +24,19 @@
 
 ## 二、编码：新增模块
 
+### 步骤 0: 数据契约 (先于编码)
+
+新增模块前，先在项目 `docs/data-contract.md` 中定义数据交互说明书：
+
+| 产出 | 说明 |
+|------|------|
+| 模块清单 | 新模块的名称、层、输入来源、输出去向 |
+| I/O 结构体对齐 | 与上下游模块对齐输入输出结构体，确保可指针直传 |
+| 组内数据流 | 如属模块组，组内全部指针直传，不外溢 |
+| 数据流图 | 文本链路图，标注每条数据流的 memcpy 关系 |
+
+详见 `10-data-contract.md`。数据契约定稿后再进入 `/new-module` 向导。
+
 ```
 /new-module
 ```
@@ -44,6 +57,10 @@
 ---
 
 ## 三、修改：重构现有模块
+
+### 步骤 0: 检查数据契约
+
+修改前，检查模块 I/O 是否在 `docs/data-contract.md` 中有定义。如有，同步更新数据契约中的结构体对齐信息。**先更新数据契约，再改代码。**
 
 ```
 /modify-module
@@ -192,6 +209,7 @@ git commit -m "feat: add pot_detect module"
 | `07-struct-generation.md` | structs.json → types.h 生成流程 | 通用 |
 | `08-data-switcher.md` | 数据交换机：GetIO/DoWork/状态字协议 | Switcher 项目 |
 | `09-std-module.md` | std_module.h：MODULE_SKELETON + MODULE_EXPORT + Para_Grp_t | **v2.1 核心** |
+| `10-data-contract.md` | 数据交互说明书：模块 I/O 显式对齐与指针直传 | 通用 |
 | `03-dual-engine.md` | JS/C 双引擎同源检测 | HMI 项目 |
 | `04-golden-output.md` | 黄金输出录制 + 模块分解验证 | HMI 项目 |
 | `06-json-driven.md` | JSON 三层驱动架构 | HMI 项目 |
