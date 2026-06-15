@@ -39,7 +39,7 @@ APP↔APP: 只通过 __weak 回调通信，禁止直接 include 或调用
 ```
 
 **每次编码前**: 确认你编辑的文件在哪个层 → 查依赖规则 → 违规即停止。
-**每次编码后**: 运行 `python tools/check_deps.py` → 不通过即修复。
+**每次编码后**: 运行 `python ../.claude/tools/check_deps.py` → 不通过即修复。
 
 ### 铁律二：JSON 覆盖逻辑
 **JSON 是规则权威数据源。JS 先行验证，C 跟随实现。**
@@ -102,8 +102,8 @@ Presentation Controls ← SlotElement/LEDElement/BlinkRule/ModeRule
 ## 提交前强制检查 (每次编码后必做)
 
 ```bash
-python tools/check_deps.py           # 层依赖审计 → 0 violations
-python tools/check_weak_pairs.py     # __weak 配对一致性 → 0 violations
+python ../.claude/tools/check_deps.py           # 层依赖审计 → 0 violations
+python ../.claude/tools/check_weak_pairs.py     # __weak 配对一致性 → 0 violations
 armcc -c ... → 0 error, 0 warning    # 独立编译
 node test_wasm_basic.js               # 双引擎对比 → 100% PASS (HMI变更时)
 ```

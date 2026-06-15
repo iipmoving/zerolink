@@ -22,6 +22,129 @@ user-invocable: true
 
 ---
 
+## 核心宏定义说明（**执行前必须理解**）
+
+### 前置检查：查看标准宏定义
+
+在开始改造前，**必须**先执行以下命令，理解框架层宏的实际定义：
+
+```bash
+# 查看 MODULE_SKELETON 定义
+grep -A 40 "#define MODULE_SKELETON" core/std_module*.h
+
+# 查看 MODULE_EXPORT 定义
+grep -A 15 "#define MODULE_EXPORT" core/std_module*.h
+
+# 查看 MODULE_IO_H 定义
+grep -A 10 "#define MODULE_IO_H" core/std_module*.h
+```
+
+### 宏结构详解
+
+#### 1. MODULE_SKELETON(name)
+
+**作用**：生成模块的框架层骨架，包括输入输出容器、构造函数和调度入口。
+
+**展开内容**（以 `MODULE_SKELETON(Calculator)` 为例）：
+
+```c
+// 生成的静态全局变量
+static Para_Grp_t g_input;           // 输入容器
+static Para_Grp_t g_output;          // 输出容器
+static uint8_t    g_init_done = 0;   // 初始化标志
+
+// 声明需要模块实现的函数
+static void Init(void);              // 用户实现：初始化 + 绑定数据缓冲区
+static void ProcessInput(void);      // 用户实现：业务逻辑
+
+// Weak 回调函数（中间层可覆盖）
+__attribute__((weak)) void Calculator_InputCallback(void) { }
+__attribute__((weak)) void Calculator_OutputCallback(Para_Grp_t *pOut) { (void)pOut; }
+__attribute__((weak)) void Calculator_OnISR(void) { }
+
+// 构造函数（首次 DoWork 时调用）
+static void Constructor(void) {
+    memset(&g_input,  0, sizeof(g_input));
+    memset(&g_output, 0, sizeof(g_output));
+    g_init_done = 0;
+    Init();                          // 调用用户实现的初始化
+    g_output.info.status |= ST_INIT;
+}
+
+// 调度入口（Switcher 调用）
+static void DoWork(void) {
+    if (!g_init_done) { Constructor(); g_init_done = 1; }
+    Calculator_InputCallback();      // ① 输入拉取（中间层覆盖）
+    ProcessInput();                  // ② 消费→计算→产出
+    if ((g_output.info.status & ST_OUT)) {
+        Calculator_OutputCallback(&g_output);  // ③ 紧急输出
+        g_output.info.status &= ~ST_OUT;
+    }
+}
+```
+
+#### 2. MODULE_EXPORT(module_name)
+
+**作用**：生成模块注册入口函数，供 Switcher 获取模块的输入输出指针和调度函数。
+
+**展开内容**（以 `MODULE_EXPORT(Calculator)` 为例）：
+
+```c
+void Calculator_GetIO(Para_Grp_t **ppIn,
+                     Para_Grp_t **ppOut,
+                     void      (**ppDoWork)(void)) {
+    *ppIn     = &g_input;    // 返回输入容器指针
+    *ppOut    = &g_output;   // 返回输出容器指针
+    *ppDoWork = DoWork;      // 返回调度入口函数
+}
+```
+
+#### 3. MODULE_IO_H(module_name)
+
+**作用**：在 `.h` 文件中声明 GetIO 函数签名，供其他模块引用。
+
+**展开内容**（以 `MODULE_IO_H(Calculator)` 为例）：
+
+```c
+void Calculator_GetIO(Para_Grp_t **ppIn,
+                     Para_Grp_t **ppOut,
+                     void      (**ppDoWork)(void));
+```
+
+### 数据结构层次
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    框架层（由 MODULE_SKELETON 生成）          │
+│  ┌─────────────┐      ┌─────────────┐                     │
+│  │ Para_Grp_t  │      │ Para_Grp_t  │                     │
+│  │   g_input   │      │   g_output  │                     │
+│  │ .info       │      │ .info       │ ← 状态 + 路由信息     │
+│  │ .para  ─────┼──────┼──→ .para    │ ← 指向业务数据缓冲区   │
+│  └─────────────┘      └─────────────┘                     │
+│           │                     │                          │
+│           ▼                     ▼                          │
+├──────────┴─────────────────────┴───────────────────────────┤
+│                    业务层（模块私有）                        │
+│  ┌─────────────────────┐  ┌─────────────────────┐          │
+│  │ Calculator_Input_t  │  │ Calculator_Output_t │          │
+│  │      s_inPara       │  │      s_outPara      │          │
+│  │ (模块私有数据缓冲区) │  │ (模块私有数据缓冲区) │          │
+│  └─────────────────────┘  └─────────────────────┘          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 宏使用规则（**禁止违反**）
+
+| 规则 | 说明 | 违反后果 |
+|------|------|----------|
+| **不要重定义宏** | `MODULE_SKELETON`/`MODULE_EXPORT`/`MODULE_IO_H` 已在 `core/std_module.h` 中定义 | 编译错误或链接冲突 |
+| **不要直接声明 `g_input/g_output`** | 由 `MODULE_SKELETON` 自动生成 | 重复定义错误 |
+| **不要直接写 `GetIO` 函数** | 由 `MODULE_EXPORT` 自动生成 | 重复定义错误 |
+| **必须在 `Init()` 中绑定 `.para`** | `g_input.para = &s_inPara; g_output.para = &s_outPara;` | 空指针访问 |
+
+---
+
 ## Step 1: 找入口 — 识别模块的所有外部调用点
 
 ```bash

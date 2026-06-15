@@ -6,71 +6,11 @@ user-invocable: true
 
 # /new-module — 模块创建向导
 
-创建符合 v2.2 架构的新模块（`std_module.h` PULL 模式）。
+创建符合 v2.3 架构的新模块（`std_module.h` PULL 模式）。支持可选的 ISR 实时通路。
 
-**核心**: `core/std_module.h` — **模块的骨架宏就是范式**
+**核心**: `std_module.h` — **模块的骨架宏就是范式**
 
-**数据流向管理**: `data_flow_table.json` — 统一维护模块间数据流向
-
----
-
-## 前置步骤：数据流向表规划
-
-### 0.1 数据流向表格式
-
-项目根目录下的 `data_flow_table.json` 用于维护所有模块的输入输出关系：
-
-```json
-{
-  "project": "four_head",
-  "version": "2.2",
-  "modules": [
-    {
-      "name": "app_power",
-      "layer": "app",
-      "inputs": [
-        {"source": "app_adc", "slot": "SLOT_APP_ADC", "fields": ["current", "voltage"]},
-        {"source": "app_comm", "slot": "SLOT_APP_COMM", "fields": ["target_power"]}
-      ],
-      "outputs": [
-        {"target": "app_display", "slot": "SLOT_APP_DISPLAY", "fields": ["ppg_delta"]}
-      ]
-    }
-  ]
-}
-```
-
-### 0.2 数据流向管理工具
-
-```bash
-# 初始化数据流向表
-python tools/data_flow_manager.py init <project_name>
-
-# 添加模块及其输入输出
-python tools/data_flow_manager.py add app_power --layer app \
-    --input app_adc --input app_comm \
-    --output app_display
-
-# 验证数据流向一致性（层依赖、循环依赖等）
-python tools/data_flow_manager.py validate
-
-# 生成代码
-python tools/data_flow_manager.py generate link      # 生成 Link 函数
-python tools/data_flow_manager.py generate switcher  # 生成 Switcher 注册
-python tools/data_flow_manager.py generate io --module app_power  # 生成 IO 头文件
-
-# 查看数据流向表
-python tools/data_flow_manager.py print
-```
-
-### 0.3 验证规则
-
-| 规则 | 说明 |
-|------|------|
-| 输入来源必须存在 | 禁止引用未定义的模块 |
-| 输出目标必须存在 | 禁止输出到未定义的模块 |
-| 层依赖顺序 | core → proto → hal → drv → app（上层可依赖下层，反之禁止） |
-| 无循环依赖 | A→B→C→A 是非法的 |
+> v2.3 新增: ISR 模块可选。在文件顶部加 `#define STD_MODULE_ENABLE_ISR 1` 启用 ISR 通路。
 
 ---
 
@@ -80,111 +20,103 @@ python tools/data_flow_manager.py print
 1. 模块名称？(snake_case，如 "power_ctrl")
 2. 所属层？(app | drv | hal | proto | core)
 3. 接收哪些模块的数据？(列出生产者模块名)
-4. 输出给哪些模块？(列出消费者模块名)
 ```
 
 ---
 
-## Step 2: I/O 接口设计（xxx_io.h）
+## Step 1.5: 数据契约 — I/O 对齐检查
 
-### 2.1 三层分离原则
+在生成代码前，先检查数据交互说明书：
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  框架层 (std_module.h)                                  │
-│  Para_Grp_t { Info_Header info; void *para; }        │
-│  → g_input / g_output 容器（status/route 在这层）     │
-└─────────────────────────────────────────────────────────┘
-                         ↑ para 指针绑定
-┌─────────────────────────────────────────────────────────┐
-│  接口层 (xxx_io.h) — 纯业务数据，不含框架字段          │
-│  {Module}_Input_t  { 子结构体1; 子结构体2; }         │
-│  {Module}_Output_t { ... }                             │
-└─────────────────────────────────────────────────────────┘
-                         ↑ Link 函数搬运
-┌─────────────────────────────────────────────────────────┐
-│  实现层 (xxx.c)                                         │
-│  static {Module}_Input_t  s_in;                        │
-│  static {Module}_Output_t s_out;                       │
-│  g_input.para  = &s_in;                                │
-│  g_output.para = &s_out;                              │
-└─────────────────────────────────────────────────────────┘
+1. 项目根目录是否有 `docs/data-contract.md`？
+   ├─ 有 → 检查新模块的 I/O 结构体是否已在其中定义
+   └─ 无 → 创建 `docs/data-contract.md`，参照 `methodology-seed/10-data-contract.md`
+
+2. 本模块的输入结构体与上游生产者输出结构体是否布局一致？
+   ├─ 是 → InputCallback 用指针直穿（生产者 LINK 地址赋给消费者输入指针，零拷贝）
+   └─ 否 → 与生产者对齐字段顺序/类型/大小，或说明理由
+
+3. 本模块的输出结构体与下游消费者输入结构体是否布局一致？
+   ├─ 是 → 消费者 InputCallback 可用指针直穿
+   └─ 否 → 与消费者对齐
+
+4. 本模块是否属于某模块组？
+   ├─ 是 → 组内数据流必须全部指针直传，不外溢
+   └─ 否 → 跳过
 ```
 
-### 2.2 命名规范（宏模板）
+**🚫 强制约束：头文件自治规则**
 
-| 类型 | 宏模板 | 示例 |
-|------|--------|------|
-| 输入类型 | `{M}_Input_t` | `AppPower_Input_t` |
-| 输出类型 | `{M}_Output_t` | `AppPower_Output_t` |
-| 头文件宏 | `{M}_IO_H` | `APP_POWER_IO_H` |
-| Link 函数 | `{Src}_to_{Dst}_Link` | `Adc_to_Power_Link` |
-| Consumer 回调 | `{Dst}_On{Src}Data` | `Power_OnAdcData` |
-| 槽位枚举 | `SLOT_{M}` | `SLOT_APP_POWER` |
+任何模块的 `.h` 文件（包括 `_io.h` 和普通 `.h`）**不得 `#include` 其他模块的 `.h`**。
 
-### 2.3 xxx_io.h 标准模板
+| 文件类型 | 允许 include | 禁止 include |
+|---------|-------------|-------------|
+| `_io.h` | `<stdint.h>` `"std_module.h"` 等系统/框架头 | 任何其他模块的 `_io.h` 或 `.h` |
+| 普通 `.h` | `<stdint.h>` `"std_module.h"` 等系统/框架头 | 任何其他模块的 `.h` |
 
-```c
-/**
- * @file    {module}_io.h
- * @brief   {Module} Data Switcher IO interface
- * @layer   {layer} (Data Switcher IO)
- *
- * 本文件定义 {Module} 模块对外暴露的输入/输出接口。
- * 每个输入源独立子结构体 — 通过 Link 函数注入。
- */
-#ifndef {MODULE}_IO_H
-#define {MODULE}_IO_H
+需要引用其他模块的数据类型时：在自己 `_io.h` 中自包含定义输入结构体，布局与生产者输出兼容。InputCallback 用指针直穿，不依赖对方的类型定义。
 
-#include <stdint.h>
-#include "std_module.h"    /* 仅用于 Para_Grp_t 前置声明 */
-
-/* ---- 输入: 每个数据源一个子结构体 ---- */
-typedef struct {
-    /* 数据源A字段 */
-    uint16_t valueA;
-    uint32_t valueB;
-} {Module}_FromSourceA_t;
-
-typedef struct {
-    /* 数据源B字段 */
-    uint8_t flag;
-} {Module}_FromSourceB_t;
-
-typedef struct {
-    {Module}_FromSourceA_t fromA;   /* → SourceA 模块 */
-    {Module}_FromSourceB_t fromB;   /* → SourceB 模块 */
-} {Module}_Input_t;
-
-/* ---- 输出 ---- */
-typedef struct {
-    uint8_t  has_output;
-    uint8_t  res[3];
-    uint16_t result;
-} {Module}_Output_t;
-
-/* ---- v2.2 统一接口宏 ---- */
-MODULE_IO_H({Module});
-
-#endif
-```
-
-**⚠️ 禁止在 xxx_io.h 中声明 status/res 字段！框架字段在 Para_Grp_t 中。**
+数据契约定稿后，再继续生成代码模板。
 
 ---
 
-## Step 3: 创建模板
+## Step 1.6: 核心概念 — 管道配对 (PIPE PAIRING)
 
-### 3.1 创建 xxx_io.h
+**这是整个 PULL 范式最核心的模式。**
+
+```
+消费者向生产者注册一个管道，双方用同一套结构体布局，
+但用 MODULE_OUTPUT_LINK / MODULE_INPUT_LINK 宏分别声明，
+两个结构在模块双方独立声明，通过中间层 (data_switcher.c) 连接。
+```
+
+### 管道配对规则
+
+```
+Producer (输出方)                                Consumer (输入方)
+─────────────────────────────                    ─────────────────────────────
+MODULE_OUTPUT_PARAMS(Producer, Consumer)           MODULE_INPUT_PARAMS(Producer, Consumer)
+  └── 字段布局: { field1, field2, ... }              └── 字段布局: 完全一致
+                                                    (自包含, 不引用 producer 类型)
+
+MODULE_OUTPUT_LINK(Producer, Consumer)              MODULE_INPUT_LINK(Producer, Consumer)
+  └── status + params[] 实例                         └── status + params[] 实例
+                                                    (自包含, 布局与 OUTPUT_LINK 一致)
+
+MODULE_OUTPUT(Producer)                             MODULE_INPUT(Consumer)
+  └── MODULE_OUTPUT_LINK {Consumer}_params (实例)    └── MODULE_INPUT_LINK* {Producer}_params (指针)
+                                                          ↑ InputCallback 直穿赋值
+```
+
+### 关键约束
+
+| 规则 | 说明 |
+|------|------|
+| 自包含 | Consumer 的 `_io.h` 定义自己的 INPUT_PARAMS / INPUT_LINK，不 `#include` Producer 的任何头文件 |
+| 布局一致 | INPUT_PARAMS 的字段顺序/类型/大小与 OUTPUT_PARAMS 完全相同 |
+| 宏不展开 | 类型定义必须用 `MODULE_INPUT_PARAMS(...)` / `MODULE_OUTPUT_LINK(...)` 宏，不得写展开后的名字 |
+| void* 直穿 | InputCallback 用 `(void*)` 将 producer OUTPUT_LINK 地址赋给 consumer INPUT_LINK 指针 |
+| 实例 vs 指针 | OUTPUT_LINK 在 producer 端是实例 ({Consumer}_params)，INPUT_LINK 在 consumer 端是指针 (*{Producer}_params) |
+
+---
+
+## Step 2: 创建模板
+
+### 2.1 IO 头文件 `include/{module}_io.h`
 
 ```c
 /**
  * @file    {module}_io.h
- * @brief   {Module} Data Switcher IO interface
- * @layer   {layer} (Data Switcher IO)
+ * @brief   {Module} I/O (v2.3 LINK+PARAMS)
+ * @layer   {layer}
  *
- * 本文件定义 {Module} 模块对外暴露的输入/输出接口。
- * 每个输入源独立子结构体 — 通过 Link 函数注入。
+ * 输入: ProducerA (来自谁)
+ * 输出: ConsumerB (发给谁)
+ *
+ * 管道配对命名:
+ *   MODULE_OUTPUT_LINK(Producer, {Module})   → out->{Module}_params    (Producer 的 io.h)
+ *   MODULE_INPUT_LINK(Producer, {Module})    → in->{Producer}_params   (本文件声明)
  */
 #ifndef {MODULE}_IO_H
 #define {MODULE}_IO_H
@@ -192,36 +124,58 @@ MODULE_IO_H({Module});
 #include <stdint.h>
 #include "std_module.h"
 
-/* ---- 输入: 每个数据源一个子结构体 ---- */
-typedef struct {
-    /* TODO: 添加 {SourceA} 字段 */
-    uint16_t valueA;
-} {Module}_From{SourceA}_t;
+#define {MODULE}_POTMAX  4
 
-typedef struct {
-    /* TODO: 添加 {SourceB} 字段 */
-    uint8_t flag;
-} {Module}_From{SourceB}_t;
+/* ========== 输入 — 从 ProducerA 接收的数据 (自包含) ========== */
 
+/* 数据参数: 布局与 MODULE_OUTPUT_PARAMS(ProducerA, {Module}) 一致 */
 typedef struct {
-    {Module}_From{SourceA}_t from{SourceA};   /* → {SourceA} 模块 */
-    {Module}_From{SourceB}_t from{SourceB};   /* → {SourceB} 模块 */
-} {Module}_Input_t;
-
-/* ---- 输出 ---- */
-typedef struct {
-    uint8_t  has_output;
+    uint16_t field1;
+    uint16_t field2;
+    uint8_t  valid;
     uint8_t  res[3];
-    uint16_t result;
-} {Module}_Output_t;
+} MODULE_INPUT_PARAMS(ProducerA, {Module});
 
-/* ---- v2.2 统一接口宏 ---- */
+/* 输入管道: 与 MODULE_OUTPUT_LINK(ProducerA, {Module}) 配对 */
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    MODULE_INPUT_PARAMS(ProducerA, {Module}) params[{MODULE}_POTMAX];
+} MODULE_INPUT_LINK(ProducerA, {Module});
+
+/* 输入聚合: InputCallback 直穿赋值 {Producer}_params 指针 */
+typedef struct {
+    MODULE_INPUT_LINK(ProducerA, {Module})* {ProducerA}_params;  /* ← 以生产者命名 */
+} MODULE_INPUT({Module});
+
+/* ========== 输出 — 发给 ConsumerB 的数据 ========== */
+
+/* 数据参数 */
+typedef struct {
+    uint16_t result;
+    uint8_t  valid;
+    uint8_t  res[5];
+} MODULE_OUTPUT_PARAMS({Module}, ConsumerB);
+
+/* 输出管道: 与 MODULE_INPUT_LINK({Module}, ConsumerB) 配对 */
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    MODULE_OUTPUT_PARAMS({Module}, ConsumerB) params[{MODULE}_POTMAX];
+} MODULE_OUTPUT_LINK({Module}, ConsumerB);
+
+/* 输出聚合 */
+typedef struct {
+    MODULE_OUTPUT_LINK({Module}, ConsumerB)  {ConsumerB}_params;  /* ← 以消费者命名 */
+} MODULE_OUTPUT({Module});
+
+/* ---- v2.3 统一接口 ---- */
 MODULE_IO_H({Module});
 
-#endif
+#endif /* {MODULE}_IO_H */
 ```
 
-### 3.2 创建 xxx.c
+### 2.2 源文件 `src/{layer}/{module}.c`
 
 ```c
 /**
@@ -229,32 +183,38 @@ MODULE_IO_H({Module});
  * @brief   一句话描述
  * @layer   {layer}
  *
- * 输入: {SourceA}(来自谁) + {SourceB}(来自谁)
- * 输出: ABC(发给谁)
+ * 输入: ProducerA (管道直穿)
+ * 输出: ConsumerB (管道直读)
  */
-#include "std_module.h"
-#include "{module}_io.h"
-#include "{module}.h"     /* 可选 — 私有 #define */
+#include "../include/{module}_io.h"
 #include <string.h>
 
-/* ---- 数据实体（模块私有）---- */
-static {Module}_Input_t   s_in;
-static {Module}_Output_t  s_out;
+/* ---- 数据结构实例 ---- */
+static {Module}_Input  s_in;    // MODULE_INPUT({Module})  展开
+static {Module}_Output s_out;   // MODULE_OUTPUT({Module}) 展开
 
 /* ---- 骨架 ---- */
 MODULE_SKELETON({Module});
 
-/* ---- 处理逻辑（每帧被调）---- */
+/* ---- 处理逻辑 (每帧被调) ---- */
 static void ProcessInput(void)
 {
-    if (g_input.info.status & ST_NEW) {
-        {Module}_Input_t *in = ({Module}_Input_t *)g_input.para;
-        /* 访问子结构体: in->from{SourceA}.valueA */
-        g_input.info.status &= ~ST_NEW;
-    }
+    {Module}_Input  *in  = ({Module}_Input *)g_input.para;
+    {Module}_Output *out = ({Module}_Output *)g_output.para;
 
-    {Module}_Output_t *out = ({Module}_Output_t *)g_output.para;
-    /* 写输出: out->result = ... */
+    if (!in->{ProducerA}_params) return;
+
+    /* ====== 输入段: 检查数据 LINK 的 status ====== */
+    if (!(in->{ProducerA}_params->status & ST_NEW)) return;
+    in->{ProducerA}_params->status &= ~ST_NEW;
+
+    /* 消费 in->{ProducerA}_params->params[h].field1 */
+
+    /* ====== 计算段 ====== */
+    out->{ConsumerB}_params.params[0].result = calc();
+
+    /* ====== 输出段: 置输出 LINK status ====== */
+    out->{ConsumerB}_params.status |= ST_OUT;
 }
 
 /* ---- 初始化 ---- */
@@ -262,89 +222,105 @@ static void Init(void)
 {
     memset(&s_in,  0, sizeof(s_in));
     memset(&s_out, 0, sizeof(s_out));
-    g_input.para   = &s_in;    /* 容器指向实体 */
-    g_output.para  = &s_out;
+    g_input.para  = &s_in;
+    g_output.para = &s_out;
 }
 
 /* ---- 导出 ---- */
 MODULE_EXPORT({Module});
 
-/* ---- Consumer 回调: Link 函数调用此函数 ---- */
-void {Module}_On{SourceA}Data(Para_Grp_t *pOut)
+/* ---- Consumer 回调: data_switcher.c 中覆盖强符号 (INPUT_CALLBACK 宏) ---- */
+INPUT_CALLBACK(ProducerA, {Module})
 {
-    {Module}_Input_t *in = ({Module}_Input_t *)g_input.para;
-    {Module}_From{SourceA}_t *src = ({Module}_From{SourceA}_t *)pOut->para;
-    
-    in->from{SourceA} = *src;
-    g_input.info.status |= ST_NEW;
-}
-
-void {Module}_On{SourceB}Data(Para_Grp_t *pOut)
-{
-    {Module}_Input_t *in = ({Module}_Input_t *)g_input.para;
-    {Module}_From{SourceB}_t *src = ({Module}_From{SourceB}_t *)pOut->para;
-    
-    in->from{SourceB} = *src;
-    g_input.info.status |= ST_NEW;
+    /* 指针直穿: 将生产者 OUTPUT_LINK 地址赋给消费者 INPUT_LINK 指针
+     * 两类型布局一致但 C 类型不同, 用 (void*) 跨类型转换, 零拷贝
+     * 展开后: in->ProducerA_params = (void*)&out->{Module}_params */
+    INPUT_GET_SLOT(ProducerA, {Module});
 }
 ```
+
+### 关键规则
+
+| 元素 | 规则 |
+|------|------|
+| `MODULE_SKELETON({Module})` | 文件顶部调用，展开 `g_input`/`g_output`/`Constructor`/`DoWork` |
+| `Init()` | 初始化 `s_in`/`s_out`，绑定 `g_input.para`/`g_output.para` |
+| `ProcessInput()` | 三段式：检查 ST_NEW → 消费输入 → 计算 → 写输出 |
+| `MODULE_EXPORT({Module})` | 文件底部调用，生成 `GetIO` (不生成 __weak OnOutput) |
+| `INPUT_CALLBACK(Producer, {Module})` + `INPUT_GET_SLOT(Producer, {Module})` | 每个数据源一个 consumer 回调，INPUT_CALLBACK 生成函数名，INPUT_GET_SLOT 指针直穿（将生产者 OUTPUT_LINK 地址赋给消费者 INPUT_LINK 指针，零拷贝）|
+
+### 状态位 (`core/std_module.h`)
+
+| 位 | 常量 | 含义 |
+|----|------|------|
+| bit0 | `ST_INIT (0x01)` | 已初始化（Constructor 置位） |
+| bit1 | `ST_NEW (0x02)` | 新输入到达（InputCallback 置位，ProcessInput 消费后自清） |
+| bit2 | `ST_OUT (0x04)` | 输出就绪（ProcessInput 输出段置位，Switcher 路由后消费） |
+
+### 数据层 status 规则 (v2.3)
+
+**status 位于数据 struct LINK 首字节**，不在 `Para_Grp_t` 包装层：
+
+| 层级 | status 位置 | 谁读写 | 用途 |
+|------|------------|--------|------|
+| 框架层 | `g_input.info.status` | Constructor/DoWork | ST_INIT 管理 |
+| 数据层 | `in->{Producer}_params->status` (单LINK) / `in->adc.status` (多LINK) | InputCallback/ProcessInput | ST_NEW/ST_OUT 数据流控制 |
+
+**ProcessInput 只读写数据层 status**，不碰 `g_input.info.status`。
+
+### route 分流 (info.route)
+
+consumer 的 ProcessInput 可通过 `g_input.info.route` 选择不同的执行路径：
+
+```c
+static void ProcessInput(void)
+{
+    switch (g_input.info.route) {
+    case 1: /* 路径A */ break;
+    case 2: /* 路径B — @OUTPUT_CALLBACK 即时触发 */ break;
+    }
+}
+```
+
+正常 PULL 路由无需 route，producer 不设 route = 0 即可。`@OUTPUT_CALLBACK` 例外场景下，producer 设 route 值指定 consumer 执行路径。
 
 ---
 
-## Step 4: Link 函数规范
+## Step 3: 注册到 Switcher
 
-### 4.1 标准模板
+### 3.1 Switcher 注册
 
+在 `src/core/data_switcher.h` 的槽位枚举中添加：
 ```c
-/* Link 函数: {SourceA} → {Module} */
-void {SourceA}_to_{Module}_Link(void)
-{
-    {SourceA}_Output_t *src = ({SourceA}_Output_t *)s_slot[SLOT_{SOURCEA}].pOut->para;
-    {Module}_Input_t   *dst = ({Module}_Input_t   *)s_slot[SLOT_{MODULE}].pIn->para;
-
-    dst->from{SourceA}.valueA = src->valueA;
-    dst->from{SourceA}.valueB = src->valueB;
-}
+    SLOT({Module}) = N,       // 在 SLOT(COUNT) 之前
 ```
-
-### 4.2 注册到 Switcher
 
 在 `src/core/data_switcher.c` 的 `Switcher_Init()` 添加：
+```c
+    SLOT_GETIO({Module});
+```
+
+### 3.2 Switcher 路由
+
+如果本模块是 **producer**，在 `Switcher_Run()` 中添加路由：
 
 ```c
-/* 模块注册 */
-{Module}_GetIO(&pIn, &pOut, &pDoWork);
-Switcher_Register(SLOT_{MODULE}, pDoWork, pOut);
-
-/* Link 注册 */
-Switcher_RegisterLink(SLOT_{SOURCEA}, SLOT_{MODULE}, {SourceA}_to_{Module}_Link);
-Switcher_RegisterLink(SLOT_{SOURCEB}, SLOT_{MODULE}, {SourceB}_to_{Module}_Link);
+/* {Module} DoWork 之后立即路由 */
+s_slot[SLOT({Module})].pDoWork();
+_route_{module}();  /* 检查 has_* 标志 → 调 consumer 回调 */
 ```
+
+如果本模块是 **consumer**，添加 consumer 回调并在路由函数中调用。
 
 ---
 
-## Step 5: 验证
+## Step 4: 验证
 
 ```bash
-python tools/check_io_convention.py {module}      # I/O 命名规范检查
-python tools/check_deps.py .                        # 层依赖检查
-python tools/check_include.py .                     # include 权限检查
+python ../.claude/tools/check_deps.py .
+python ../.claude/tools/check_include.py .
+python ../.claude/tools/check_output_callback.py .
 ```
-
----
-
-## 关键规则汇总
-
-| 规则 | 说明 |
-|------|------|
-| xxx_io.h 只含业务数据 | 禁止声明 status/res — 框架字段在 Para_Grp_t |
-| 每个输入源独立子结构体 | `from{SourceA}_t`, `from{SourceB}_t` |
-| Link 函数显式搬运 | 字段一一对应，不做隐式转换 |
-| Consumer 回调写 g_input.para | 写完置位 ST_NEW |
-| g_input.para 类型转换 | `(Module_Input_t *)g_input.para` |
-| g_output.para 类型转换 | `(Module_Output_t *)g_output.para` |
-
----
 
 ## @OUTPUT_CALLBACK 例外
 

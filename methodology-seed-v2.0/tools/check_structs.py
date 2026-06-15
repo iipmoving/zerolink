@@ -67,6 +67,10 @@ FIELD_RE = re.compile(
 # sizeof comment: } Name; /* sizeof=N [...comment...] */
 SIZEOF_RE = re.compile(r'\}\s*(\w+);\s*/\*\s*sizeof=(\d+)[^*]*\*/')
 
+# Naming convention: } Prefix_Input_t / Prefix_Output_t / Prefix_Link_t
+TYPEDEF_NAME_RE = re.compile(r'\}\s*(\w+?)_(Output_Link|Input|Output)\b')
+SAME_AS_RE = re.compile(r'/\*\s*same as\s+\S+\s*\*/')
+
 # Section markers
 IFACE_BEGIN_RE = re.compile(r'INTERFACE STRUCTS')
 IFACE_END_RE = re.compile(r'END INTERFACE STRUCTS')
@@ -189,6 +193,59 @@ def _is_nested_struct_match(consumer_type, owner_type, h_structs):
     # consumer's source should equal owner's name or owner's source
     return (cinfo['source'] == owner_type or
             cinfo['source'] == oinfo['source'])
+
+
+# ============================================================
+# 命名约定检查 — Input_Link / Output_Link 配对
+# ============================================================
+
+def check_naming_convention(project_dir, search_paths):
+    """检查 .h 文件中的 I/O 结构体命名约定.
+
+    规则:
+      - _Input / _Output 必须配对出现 (同模块前缀)
+      - _Output_Link 是数据列定义, 不参与配对
+    """
+    violations = []
+    modules = {}
+
+    for sp in search_paths:
+        base = os.path.join(project_dir, sp)
+        if not os.path.isdir(base):
+            continue
+        for root, dirs, files in os.walk(base):
+            for fname in files:
+                if not fname.endswith('.h'):
+                    continue
+                filepath = os.path.join(root, fname)
+                relpath = os.path.relpath(filepath, project_dir)
+
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+
+                for m in TYPEDEF_NAME_RE.finditer(content):
+                    prefix = m.group(1)
+                    suffix = m.group(2)
+                    if prefix not in modules:
+                        modules[prefix] = {}
+                    modules[prefix][suffix] = relpath
+
+    # Check: Input/Output pairing
+    for prefix, pair in modules.items():
+        if 'Input' not in pair:
+            violations.append({
+                'name': prefix,
+                'desc': (f'结构体 "{prefix}" 缺少 _Input 配对 '
+                         f'(仅 {pair.get("Output", "?")})'),
+            })
+        elif 'Output' not in pair:
+            violations.append({
+                'name': prefix,
+                'desc': (f'结构体 "{prefix}" 缺少 _Output 配对 '
+                         f'(仅 {pair.get("Input", "?")})'),
+            })
+
+    return violations
 
 
 def check_h_consistency(h_structs):
@@ -981,11 +1038,40 @@ typedef struct {
         return True
     t("@STRUCT .h 解析 (嵌套结构体)", test_parse_nested_struct)
 
+    # 16) 命名约定检查 — Input_Link / Output_Link 配对
+    def test_naming_convention_pairing():
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod_dir = os.path.join(tmpdir, 'src', 'app', 'test_mod')
+            os.makedirs(mod_dir)
+            h_file = os.path.join(mod_dir, 'test_mod.h')
+            with open(h_file, 'w', encoding='utf-8') as f:
+                f.write('typedef struct { uint16_t val; } Power_Input;\n')
+                # no Power_Output — should trigger violation
+            violations = check_naming_convention(tmpdir, ['src/app'])
+            assert len(violations) == 1
+            assert '缺少 _Output' in violations[0]['desc']
+        return True
+    t("命名约定 (缺少 _Output 配对)", test_naming_convention_pairing)
+
+    # 17) 命名约定检查 — 完整配对
+    def test_naming_convention_ok():
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod_dir = os.path.join(tmpdir, 'src', 'app', 'test_mod')
+            os.makedirs(mod_dir)
+            h_file = os.path.join(mod_dir, 'test_mod.h')
+            with open(h_file, 'w', encoding='utf-8') as f:
+                f.write('typedef struct { uint16_t val; } Power_Input;\n')
+                f.write('typedef struct { uint32_t result; } Power_Output;\n')
+            violations = check_naming_convention(tmpdir, ['src/app'])
+            assert len(violations) == 0, f"Expected 0 violations, got: {violations}"
+        return True
+    t("命名约定 (完整配对)", test_naming_convention_ok)
+
     if errors:
-        print(f"\n[FAIL] --self-test: {len(errors)}/15 项失败")
+        print(f"\n[FAIL] --self-test: {len(errors)}/17 项失败")
         sys.exit(1)
 
-    print(f"\n[PASS] --self-test 全部通过 (15/15)")
+    print(f"\n[PASS] --self-test 全部通过 (17/17)")
     return True
 
 
@@ -1203,6 +1289,21 @@ def main():
             else:
                 print(f"  [PASS] 所有 consumer 结构体与 owner 一致")
             print()
+
+    # ================================================================
+    # 通用检查: I/O 结构体命名约定 — Input/Output 配对 + Link 注解
+    # 在两种模式中都运行, 扫描所有 .h 文件
+    # ================================================================
+    print("--- 命名约定: I/O 结构体 ---")
+    naming_violations = check_naming_convention(project_dir, search_paths)
+    total_violations += len(naming_violations)
+    if naming_violations:
+        print(f"  [FAIL] {len(naming_violations)} 项命名约定违规:")
+        for v in naming_violations:
+            print(f"    - {v['desc']}")
+    else:
+        print("  [PASS] _Input / _Output 配对完整")
+    print()
 
     # ---- 汇总 ----
     if total_violations > 0:

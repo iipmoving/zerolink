@@ -17,6 +17,10 @@ gen_io_h.py — v2.3 LINK+PARAMS io.h 生成器
 import os
 import re
 
+# AI 块标记 (与 gen_module_c.py 一致)
+AI_BLOCK_BEGIN = "// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 ====="
+AI_BLOCK_END   = "// ===== [END AI GENERATED] ====="
+
 
 def _rel_include(io_dir: str, target_path: str, base_dir: str = None) -> str:
     """计算 io.h 中 #include 的相对路径
@@ -158,6 +162,10 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
         lines.append("")
         lines.append(f"#pragma pack({pack})")
 
+    # ===== AI 生成段开始 =====
+    lines.append("")
+    lines.append(AI_BLOCK_BEGIN)
+
     # ========== 模块专属类型 typedef (独立于管道) ==========
     if module.get("types"):
         for t in module["types"]:
@@ -281,6 +289,9 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
         lines.append(f"typedef struct {{")
         lines.append(f"    uint8_t  res[4];")
         lines.append(f"}} MODULE_INPUT({mod_name});")
+
+    # ===== AI 生成段结束 =====
+    lines.append(AI_BLOCK_END)
 
     # Unpack
     if pack:

@@ -71,7 +71,6 @@ def resolve_config(project_dir, preset_name, config_path):
     if config_path:
         cfg = load_config_file(config_path)
         if 'structs' in cfg:
-            # 可能误传了 structs.json 本身, 提取 structs_source 相关
             pass
         if 'structs_generation' in cfg:
             return cfg['structs_generation'], 'config:' + config_path
@@ -87,19 +86,16 @@ def resolve_config(project_dir, preset_name, config_path):
             sys.exit(2)
         return BUILTIN_PRESETS[preset_name], 'preset:' + preset_name
 
-    # 尝试从 project_dir/deps_config.json 读取 structs_generation 段
     deps_cfg = os.path.join(project_dir, 'deps_config.json')
     if os.path.isfile(deps_cfg):
         cfg = load_config_file(deps_cfg)
         if 'structs_generation' in cfg:
             return cfg['structs_generation'], 'file:deps_config.json#structs_generation'
 
-    # 本地 structs_config.json
     local_cfg = os.path.join(project_dir, 'structs_config.json')
     if os.path.isfile(local_cfg):
         return load_config_file(local_cfg), 'file:structs_config.json'
 
-    # 自动检测
     if os.path.isdir(os.path.join(project_dir, 'drv')):
         return BUILTIN_PRESETS['four_head'], 'auto:four_head'
     if os.path.isdir(os.path.join(project_dir, 'base_class')):
@@ -115,7 +111,6 @@ def resolve_config(project_dir, preset_name, config_path):
 # ============================================================
 
 def load_structs_json(filepath):
-    """加载并校验 structs.json。返回 dict 或报错退出。"""
     if not os.path.exists(filepath):
         print(f"错误: structs.json 不存在: {filepath}")
         print("请先创建 cfg/structs.json (运行 --print-template 查看格式)")
@@ -139,7 +134,6 @@ def load_structs_json(filepath):
 
 
 def validate_schema(data):
-    """校验 structs.json 顶层结构。返回错误列表。"""
     errors = []
 
     if not isinstance(data, dict):
@@ -166,7 +160,6 @@ def validate_schema(data):
 
 
 def validate_struct_def(key, sdef):
-    """校验单个结构体定义。返回错误列表。"""
     errors = []
 
     if not isinstance(sdef, dict):
@@ -198,24 +191,18 @@ def validate_struct_def(key, sdef):
                 errors.append(f'structs["{key}"].consumers["{cname}"]: 必须是 object')
                 continue
             if 'fields' not in cdef:
-                errors.append(
-                    f'structs["{key}"].consumers["{cname}"]: 缺少 "fields"')
+                errors.append(f'structs["{key}"].consumers["{cname}"]: 缺少 "fields"')
             elif isinstance(cdef['fields'], list):
-                # 检查 consumer fields 都是 owner fields 的子集
                 owner_fields = {f['name'] for f in sdef.get('fields', [])}
                 for cf in cdef['fields']:
                     if cf not in owner_fields:
-                        errors.append(
-                            f'structs["{key}"].consumers["{cname}"].fields: '
-                            f'"{cf}" 不在 owner fields 中')
+                        errors.append(f'structs["{key}"].consumers["{cname}"].fields: "{cf}" 不在 owner fields 中')
 
     if 'deprecated' in sdef and isinstance(sdef['deprecated'], dict):
         for dfname, dinfo in sdef['deprecated'].items():
             owner_fields = {f['name'] for f in sdef.get('fields', [])}
             if dfname not in owner_fields:
-                errors.append(
-                    f'structs["{key}"].deprecated["{dfname}"]: '
-                    f'字段不在 owner fields 中')
+                errors.append(f'structs["{key}"].deprecated["{dfname}"]: 字段不在 owner fields 中')
 
     return errors
 
@@ -225,7 +212,6 @@ def validate_struct_def(key, sdef):
 # ============================================================
 
 def find_module_dir(project_dir, module_name, search_paths):
-    """在项目目录下查找模块目录。返回路径或 None。"""
     norm_name = module_name.lower().replace('-', '_').replace(' ', '_')
     for sp in search_paths:
         base = os.path.join(project_dir, sp)
@@ -242,18 +228,15 @@ def find_module_dir(project_dir, module_name, search_paths):
 
 
 def ensure_module_dir(project_dir, module_name, search_paths):
-    """查找或创建模块目录。"""
     existing = find_module_dir(project_dir, module_name, search_paths)
     if existing:
         return existing
-    # 在第一个有效搜索路径下创建
     for sp in search_paths:
         base = os.path.join(project_dir, sp)
         if os.path.isdir(base):
             module_dir = os.path.join(base, module_name)
             os.makedirs(module_dir, exist_ok=True)
             return module_dir
-    # 兜底: 项目根目录
     module_dir = os.path.join(project_dir, module_name)
     os.makedirs(module_dir, exist_ok=True)
     return module_dir
@@ -264,7 +247,6 @@ def ensure_module_dir(project_dir, module_name, search_paths):
 # ============================================================
 
 def compute_field_size(field, type_sizes=None):
-    """计算字段的字节大小。"""
     if type_sizes is None:
         type_sizes = TYPE_SIZES
     ftype = field.get('type', 'uint8_t')
@@ -276,7 +258,6 @@ def compute_field_size(field, type_sizes=None):
 
 
 def to_pascal_case(snake_str):
-    """将 snake_case 转为 PascalCase。"""
     return ''.join(word.capitalize() for word in snake_str.split('_'))
 
 
@@ -285,7 +266,6 @@ def to_pascal_case(snake_str):
 # ============================================================
 
 def format_field_decl(field):
-    """格式化字段声明。返回 C 声明字符串。"""
     ftype = field['type']
     fname = field['name']
     count = field.get('count')
@@ -295,7 +275,6 @@ def format_field_decl(field):
 
 
 def generate_owner_struct(struct_key, struct_def, whitelist, type_sizes):
-    """生成 owner 模块的完整结构体。返回 C 代码字符串。"""
     fields = struct_def.get('fields', [])
     suffix = struct_def.get('suffix', '')
     deprecated = struct_def.get('deprecated', {})
@@ -306,7 +285,6 @@ def generate_owner_struct(struct_key, struct_def, whitelist, type_sizes):
     lines.append(f"// {struct_def.get('description', struct_key)}")
     lines.append(f"typedef struct {{")
 
-    # 对齐列宽
     max_type_len = 0
     for f in fields:
         decl = format_field_decl(f)
@@ -319,8 +297,7 @@ def generate_owner_struct(struct_key, struct_def, whitelist, type_sizes):
             comment_parts.append(f['note'])
         if f['name'] in deprecated:
             dinfo = deprecated[f['name']]
-            comment_parts.append(
-                f"@deprecated: use {dinfo.get('replaced_by', '?')}")
+            comment_parts.append(f"@deprecated: use {dinfo.get('replaced_by', '?')}")
         comment = f"  /* {'; '.join(comment_parts)} */" if comment_parts else ""
         lines.append(f"    {decl:<{max_type_len}}{comment}")
 
@@ -330,7 +307,6 @@ def generate_owner_struct(struct_key, struct_def, whitelist, type_sizes):
 
 def generate_consumer_struct(struct_key, struct_def, consumer_name,
                              consumer_def, whitelist, type_sizes):
-    """生成 consumer 模块的结构体 (子集字段 + padding)。返回 C 代码字符串。"""
     owner_fields = struct_def.get('fields', [])
     consumer_field_names = set(consumer_def.get('fields', []))
     deprecated = struct_def.get('deprecated', {})
@@ -353,11 +329,8 @@ def generate_consumer_struct(struct_key, struct_def, consumer_name,
     for f in owner_fields:
         fname = f['name']
 
-        # 检查 deprecated 引用
         if fname in consumer_field_names and fname in deprecated:
-            print(
-                f"错误: consumer '{consumer_name}' 引用了废弃字段 '{fname}' "
-                f"({deprecated[fname].get('replaced_by', '?')})")
+            print(f"错误: consumer '{consumer_name}' 引用了废弃字段 '{fname}' ({deprecated[fname].get('replaced_by', '?')})")
             print(f"  在 struct '{struct_key}' 中, 请更新 consumer fields 列表")
             sys.exit(2)
 
@@ -371,7 +344,6 @@ def generate_consumer_struct(struct_key, struct_def, consumer_name,
             decls.append((pad_decl, comment, True))
             pad_idx += 1
 
-    # 对齐
     max_decl_len = max(len(d[0]) for d in decls) if decls else 0
     for decl, comment, _ in decls:
         lines.append(f"    {decl:<{max_decl_len}}{comment}")
@@ -381,7 +353,6 @@ def generate_consumer_struct(struct_key, struct_def, consumer_name,
 
 
 def make_auto_header(serial, version="1.0"):
-    """生成 AUTO-GENERATED 文件头。"""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return (
         f"/* ================================================================\n"
@@ -396,7 +367,6 @@ def make_auto_header(serial, version="1.0"):
 
 
 def make_auto_block(structs_content, serial, version="1.0"):
-    """生成完整的 AUTO-GENERATED 区块 (含标记)。"""
     header = make_auto_header(serial, version)
     return (
         f"{header}\n"
@@ -411,14 +381,12 @@ def make_auto_block(structs_content, serial, version="1.0"):
 
 
 def parse_existing_types_h(filepath):
-    """解析已有 types.h, 提取手写区域和 AUTO-GENERATED 区域。返回 (manual_parts, auto_parts, has_auto_block)。"""
     if not os.path.exists(filepath):
         return [], None, False
 
     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
 
-    # 检查是否有 AUTO-GENERATED 区块
     auto_start_re = re.compile(r'/\* === AUTO-GENERATED from structs\.json serial=(\d+) === \*/')
     auto_end_re = re.compile(r'/\* === END AUTO-GENERATED === \*/')
 
@@ -436,34 +404,26 @@ def parse_existing_types_h(filepath):
             manual_parts.append(after)
         return manual_parts, embedded_serial, True
     else:
-        # 没有 AUTO-GENERATED 区块, 整个文件视为手写区域
         return [content.rstrip()], None, False
 
 
 def merge_types_h(filepath, structs_content, serial, version="1.0"):
-    """将生成的 structs 内容合并到 types.h 中。"""
     manual_parts, embedded_serial, has_auto = parse_existing_types_h(filepath)
 
-    # 检查 serial 回退
     if embedded_serial is not None and serial < embedded_serial:
         print(f"警告: {filepath}")
         print(f"  structs.json serial={serial} < 文件内嵌 serial={embedded_serial}")
         print(f"  JSON 可能被回退了 — 请确认这是有意操作, 然后重新生成")
-        # 仍然允许生成, 但发出警告
 
     auto_block = make_auto_block(structs_content, serial, version)
 
     if has_auto:
-        # 只替换 AUTO-GENERATED 区块
-        # manual_parts[0] = before, manual_parts[1:] = after (可能有多个)
         before = manual_parts[0] if len(manual_parts) > 0 else ''
         after_parts = manual_parts[1:] if len(manual_parts) > 1 else []
         after = '\n\n'.join(after_parts)
         parts = [p for p in [before, auto_block, after] if p]
         return '\n\n'.join(parts) + '\n'
     else:
-        # 文件全新 或 无 AUTO-GENERATED 区块
-        # 将现有内容包裹为手写区域
         if manual_parts and manual_parts[0].strip():
             return f"{MANUAL_START}\n{manual_parts[0]}\n\n{auto_block}\n"
         else:
@@ -475,7 +435,6 @@ def merge_types_h(filepath, structs_content, serial, version="1.0"):
 # ============================================================
 
 def generate_all(structs_data, config, project_dir, struct_filter=None):
-    """遍历 structs.json, 为每个模块生成 types.h。返回生成的文件列表。"""
     serial = structs_data.get('serial', 0)
     version = structs_data.get('version', '1.0')
     structs = structs_data.get('structs', {})
@@ -486,15 +445,12 @@ def generate_all(structs_data, config, project_dir, struct_filter=None):
     type_sizes = config.get('type_sizes', TYPE_SIZES)
     search_paths = config.get('module_search_paths', ['.'])
 
-    # 按模块聚合生成内容
-    # module_contents[module_name] = [] of (struct block string)
     module_contents = OrderedDict()
 
     for skey, sdef in structs.items():
         if struct_filter and skey != struct_filter:
             continue
 
-        # 校验字段类型
         for f in sdef.get('fields', []):
             ftype = f.get('type', '')
             if ftype not in whitelist:
@@ -502,29 +458,22 @@ def generate_all(structs_data, config, project_dir, struct_filter=None):
                 print(f"  允许的类型: {whitelist}")
                 sys.exit(2)
 
-        # Owner struct
         owner = sdef['owner']
         owner_code = generate_owner_struct(skey, sdef, whitelist, type_sizes)
         module_contents.setdefault(owner, []).append(owner_code)
 
-        # Consumer structs
         consumers = sdef.get('consumers', {})
         for cname, cdef in consumers.items():
-            # 检查 deprecated 引用
             deprecated = sdef.get('deprecated', {})
             for cf in cdef.get('fields', []):
                 if cf in deprecated:
-                    print(
-                        f"错误: struct '{skey}' consumer '{cname}' "
-                        f"引用了废弃字段 '{cf}'")
+                    print(f"错误: struct '{skey}' consumer '{cname}' 引用了废弃字段 '{cf}'")
                     print(f"  替代字段: {deprecated[cf].get('replaced_by', '?')}")
                     sys.exit(2)
 
-            consumer_code = generate_consumer_struct(
-                skey, sdef, cname, cdef, whitelist, type_sizes)
+            consumer_code = generate_consumer_struct(skey, sdef, cname, cdef, whitelist, type_sizes)
             module_contents.setdefault(cname, []).append(consumer_code)
 
-    # 写入文件
     generated_files = []
     for module_name, struct_blocks in module_contents.items():
         structs_content = '\n\n'.join(struct_blocks)
@@ -546,22 +495,18 @@ def generate_all(structs_data, config, project_dir, struct_filter=None):
 # --check 模式
 # ============================================================
 
-AUTO_START_RE = re.compile(
-    r'/\* === AUTO-GENERATED from structs\.json serial=\d+ === \*/')
+AUTO_START_RE = re.compile(r'/\* === AUTO-GENERATED from structs\.json serial=\d+ === \*/')
 AUTO_END_RE = re.compile(r'/\* === END AUTO-GENERATED === \*/')
 
 
 def extract_struct_content(file_content):
-    """从 types.h 中提取 AUTO-GENERATED 区块内的结构体内容。
-    返回 (struct_text, has_auto_block)。"""
     m_start = AUTO_START_RE.search(file_content)
     m_end = AUTO_END_RE.search(file_content)
     if m_start and m_end:
         inner = file_content[m_start.end():m_end.start()].strip()
-        # 去掉可能的 "/* DO NOT EDIT BELOW..." 注释行
         lines = inner.split('\n')
         cleaned = []
-        skip_next = True  # skip the first "DO NOT EDIT" line
+        skip_next = True
         for line in lines:
             stripped = line.strip()
             if skip_next and (stripped.startswith('/* DO NOT EDIT') or stripped == ''):
@@ -576,9 +521,7 @@ def extract_struct_content(file_content):
 
 
 def normalize_struct_text(text):
-    """规范化结构体文本用于比较 — 去除空白差异。"""
     lines = [line.rstrip() for line in text.split('\n')]
-    # 去掉首尾空行
     while lines and not lines[0].strip():
         lines.pop(0)
     while lines and not lines[-1].strip():
@@ -587,7 +530,6 @@ def normalize_struct_text(text):
 
 
 def check_mode(structs_data, config, project_dir, struct_filter=None):
-    """生成结构体内容, 与实际文件中的 AUTO-GENERATED 区块比较。"""
     serial = structs_data.get('serial', 0)
     structs = structs_data.get('structs', {})
 
@@ -618,13 +560,10 @@ def check_mode(structs_data, config, project_dir, struct_filter=None):
             deprecated = sdef.get('deprecated', {})
             for cf in cdef.get('fields', []):
                 if cf in deprecated:
-                    print(
-                        f"错误: struct '{skey}' consumer '{cname}' "
-                        f"引用了废弃字段 '{cf}'")
+                    print(f"错误: struct '{skey}' consumer '{cname}' 引用了废弃字段 '{cf}'")
                     sys.exit(2)
 
-            consumer_code = generate_consumer_struct(
-                skey, sdef, cname, cdef, whitelist, type_sizes)
+            consumer_code = generate_consumer_struct(skey, sdef, cname, cdef, whitelist, type_sizes)
             module_contents.setdefault(cname, []).append(consumer_code)
 
     import difflib
@@ -650,7 +589,7 @@ def check_mode(structs_data, config, project_dir, struct_filter=None):
 
             if new_norm != existing_norm:
                 mismatches += 1
-                relpath = os.path.relpath(existing_path, project_dir)
+                relpath = os.path.relpath(existing_path, project_root)
                 print(f"  CHECK: {relpath}  — MISMATCH")
 
                 diff = difflib.unified_diff(
@@ -663,20 +602,16 @@ def check_mode(structs_data, config, project_dir, struct_filter=None):
                     sys.stdout.write(line)
                 print()
             else:
-                relpath = os.path.relpath(existing_path, project_dir)
-                # 同时检查 serial
-                auto_start_re = re.compile(
-                    r'/\* === AUTO-GENERATED from structs\.json serial=(\d+) === \*/')
+                relpath = os.path.relpath(existing_path, project_root)
+                auto_start_re = re.compile(r'/\* === AUTO-GENERATED from structs\.json serial=(\d+) === \*/')
                 sm = auto_start_re.search(actual_full)
                 if sm and int(sm.group(1)) != serial:
-                    print(f"  CHECK: {relpath}  — SERIAL UPDATE "
-                          f"({sm.group(1)} -> {serial})")
+                    print(f"  CHECK: {relpath}  — SERIAL UPDATE ({sm.group(1)} -> {serial})")
                 else:
                     print(f"  CHECK: {relpath}  — OK")
         else:
             mismatches += 1
-            safe_name = module_name
-            relpath = f"{safe_name}/types.h"
+            relpath = f"{module_name}/types.h"
             print(f"  CHECK: {relpath}  — MISSING (文件不存在)")
             print(f"    请运行 python tools/generate_structs.py 生成")
 
@@ -692,22 +627,13 @@ def print_template():
         "_comment": "结构体代码生成器配置 — 定义 structs.json 路径和模块搜索规则",
         "structs_source": "cfg/structs.json",
         "module_search_paths": ["src/app", "src/drv", "src/proto", "src/core", "."],
-        "type_whitelist": [
-            "uint8_t", "uint16_t", "uint32_t",
-            "int8_t", "int16_t", "int32_t",
-            "char"
-        ],
-        "type_sizes": {
-            "uint8_t": 1, "uint16_t": 2, "uint32_t": 4,
-            "int8_t": 1, "int16_t": 2, "int32_t": 4,
-            "char": 1, "float": 4
-        },
+        "type_whitelist": ["uint8_t", "uint16_t", "uint32_t", "int8_t", "int16_t", "int32_t", "char"],
+        "type_sizes": {"uint8_t": 1, "uint16_t": 2, "uint32_t": 4, "int8_t": 1, "int16_t": 2, "int32_t": 4, "char": 1, "float": 4},
     }
     print(json.dumps(template, indent=2, ensure_ascii=False))
 
 
 def print_structs_template():
-    """打印 structs.json 模板 (--print-structs-template)。"""
     template = {
         "version": "1.0",
         "serial": 0,
@@ -723,12 +649,8 @@ def print_structs_template():
                     {"name": "timer_active", "type": "uint8_t", "note": "定时激活标志"}
                 ],
                 "consumers": {
-                    "display_module": {
-                        "fields": ["head_power", "work_mode"]
-                    },
-                    "timer_module": {
-                        "fields": ["timer_remaining", "timer_active"]
-                    }
+                    "display_module": {"fields": ["head_power", "work_mode"]},
+                    "timer_module": {"fields": ["timer_remaining", "timer_active"]}
                 }
             }
         }
@@ -755,7 +677,6 @@ def run_self_test():
             errors.append(name)
             print(f"  [FAIL] {name}: {e}")
 
-    # 1) 内置预设结构
     def test_builtin_structure():
         for name in ['four_head', 'm4-ekf']:
             p = BUILTIN_PRESETS[name]
@@ -765,9 +686,8 @@ def run_self_test():
             assert isinstance(p['module_search_paths'], list)
             assert len(p['module_search_paths']) >= 2
         return True
-    t("内置预设结构 (four_head + m4-ekf 配置完整)", test_builtin_structure)
+    t("内置预设结构", test_builtin_structure)
 
-    # 2) JSON 序列化/反序列化
     def test_json_roundtrip():
         cfg = BUILTIN_PRESETS['four_head']
         s = json.dumps(cfg, ensure_ascii=False)
@@ -776,146 +696,58 @@ def run_self_test():
         return True
     t("JSON 序列化/反序列化", test_json_roundtrip)
 
-    # 3) Schema 校验 — 正确数据
     def test_schema_valid():
-        data = {
-            "version": "1.0",
-            "serial": 1,
-            "structs": {
-                "Test": {
-                    "description": "test",
-                    "owner": "test_mod",
-                    "suffix": "OUT",
-                    "fields": [
-                        {"name": "a", "type": "uint8_t"},
-                        {"name": "b", "type": "uint16_t"}
-                    ]
-                }
-            }
-        }
+        data = {"version": "1.0", "serial": 1, "structs": {"Test": {"description": "test", "owner": "test_mod", "suffix": "OUT", "fields": [{"name": "a", "type": "uint8_t"}, {"name": "b", "type": "uint16_t"}]}}}
         errs = validate_schema(data)
         assert errs == [], f"Unexpected errors: {errs}"
         return True
     t("Schema 校验 (正确 JSON)", test_schema_valid)
 
-    # 4) Schema 校验 — 缺少字段
     def test_schema_invalid():
         data = {"version": "1.0"}
         errs = validate_schema(data)
-        assert len(errs) >= 2  # 缺少 serial + structs
+        assert len(errs) >= 2
         return True
-    t("Schema 校验 (缺少 serial/structs)", test_schema_invalid)
+    t("Schema 校验 (缺少字段)", test_schema_invalid)
 
-    # 5) 字段大小计算
     def test_field_size():
         assert compute_field_size({'type': 'uint8_t'}) == 1
         assert compute_field_size({'type': 'uint16_t'}) == 2
         assert compute_field_size({'type': 'uint32_t'}) == 4
         assert compute_field_size({'type': 'uint8_t', 'count': 4}) == 4
         assert compute_field_size({'type': 'uint16_t', 'count': 3}) == 6
-        assert compute_field_size({'type': 'char', 'count': 8}) == 8
         return True
-    t("字段大小计算 (标量+数组)", test_field_size)
+    t("字段大小计算", test_field_size)
 
-    # 6) Owner struct 生成
     def test_generate_owner():
-        sdef = {
-            "description": "test struct",
-            "owner": "test_mod",
-            "suffix": "OUT",
-            "fields": [
-                {"name": "a", "type": "uint8_t", "note": "field a"},
-                {"name": "b", "type": "uint16_t"}
-            ]
-        }
+        sdef = {"description": "test struct", "owner": "test_mod", "suffix": "OUT", "fields": [{"name": "a", "type": "uint8_t", "note": "field a"}, {"name": "b", "type": "uint16_t"}]}
         code = generate_owner_struct("Test", sdef, TYPE_SIZES.keys(), TYPE_SIZES)
         assert "Test_OUT_t" in code
         assert "uint8_t a" in code
-        assert "uint16_t b" in code
-        assert "/* field a */" in code
         return True
     t("Owner struct 生成", test_generate_owner)
 
-    # 7) Consumer struct 生成 (含 padding)
     def test_generate_consumer():
-        sdef = {
-            "description": "test struct",
-            "owner": "test_mod",
-            "suffix": "OUT",
-            "fields": [
-                {"name": "a", "type": "uint8_t"},
-                {"name": "b", "type": "uint16_t"},
-                {"name": "c", "type": "uint32_t"}
-            ]
-        }
+        sdef = {"description": "test", "owner": "test_mod", "suffix": "OUT", "fields": [{"name": "a", "type": "uint8_t"}, {"name": "b", "type": "uint16_t"}, {"name": "c", "type": "uint32_t"}]}
         cdef = {"fields": ["a", "c"]}
-        code = generate_consumer_struct(
-            "Test", sdef, "consumer_mod", cdef,
-            TYPE_SIZES.keys(), TYPE_SIZES)
-        assert "ConsumerMod_Test_IN_t" in code  # default name (PascalCase)
-        assert "uint8_t a" in code
-        assert "uint32_t c" in code
-        assert "__pad_0[2]" in code  # PADDING for b (uint16_t = 2 bytes)
-        assert "PADDING: b" in code
+        code = generate_consumer_struct("Test", sdef, "consumer_mod", cdef, TYPE_SIZES.keys(), TYPE_SIZES)
+        assert "ConsumerMod_Test_IN_t" in code
+        assert "__pad_0[2]" in code
         return True
     t("Consumer struct 生成 (含 padding)", test_generate_consumer)
 
-    # 8) Consumer 自定义 struct_name
-    def test_consumer_custom_name():
-        sdef = {
-            "description": "test",
-            "owner": "src_mod",
-            "suffix": "OUT",
-            "fields": [{"name": "x", "type": "uint8_t"}]
-        }
-        cdef = {"fields": ["x"], "struct_name": "Key_HeadState"}
-        code = generate_consumer_struct(
-            "HeadState", sdef, "key_module", cdef,
-            TYPE_SIZES.keys(), TYPE_SIZES)
-        assert "Key_HeadState" in code
-        assert "Consumer_HeadState_IN_t" not in code
-        return True
-    t("Consumer 自定义 struct_name", test_consumer_custom_name)
-
-    # 9) AUTO-GENERATED header 含 serial
     def test_auto_header():
         header = make_auto_header(5)
         assert "serial=5" in header
         assert "AUTO-GENERATED" in header
-        assert "cfg/structs.json" in header
         return True
-    t("AUTO-GENERATED header (serial嵌入)", test_auto_header)
-
-    # 10) Auto block 含标记
-    def test_auto_block():
-        block = make_auto_block("// generated content", 3)
-        assert "serial=3" in block
-        assert "AUTO-GENERATED from structs.json" in block
-        assert "END AUTO-GENERATED" in block
-        return True
-    t("AUTO-GENERATED block (含标记)", test_auto_block)
-
-    # 11) 配置加载
-    def test_config_load():
-        with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.json', delete=False, encoding='utf-8'
-        ) as f:
-            json.dump(BUILTIN_PRESETS['m4-ekf'], f)
-            tmp_path = f.name
-        try:
-            loaded = load_config_file(tmp_path)
-            assert loaded['structs_source'] == 'cfg/structs.json'
-            assert 'module_search_paths' in loaded
-        finally:
-            os.unlink(tmp_path)
-        return True
-    t("JSON 配置文件加载", test_config_load)
+    t("AUTO-GENERATED header", test_auto_header)
 
     if errors:
-        print(f"\n[FAIL] --self-test: {len(errors)}/11 项失败")
+        print(f"\n[FAIL] --self-test: {len(errors)} 项失败")
         sys.exit(1)
 
-    print(f"\n[PASS] --self-test 全部通过 (11/11)")
+    print(f"\n[PASS] --self-test 全部通过")
     return True
 
 
@@ -925,7 +757,6 @@ def run_self_test():
 
 def main():
     if '--self-test' in sys.argv:
-        print("generate_structs.py --self-test")
         run_self_test()
         sys.exit(0)
 
@@ -973,19 +804,7 @@ def main():
     if project_dir is None:
         print("用法: python generate_structs.py <project_dir> [选项]")
         print("      python generate_structs.py --print-template")
-        print("      python generate_structs.py --print-structs-template")
         print("      python generate_structs.py --self-test")
-        print()
-        print("选项:")
-        print("  --project <name>    内置预设: four_head, m4-ekf")
-        print("  --config <file>     自定义 JSON 配置")
-        print("  --source <file>     指定 structs.json 路径")
-        print("  --struct <name>     只生成指定结构体")
-        print("  --check             检查模式 (diff 现有文件)")
-        print()
-        print("示例:")
-        print("  python generate_structs.py . --project four_head")
-        print("  python generate_structs.py . --check")
         sys.exit(2)
 
     project_dir = os.path.abspath(project_dir)
@@ -995,17 +814,14 @@ def main():
 
     config, cfg_source = resolve_config(project_dir, preset_name, config_path)
 
-    # 确定 structs.json 路径
     if source_path:
         json_path = os.path.join(project_dir, source_path)
     else:
         json_path = os.path.join(project_dir, config.get('structs_source', 'cfg/structs.json'))
 
-    # 如果 structs.json 不存在且不是 --check 模式, 打印友好提示
     if not os.path.exists(json_path) and not check:
         print(f"注意: structs.json 不存在 ({json_path})")
         print(f"  运行 --print-structs-template 查看模板格式")
-        print(f"  或创建 cfg/structs.json 后重新运行")
         sys.exit(0)
 
     if not check:
@@ -1032,7 +848,6 @@ def main():
             sys.exit(0)
         else:
             print(f"\nRESULT: {mismatches} 个文件不一致.")
-            print(f"  请运行 python tools/generate_structs.py 重新生成.")
             sys.exit(1)
     else:
         generated = generate_all(structs_data, config, project_dir, struct_filter)

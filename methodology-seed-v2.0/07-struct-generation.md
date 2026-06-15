@@ -167,15 +167,15 @@ typedef struct {
 ### generate_structs.py
 
 ```bash
-python tools/generate_structs.py             # 生成所有 types.h
-python tools/generate_structs.py --check     # 生成到 /tmp, diff 实际文件
-python tools/generate_structs.py --struct X  # 只生成指定结构体
+python ../.claude/tools/generate_structs.py             # 生成所有 types.h
+python ../.claude/tools/generate_structs.py --check     # 生成到 /tmp, diff 实际文件
+python ../.claude/tools/generate_structs.py --struct X  # 只生成指定结构体
 ```
 
 ### check_structs.py
 
 ```bash
-python tools/check_structs.py    # 验证一致性, 用于 pre-commit hook
+python ../.claude/tools/check_structs.py    # 验证一致性, 用于 pre-commit hook
 ```
 
 内部逻辑: 调用 `generate_structs.py --check` → 如果实际文件与生成输出不一致 → 非零退出码 → 阻断提交。
@@ -195,27 +195,27 @@ python tools/check_structs.py    # 验证一致性, 用于 pre-commit hook
 2. 填写 `owner`, `suffix`, `fields`
 3. 如有 consumer，填写 `consumers`
 4. `serial += 1`
-5. 运行 `python tools/generate_structs.py`
-6. 运行 `python tools/check_structs.py`
+5. 运行 `python ../.claude/tools/generate_structs.py`
+6. 运行 `python ../.claude/tools/check_structs.py`
 
 ### 新增字段
 1. 编辑 `cfg/structs.json` → 在对应 struct 的 `fields` 数组追加
 2. 如有新 consumer 需要此字段，在各 consumer 的 `fields` 列表追加
 3. `serial += 1`
-4. 运行 `python tools/generate_structs.py`
+4. 运行 `python ../.claude/tools/generate_structs.py`
 
 ### 新增 consumer
 1. 编辑 `cfg/structs.json` → 在对应 struct 的 `consumers` 下新增模块
 2. 声明该模块需要的 `fields`
 3. `serial += 1`
-4. 运行 `python tools/generate_structs.py`
+4. 运行 `python ../.claude/tools/generate_structs.py`
 5. 更新 `interface_map.h`: 如有新的 __weak 通道，注册配对
 
 ### 废弃字段
 1. 编辑 `cfg/structs.json` → 在 `deprecated` 下新增条目
 2. 确认所有 consumer 的 `fields` 中已移除此字段
 3. `serial += 1`
-4. 运行 `python tools/generate_structs.py`
+4. 运行 `python ../.claude/tools/generate_structs.py`
 
 ---
 

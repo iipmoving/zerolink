@@ -25,7 +25,7 @@ import difflib
 # 生成器引擎 (直接导入，非子进程)
 from gen_io_h import generate_io_h, _pascal_to_snake
 from gen_switcher import generate_switcher
-from gen_module_c import generate_module_c, generate_module_h, generate_module_c_refactored
+from gen_module_c import generate_module_c, generate_module_h, generate_module_c_refactored, strip_ai_blocks, wrap_in_ai_block, replace_ai_block, find_ai_block
 
 # KEIL 项目解析器
 from keil_parser import parse_uvprojx, filter_files, scan_source_files, generate_ai_scan_doc
@@ -306,7 +306,8 @@ class ConfigEditor:
         self._code_preview_module_label.pack(side=tk.LEFT, padx=6)
 
         ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(top, text="更新 (覆盖原文件)", command=self._code_preview_update).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="更新 (保存内容)", command=self._code_preview_update).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="重新生成", command=self._code_preview_regenerate).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="另存为...", command=self._code_preview_save_as).pack(side=tk.LEFT, padx=2)
         ttk.Checkbutton(top, text="显示差异", command=self._code_preview_toggle_diff).pack(side=tk.LEFT, padx=8)
         self._code_preview_diff_var = tk.BooleanVar(value=False)
@@ -748,6 +749,13 @@ class ConfigEditor:
             self._ref_project_json_path.config(text=path)
             self._ref_log_append(f"[OK] project.json 已导入: {len(config['modules'])} 模块, {len(config['pipes'])} 管道")
             self._load_config_data(config, path)
+            # 同步更新重构面板的输出目录（确保绝对路径，从盘符开始）
+            raw_root = config.get("project", {}).get("output_root", "")
+            if raw_root:
+                if not os.path.isabs(raw_root):
+                    raw_root = os.path.abspath(os.path.join(os.path.dirname(path), raw_root))
+                self._ref_output_dir.delete(0, tk.END)
+                self._ref_output_dir.insert(0, raw_root)
         except Exception as e:
             self._ref_log_append(f"[ERROR] {e}")
             messagebox.showerror("导入失败", str(e))
@@ -889,6 +897,7 @@ class ConfigEditor:
         ttk.Button(bar, text="仅 io.h", command=lambda: self.cmd_generate("io")).pack(side=tk.LEFT, padx=2)
         ttk.Button(bar, text="仅 switcher", command=lambda: self.cmd_generate("switcher")).pack(side=tk.LEFT, padx=2)
         ttk.Button(bar, text="仅 modules", command=lambda: self.cmd_generate("modules")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="⟳ 强制刷新", command=self.cmd_force_refresh).pack(side=tk.LEFT, padx=2)
 
         self.lbl_status = ttk.Label(bar, relief=tk.SUNKEN, anchor=tk.W, padding=(4, 2))
         self.lbl_status.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(12, 0))
@@ -915,8 +924,12 @@ class ConfigEditor:
         # 填充项目设置
         proj = data.get("project", {})
         paths = proj.get("paths", {})
+        raw_root = proj.get("output_root", "")
+        # 相对路径 → 解析为 JSON 所在目录的绝对路径
+        if path and raw_root and not os.path.isabs(raw_root):
+            raw_root = os.path.abspath(os.path.join(os.path.dirname(path), raw_root))
         self.entry_output_root.delete(0, tk.END)
-        self.entry_output_root.insert(0, proj.get("output_root", ""))
+        self.entry_output_root.insert(0, raw_root)
         for key in ("io_dir", "core_dir", "app_dir", "base_class_dir", "proto_dir"):
             ent = getattr(self, f"entry_{key.replace('.', '_')}", None)
             if ent:
@@ -946,7 +959,7 @@ class ConfigEditor:
             "std_module_path": self.config.get("project", {}).get("std_module_path", "core/std_module.h"),
             "pack": int(self.entry_pack.get() or 4),
             "comment_guard": self.config.get("project", {}).get("comment_guard", True),
-            "output_root": self.entry_output_root.get(),
+            "output_root": os.path.abspath(self.entry_output_root.get()),
         }
         # 从链条树收集
         slot_chains = []
@@ -1042,6 +1055,9 @@ class ConfigEditor:
             else:
                 self.tree.insert(node_id, tk.END, text="(无出参)", values=("none",))
 
+        # data_switcher 节点（无管道声明，但需代码预览）
+        self.tree.insert("", tk.END, text="[data_switcher]", values=("switcher",), open=True)
+
     def _on_tree_select(self, event):
         sel = self.tree.selection()
         if not sel:
@@ -1064,6 +1080,11 @@ class ConfigEditor:
             self._show_pipe(pipe)
             self._refresh_field_table(pipe)
             self._show_pipe_preview(pipe)
+
+        elif val_type == "switcher":
+            # data_switcher 预览
+            self._clear_pipe_editor()
+            self._show_data_switcher_preview()
 
         else:
             self._clear_pipe_editor()
@@ -1124,12 +1145,17 @@ class ConfigEditor:
             if file_type == "io.h":
                 content = generate_io_h(mod, pipes, project)
             elif file_type == ".c":
-                content = generate_module_c(mod, pipes, project)
+                # 已有文件用重构模式（保留原内容，插 AI 段到最前面）
+                if os.path.isfile(file_path):
+                    content = generate_module_c_refactored(mod, pipes, project, file_path)
+                else:
+                    content = generate_module_c(mod, pipes, project)
             elif file_type == ".h":
                 content = generate_module_h(mod)
             else:
                 content = f"// 未知文件类型: {file_type}"
             self._update_code_preview(content, file_path)
+            self.status(f"预览: {mod['name']} ({file_type}) → {file_path}")
         except Exception as e:
             self._update_code_preview(f"// 生成错误: {e}")
 
@@ -1291,6 +1317,14 @@ class ConfigEditor:
     # ================================================================
     # 字段编辑
     # ================================================================
+    def _find_type_definition(self, type_name: str) -> dict | None:
+        """在全部模块的 types[] 中查找外部类型定义"""
+        for mod in self.modules:
+            for t in mod.get("types", []):
+                if t.get("name") == type_name:
+                    return t
+        return None
+
     def _refresh_field_table(self, pipe):
         self._field_item_map.clear()
         self.field_tree.delete(*self.field_tree.get_children())
@@ -1298,7 +1332,7 @@ class ConfigEditor:
             self._populate_field_tree("", f)
 
     def _populate_field_tree(self, parent, field):
-        """递归填充字段 Treeview（支持嵌套结构体）"""
+        """递归填充字段 Treeview（支持嵌套结构体和外部类型引用）"""
         name = field.get("name", "")
         ftype = field.get("type", "")
         comment = field.get("comment", "")
@@ -1309,8 +1343,17 @@ class ConfigEditor:
             for sub in field["fields"]:
                 self._populate_field_tree(iid, sub)
         else:
-            iid = self.field_tree.insert(parent, tk.END, values=(name, ftype, comment))
-            self._field_item_map[iid] = field
+            # 检查是否是指向外部类型 (types[]) 的指针字段
+            base_type = ftype.rstrip('*').strip()
+            type_def = self._find_type_definition(base_type) if base_type and base_type != ftype else None
+            if type_def:
+                iid = self.field_tree.insert(parent, tk.END, values=(f"▸ {name}", ftype, comment), open=True)
+                self._field_item_map[iid] = field
+                for sub in type_def.get("fields", []):
+                    self._populate_field_tree(iid, sub)
+            else:
+                iid = self.field_tree.insert(parent, tk.END, values=(name, ftype, comment))
+                self._field_item_map[iid] = field
 
     def _remove_field_recursive(self, fields, target_field):
         """递归查找并移除目标字段（支持嵌套）"""
@@ -1376,8 +1419,8 @@ class ConfigEditor:
         if not field:
             return
 
-        # 结构体节点: 展开/折叠
-        if field.get("type") == "struct" and field.get("fields"):
+        # 有子节点的字段行: 展开/折叠 (支持嵌套结构体和外部类型引用)
+        if self.field_tree.get_children(iid):
             was_open = self.field_tree.item(iid, "open")
             self.field_tree.item(iid, open=not was_open)
             return
@@ -1512,16 +1555,21 @@ class ConfigEditor:
     # 代码预览
     # ================================================================
     def _update_code_preview(self, text: str, file_path: str = None):
-        """更新代码预览 (右侧可编辑), 直接显示, 无 diff 对齐"""
+        """更新代码预览 (右侧可编辑), 左侧显示 .bak 原内容"""
         self._code_preview_current_path = file_path
 
-        # 左侧窗格显示简单提示
+        # 左侧显示 .bak 原内容（如果存在）
+        bak_path = file_path + ".bak" if file_path and os.path.isfile(file_path + ".bak") else None
         self._code_preview_left.config(state=tk.NORMAL)
         self._code_preview_left.delete(1.0, tk.END)
-        self._code_preview_left.insert(1.0, "(diff 比对已关闭)")
+        if bak_path:
+            with open(bak_path, "r", encoding="utf-8", errors="replace") as f:
+                self._code_preview_left.insert(1.0, f.read())
+        else:
+            self._code_preview_left.insert(1.0, "(无 .bak 文件)")
         self._code_preview_left.config(state=tk.DISABLED)
 
-        # 右侧显示生成内容
+        # 右侧显示生成内容（可编辑）
         self._code_preview_text.config(state=tk.NORMAL)
         self._code_preview_text.delete(1.0, tk.END)
         self._code_preview_text.insert(1.0, text)
@@ -1578,6 +1626,23 @@ class ConfigEditor:
                         f"{right_lineno + k - j1}.0", f"{right_lineno + k - j1}.end")
                 right_lineno += (j2 - j1)
 
+    def _expand_type_refs_for_preview(self, fields: list) -> list:
+        """将指针引用外部类型的字段展开为 inline struct，供管道预览展示"""
+        result = []
+        for f in fields:
+            ftype = f.get("type", "")
+            base_type = ftype.rstrip('*').strip()
+            type_def = self._find_type_definition(base_type) if base_type and base_type != ftype else None
+            if type_def:
+                expanded = dict(f)
+                expanded["type"] = "struct"
+                expanded["comment"] = f"{ftype} {f.get('name', '')}: {f.get('comment', '')} (外部类型引用)"
+                expanded["fields"] = list(type_def["fields"])
+                result.append(expanded)
+            else:
+                result.append(f)
+        return result
+
     def _show_pipe_preview(self, pipe):
         """管道预览: 显示该管道在两端模块中的生成代码 (不含完整模块 io.h)"""
         if not pipe:
@@ -1593,6 +1658,9 @@ class ConfigEditor:
 
         from gen_io_h import _gen_params_fields, _link_style_to_c
 
+        # 展开外部类型引用，让预览显示子字段
+        preview_fields = self._expand_type_refs_for_preview(fields)
+
         lines = []
         lines.append("// ================================================================")
         lines.append(f"//  {from_name} → {to_name}")
@@ -1607,7 +1675,7 @@ class ConfigEditor:
         lines.append("")
         lines.append(f"/* {from_name} → {to_name}  输出参数 */")
         lines.append(f"typedef struct {{")
-        lines.append(_gen_params_fields(fields))
+        lines.append(_gen_params_fields(preview_fields))
         lines.append(f"}} MODULE_OUTPUT_PARAMS({from_name}, {to_name});")
         lines.append("")
         out_link = _link_style_to_c(out_style, out_size)
@@ -1626,7 +1694,7 @@ class ConfigEditor:
         lines.append("")
         lines.append(f"/* {from_name} → {to_name}  输入参数 (与 OUTPUT_PARAMS 布局兼容) */")
         lines.append(f"typedef struct {{")
-        lines.append(_gen_params_fields(fields))
+        lines.append(_gen_params_fields(preview_fields))
         lines.append(f"}} MODULE_INPUT_PARAMS({from_name}, {to_name});")
         lines.append("")
         in_link = _link_style_to_c(in_style, in_size)
@@ -1744,7 +1812,7 @@ class ConfigEditor:
     # 代码预览 — 更新 / 另存
     # ================================================================
     def _code_preview_update(self):
-        """覆盖原文件: 先时间戳备份, 再写入"""
+        """更新 AI 生成段: 先时间戳备份, 再写入"""
         text = self._code_preview_text.get(1.0, tk.END)
         if not text.strip():
             messagebox.showinfo("提示", "没有内容可写入")
@@ -1753,20 +1821,46 @@ class ConfigEditor:
         if not path:
             messagebox.showinfo("提示", "请先选择一个模块 (没有关联的源文件路径)")
             return
-        if not messagebox.askyesno("确认覆盖",
-                                   f"覆盖原文件?\n{path}\n\n将自动时间戳备份"):
+        if not messagebox.askyesno("确认更新",
+                                   f"更新 AI 生成段?\n{path}\n\n将自动时间戳备份"):
             return
         try:
             if os.path.isfile(path):
-                import time
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    original = f.read()
+                old_ai_start, old_ai_end = find_ai_block(original)
+                if old_ai_start >= 0:
+                    # 旧文件有 AI 标记 → 替换 AI 段，保留头部/尾部
+                    ai_start, ai_end = find_ai_block(text)
+                    if ai_start >= 0:
+                        new_ai_part = text[ai_start:ai_end]
+                        before_old_ai = original[:old_ai_start]
+                        if not any(x in before_old_ai for x in ['#ifndef', '#include']):
+                            content = before_old_ai + text  # 迁移: 旧格式
+                        else:
+                            content = before_old_ai + new_ai_part + original[old_ai_end:]  # 稳态
+                    else:
+                        content = text  # 预览无 AI 标记, 直接写
+                else:
+                    # 旧文件无 AI 标记 → 写入预览内容 (生成器已产生正确输出)
+                    content = text
+            else:
+                content = text  # 新文件
+
+            import time
+            bak_path = ""
+            if os.path.isfile(path):
                 bak_path = f"{path}.bak_{time.strftime('%Y%m%d_%H%M%S')}"
                 shutil.copy2(path, bak_path)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-            self.status(f"已更新: {path}  (备份: {os.path.basename(bak_path)})")
+                f.write(content)
+            bak_info = f"  (备份: {os.path.basename(bak_path)})" if bak_path else ""
+            self.status(f"已更新: {path}{bak_info}")
         except Exception as e:
             messagebox.showerror("写入失败", str(e))
+            import traceback
+            traceback.print_exc()
 
     def _code_preview_save_as(self):
         """另存代码预览文件"""
@@ -1792,6 +1886,45 @@ class ConfigEditor:
             self._code_preview_pw.forget(self._code_preview_left_frame)
         else:
             self._code_preview_pw.insert(0, self._code_preview_left_frame, weight=1)
+    def _show_data_switcher_preview(self):
+        """生成 data_switcher 代码预览"""
+        config = self._collect_config()
+        project = config.get("project", {})
+        paths = project.get("paths", {})
+        output_root = self.entry_output_root.get().strip()
+        core_dir = paths.get("core_dir", "core")
+        from gen_switcher import generate_switcher
+        content = generate_switcher(
+            config.get("modules", []),
+            config.get("pipes", []),
+            config.get("slot_order", []),
+            project,
+            config.get("slot_chains", [])
+        )
+        sw_path = os.path.abspath(os.path.join(output_root, core_dir, "data_switcher.c")) if output_root else ""
+        self._code_preview_module_label.config(text="data_switcher")
+        self._update_code_preview(content, sw_path)
+
+
+    def _code_preview_regenerate(self):
+        """重新生成当前代码预览内容，不写磁盘"""
+        module_name = self._code_preview_module_label.cget("text")
+        if not module_name or module_name == "(未选择模块)":
+            messagebox.showinfo("提示", "请先选择一个模块")
+            return
+        file_type = self._code_preview_type.get()
+        # data_switcher 特殊处理
+        if module_name == "data_switcher":
+            self._show_data_switcher_preview()
+            self.status("重新生成: data_switcher")
+            return
+        mod = next((m for m in self.modules if m["name"] == module_name), None)
+        if not mod:
+            messagebox.showinfo("提示", f"模块 {module_name} 未找到")
+            return
+        self.status(f"重新生成: {mod['name']} ({file_type})")
+        self._show_module_preview(mod, file_type)
+
     def _check_append(self, text: str, tag: str = None):
         """向检查结果末尾追加一行"""
         self.check_text.config(state=tk.NORMAL)
@@ -1812,6 +1945,23 @@ class ConfigEditor:
         self.check_text.tag_configure("skip", foreground="gray")
         self.check_text.tag_configure("info", foreground="blue")
         self.check_text.tag_configure("bold", font=("Consolas", 10, "bold"))
+
+    def cmd_force_refresh(self):
+        """强制刷新所有预览内容（重新生成树、管道预览、代码预览）"""
+        if not self.config:
+            return
+        # 记住当前选择
+        sel = self.tree.selection()
+        # 重建模块树
+        self._rebuild_tree()
+        # 重新选择并触发更新
+        if sel:
+            try:
+                self.tree.selection_set(sel[0])
+                self._on_tree_select(None)
+            except tk.TclError:
+                pass
+        self.status("强制刷新完成")
 
     def cmd_check(self):
         """运行全部检查"""
@@ -2115,23 +2265,48 @@ class ConfigEditor:
 
         files = []
 
-        # 1. io.h
+        # 1. io.h (AI 标记内嵌在 generate_io_h 输出中, 仅范式段可被替换)
         if mode in ("all", "io"):
             io_out = os.path.join(output_root, io_dir)
             for mod in modules:
-                content = generate_io_h(mod, pipes, project)
+                raw_content = generate_io_h(mod, pipes, project)
                 fname = f"{_pascal_to_snake(mod['name'])}_io.h"
                 fpath = os.path.join(io_out, fname)
                 original = ""
                 if os.path.isfile(fpath):
                     with open(fpath, "r", encoding="utf-8", errors="replace") as f:
                         original = f.read()
+                    # 从新内容中提取 AI 段
+                    ai_start, ai_end = find_ai_block(raw_content)
+                    if ai_start >= 0:
+                        new_ai_part = raw_content[ai_start:ai_end]
+                        # 检查旧文件中 AI 标记前的区域是否包含标准头部
+                        old_ai_start, old_ai_end = find_ai_block(original)
+                        if old_ai_start >= 0:
+                            before_old_ai = original[:old_ai_start]
+                            # 迁移判定: 旧 AI 标记前没有 #ifndef/#include → 头部在 AI 块内部
+                            if not any(x in before_old_ai for x in ['#ifndef', '#include']):
+                                # 迁移模式: 用户内容(标记前) + 新完整内容(头部+AI段+尾部)
+                                content = before_old_ai + raw_content
+                            else:
+                                # 稳态: 保留旧头部/尾部, 只换 AI 段
+                                content = before_old_ai + new_ai_part + original[old_ai_end:]
+                        else:
+                            # 旧文件无 AI 标记 → 插入到头部
+                            content = raw_content
+                    else:
+                        # 新内容没有 AI 标记（异常）, 回退到完整替换
+                        content = raw_content
+                else:
+                    # 新文件: 直接使用完整内容（自带 AI 标记包围范式段）
+                    content = raw_content
                 files.append({"path": fpath, "new_content": content, "original_content": original})
 
-        # 2. data_switcher.c
+        # 2. data_switcher.c (包裹 AI 标记, 统一处理)
         if mode in ("all", "switcher"):
             core_out = os.path.join(output_root, core_dir)
-            content = generate_switcher(modules, pipes, slot_order, project, slot_chains)
+            raw_content = generate_switcher(modules, pipes, slot_order, project, slot_chains)
+            content = wrap_in_ai_block(raw_content)
             fpath = os.path.join(core_out, "data_switcher.c")
             original = ""
             if os.path.isfile(fpath):
@@ -2139,31 +2314,26 @@ class ConfigEditor:
                     original = f.read()
             files.append({"path": fpath, "new_content": content, "original_content": original})
 
-        # 3. 模块 .c + .h (文件名来自 source_file, 不与模块名强制关联)
+        # 3. 模块 .c (仅新模块, 不覆盖已有源文件)
         if mode in ("all", "modules"):
             for mod in modules:
                 source_file = mod.get("source_file", "")
                 if source_file:
                     c_path = os.path.abspath(os.path.join(output_root, source_file))
-                    base_h = os.path.splitext(source_file)[0] + ".h"
-                    h_path = os.path.abspath(os.path.join(output_root, base_h))
                 else:
                     mod_out = _mod_output_dir(mod)
                     c_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.c")
-                    h_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.h")
-                content_c = generate_module_c(mod, pipes, project, c_path)
-                original_c = ""
+
+                # 已有 .c 文件: 使用重构模式插入 AI 块到头部
                 if os.path.isfile(c_path):
                     with open(c_path, "r", encoding="utf-8", errors="replace") as f:
-                        original_c = f.read()
-                files.append({"path": c_path, "new_content": content_c, "original_content": original_c})
+                        orig = f.read()
+                    content_c = generate_module_c_refactored(mod, pipes, project, c_path)
+                    files.append({"path": c_path, "new_content": content_c, "original_content": orig})
+                    continue
 
-                content_h = generate_module_h(mod)
-                original_h = ""
-                if os.path.isfile(h_path):
-                    with open(h_path, "r", encoding="utf-8", errors="replace") as f:
-                        original_h = f.read()
-                files.append({"path": h_path, "new_content": content_h, "original_content": original_h})
+                content_c = generate_module_c(mod, pipes, project, c_path)
+                files.append({"path": c_path, "new_content": content_c, "original_content": ""})
 
         return files
 
@@ -2231,14 +2401,14 @@ class ConfigEditor:
 
 
 class DiffDialog:
-    """生成预览对话框 — 确认文件替换"""
+    """生成预览对话框 — 确认更新 AI 生成段"""
 
     def __init__(self, parent, files_to_generate):
         self.result = []  # 确认的文件列表，_execute 时填充
         self.files = files_to_generate
 
         dlg = tk.Toplevel(parent)
-        dlg.title("生成预览 — 确认文件替换")
+        dlg.title("生成预览 — 确认更新 AI 生成段")
         dlg.geometry("1100x700")
         dlg.transient(parent)
         dlg.grab_set()
@@ -2306,7 +2476,7 @@ class DiffDialog:
         ttk.Button(btn_frame, text="取消全选", command=self._deselect_all).pack(side=tk.LEFT, padx=2)
         ttk.Label(btn_frame, text="").pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.btn_execute = ttk.Button(btn_frame, text=f"执行替换 ({len(files_to_generate)} 个)", command=self._execute)
+        self.btn_execute = ttk.Button(btn_frame, text=f"更新 AI 段 ({len(files_to_generate)} 个)", command=self._execute)
         self.btn_execute.pack(side=tk.RIGHT, padx=2)
         ttk.Button(btn_frame, text="取消", command=dlg.destroy).pack(side=tk.RIGHT, padx=2)
 
@@ -2327,7 +2497,7 @@ class DiffDialog:
         self.file_tree.set(iid, "sel", "☑" if self._file_vars[iid] else "☐")
         # 更新按钮计数
         checked = sum(1 for v in self._file_vars.values() if v)
-        self.btn_execute.config(text=f"执行替换 ({checked} 个)")
+        self.btn_execute.config(text=f"更新 AI 段 ({checked} 个)")
 
     def _on_file_select_diff(self, event):
         sel = self.file_tree.selection()
@@ -2377,13 +2547,13 @@ class DiffDialog:
             self._file_vars[iid] = True
             self.file_tree.set(iid, "sel", "☑")
         checked = len(self._file_vars)
-        self.btn_execute.config(text=f"执行替换 ({checked} 个)")
+        self.btn_execute.config(text=f"更新 AI 段 ({checked} 个)")
 
     def _deselect_all(self):
         for iid in self._file_vars:
             self._file_vars[iid] = False
             self.file_tree.set(iid, "sel", "☐")
-        self.btn_execute.config(text="执行替换 (0 个)")
+        self.btn_execute.config(text="更新 AI 段 (0 个)")
 
     def _execute(self):
         confirmed = []

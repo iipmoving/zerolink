@@ -534,7 +534,7 @@ int16_t * Power_Calculator_GetTxaBuffAddress(uint8_t ch)
     // );
 
 
-
+#if 0
 // 32位整数平方根（避免浮点）
 static uint32_t sqrt32(uint32_t n) {
     uint32_t root = 0;
@@ -648,7 +648,7 @@ static bool isNoLoadCondition(const uint16_t* current, uint16_t count, int32_t p
     }
     return (max - min) < (NO_LOAD_THRESHOLD >> 1);  // 右移代替除2
 }
-
+#endif
 // 主计算函数
 #if 0
 PowerResult CalculatePowerAi(
@@ -1050,55 +1050,18 @@ PowerResult CalculatePower(
 
 //瞬时电流
         xReturn.active_current=sumCurrent;
-//峰值电流
-//        uint32_t esrValue=sumUp.voltage/sumCurrent;         //电压除以电流
-//        xReturn.esr=   esrValue;         
-//				
+
 				 xReturn.peak_current=sumUp.peak_current;
 
 				
-#if 0 
-//上管相位角
-        uint32_t angle=hrtim_values[phaseUp]*180;		//相位角（180度为单位）
-        angle/=input->highOff;
-        xReturn.phase_angleUp=angle;
-				
-//下管相位角
-				angle=hrtim_values[phaseDown]-input->highOff;		//相位角（180度为单位）
-        angle*=180;
-        angle/=(input->lowOff-input->highOff);
-        xReturn.phase_angleDown=angle;
-						
-					
-						
-//				xReturn.zero_current=sumUp.current/hrtim_per_adc;
-           
-            if(phaseUp>potNumStart)
-            {
-//上管过零点位置（数组位号）							
-							
-//                xReturn.zero_cross_high=phaseUp-potNumStart;            //这个是相对于起始点的位置
-	//							 xReturn.zero_cross_high=hrtim_values[phaseUp]/FRE_PER_ADC;
-							
-							xReturn.zero_cross_high=(hrtim_values[phaseUp]-input->highOn)/FRE_PER_ADC;
-							
-            }
-            if(phaseDown>phaseUp)
-            {
-//下管过零点位置（数组位号）								
-          //      xReturn.zero_cross_low=phaseDown-potNumStart;    
-								 xReturn.zero_cross_high=hrtim_values[phaseDown]/FRE_PER_ADC;
-							
-							
-            }
-#else
+
 				if(hrtim_values[phaseUp]>input->highOn)
 				{
 
                     uint32_t angle=hrtim_values[phaseUp]-input->highOn;
 						
 //                    xReturn.zero_cross_high=angle/(FRE_PER_ADC/4);
-										 xReturn.zero_cross_high=hrtim_values[phaseUp];	
+					xReturn.zero_cross_high=hrtim_values[phaseUp];	
 					
 					
                     angle*=PHASE_DEG_BASE;		//相位角（180度为单位）
@@ -1121,7 +1084,7 @@ PowerResult CalculatePower(
 
 
     }
-#endif
+
 		
 	return	xReturn;
 }

@@ -2319,7 +2319,7 @@ void	APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
 			message.array[2].size=size;	
 			message.array[3].size=0;	
 
-			message.array[0].buff=TxaHrtimBuff[PotChWork];
+			message.array[0].buff=TxaHrtimBuff[PotChWork];			//这个放在首地址
 			message.array[1].buff=TxaVcBuff[PotChWork];
 //			message.array[2].buff=TxaAdcBuff[PotChWork];		
 			message.array[2].buff=TxaFmacBuff[PotChWork]+fmacLeveNum/2;
@@ -2512,11 +2512,17 @@ void 	APP_ADC_TimDmaEnd(void)			//每1ms 计算一次TXA有效值
 
 
 
-		if(AdcFromApiDma20ms.count<=20&&AdcFromApiDma20ms.count>1)
+		if(AdcFromApiDma20ms.count<=20)
 		{
 //-----------找到起始点----------------------------------	
 			
 
+			if(&&AdcFromApiDma20ms.count<=1)
+			{	
+	
+				TxA_ADC_AdcDmaBuff.step = TXA_StepFmacEnd;		//第一个时间片不FMAC，进20MS统计
+				return;
+			}
 //			uint16_t delay=1000;
 //			while(delay--);
 			
@@ -2532,16 +2538,12 @@ startLoop:
 			
 			if(APP_ADC_MesageBuff())			//将DMA数据转存到数组
 			{
-
+					TxA_ADC_AdcDmaBuff.step = TXA_StepFmacStart;
 					
 			}
 			API_GPIO_WritePin(DebugA_pin,0);
 			
 		}
-		else
-		{
-				
-		}	
 		
 	}	
 }	

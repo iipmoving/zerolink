@@ -952,6 +952,11 @@
               <FileType>1</FileType>
               <FilePath>..\..\DRV\SRC\adc_processing1.c</FilePath>
             </File>
+            <File>
+              <FileName>drv_hrtim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\DRV\SRC\drv_hrtim.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1190,6 +1195,11 @@
               <FileName>app_power.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\APP\POWER\src\app_power.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_power_drv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\APP\POWER\src\app_power_drv.c</FilePath>
             </File>
           </Files>
         </Group>

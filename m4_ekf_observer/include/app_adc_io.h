@@ -1,73 +1,101 @@
 /**
  * @file    app_adc_io.h
- * @brief   APP_ADC Data Switcher IO interface
- * @layer   app (Data Switcher IO)
+ * @brief   AppAdc Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 本文件定义 APP_ADC 模块对外暴露的 I/O 接口。
- * 仅 data_switcher.c 和 APP_ADC.C 自身可用全路径 include 本文件。
+ * ADC 采样 — 输出谐振电流/电压/HRTIM 时序到 Calculator 和功率参数到 AppPower
  *
- * === v2.2 PULL 范式 ===
- * AdcValues_t 暴露在公开头，中间层使用类型化指针 AdcValues_t* 路由。
- * Union AdcBlock_t 兼容旧代码 inputValue[AdcGroupXxx] 枚举下标访问。
- * 每炉头独立 AdcHeadValues_t，循环时只传 &fields.head[ch] 一个指针。
+ * 输出目标:
+ *   AppAdc → AppPower  (ADC → Power: 电压/电流/相位等功率控制参数)
+ *   AppAdc → Calculator  (ADC → Calculator: 谐振电流/HRTIM 时序原始数据)
  */
 
-#ifndef APP_ADC_IO_H
-#define APP_ADC_IO_H
+#ifndef APPADC_IO_H
+#define APPADC_IO_H
 
 #include <stdint.h>
 #include "std_module.h"
 
-/* ---- 单炉头数据 — 每炉头独立空间 ---- */
-//typedef struct {
-//    uint32_t power;
-//    uint32_t current;
-//    uint32_t phase;
-//    uint32_t phase_down;
-//    uint32_t ceil_q;
-//    uint32_t bottom_temp;
-//    uint32_t igbt_temp;
-//} AdcHeadValues_t;
-
-
-#define	ADC_POTMAX	4
-typedef struct	__attribute__((aligned(32))) {
-	
-	uint16_t 	voltage;	
-	uint16_t 	Fan;
-	
-	uint16_t	power[ADC_POTMAX];		//MASTER CURRENT AD
-	uint16_t 	txa[ADC_POTMAX];			//电
-	uint16_t 	bottom[ADC_POTMAX];
-	uint16_t 	igbt[ADC_POTMAX];
-	uint16_t 	ceilQ[ADC_POTMAX];	
-	uint16_t 	phase[ADC_POTMAX];		
-	uint16_t 	phaseDown[ADC_POTMAX];		
-	
-}APP_Adc_Output_t;				//与APP_ADC_DEF	inputvalue[]一样 所以不需要实例
-
-
-
-///* ---- 全局数据 + 炉头数组 ---- */
-//typedef struct {
-//    uint32_t        voltage;         /* 全局(非炉头) */
-//    uint32_t        fan;             /* 全局 */
-//    AdcHeadValues_t head[4];         /* 每炉头独立 */
-//} AdcValues_t;
-
-///* ---- Union — 旧代码兼容 + 新代码类型安全 ---- */
-//typedef union {
-//    uint32_t    inputValue[30];  /* 旧代码: inputValue[AdcGroupVoltage] */
-//    AdcValues_t fields;          /* 新代码: fields.head[ch].phase      */
-//} AdcBlock_t;
-
 #pragma pack(4)
 
+#define	POTMAXNUM 4
 
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+
+/* ================================================================
+ * AppAdc_OutputParams_t — 每通道 HRTIM 工作周期参数 (独立 typedef, 多处引用)
+ * ================================================================ */
+
+typedef struct {
+    uint16_t start;     /* HRTIM 开始点 */
+    uint16_t end;     /* HRTIM 结束点 */
+    uint16_t highOn;     /* 死区后高端开通 HRTIM 值 */
+    uint16_t highOff;     /* 高端关闭 (DUTY PPG 占空比) */
+    uint16_t lowOn;     /* 死区后低端开通 */
+    uint16_t lowOff;     /* 低端关闭 (prioed PPG 周期) */
+    uint16_t zero_cross_high;     /* 高端过零点索引 */
+    uint16_t zero_cross_low;     /* 低端过零点索引 */
+    uint16_t perAdc;     /* 每个 ADC 对应的 HRTIM 值 */
+} AppAdc_OutputParams_t;
+
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppAdc → AppPower  输出参数  (ADC → Power: 电压/电流/相位等功率控制参数)
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint16_t voltage;     /* 母线电压 ADC */
+    uint16_t power[4];     /* 每炉头功率 ADC */
+    uint16_t txa[4];     /* 每炉头谐振电流 ADC */
+    uint16_t phase[4];     /* 每炉头相位 ADC */
+} MODULE_OUTPUT_PARAMS(AppAdc, AppPower);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(AppAdc, AppPower) *params;
+} MODULE_OUTPUT_LINK(AppAdc, AppPower);
+
+/* ------------------------------------------------------------------
+ * AppAdc → Calculator  输出参数  (ADC → Calculator: 谐振电流/HRTIM 时序原始数据)
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint16_t** resonant_current;     /* 谐振电流 ADC 数组指针数组 */
+    uint16_t** hrtim_values;     /* HRTIM 时间戳数组指针数组 */
+    uint16_t** voltage_data;     /* 母线电压数组指针数组 */
+    AppAdc_OutputParams_t* input;     /* 每通道 HRTIM 工作周期参数 (AppAdc 侧独立 typedef) */
+} MODULE_OUTPUT_PARAMS(AppAdc, Calculator);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(AppAdc, Calculator) *params;
+} MODULE_OUTPUT_LINK(AppAdc, Calculator);
+
+/* AppAdc_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
+typedef struct {
+    MODULE_OUTPUT_LINK(AppAdc, AppPower)  AppPower_params;  /* → AppPower */
+    MODULE_OUTPUT_LINK(AppAdc, Calculator)  Calculator_params;  /* → Calculator */
+} MODULE_OUTPUT(AppAdc);
+
+/* ========== INPUT (无) — 本模块没有输入 ========== */
+
+/* AppAdc_Input — 无输入 */
+typedef struct {
+    uint8_t  res[4];
+} MODULE_INPUT(AppAdc);
+// ===== [END AI GENERATED] =====
 
 #pragma pack()
 
-/* ---- v2.2 统一接口 ---- */
-MODULE_IO_H(APP_Adc);
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(AppAdc);
 
-#endif /* APP_ADC_IO_H */
+#endif /* APPADC_IO_H */
+

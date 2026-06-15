@@ -6,18 +6,17 @@
 #include <string.h>
 
 /* ========================== 工作周期定义 (保持不变) ========================== */
-
 typedef struct {
-    uint16_t start;             // HRTIM 开始点索引
-    uint16_t end;               // HRTIM 结束点索引
-    uint16_t highOn;            // 死区后上管开通 HRTIM 值
-    uint16_t highOff;           // 上管关断 (DUTY)  HRTIM 值
-    uint16_t lowOn;             // 死区后下管开通 HRTIM 值
-    uint16_t lowOff;            // 下管关断 (period) HRTIM 值
-    uint16_t zero_cross_high;   // 上管过零点索引
-    uint16_t zero_cross_low;    // 下管过零点索引
-    uint16_t perAdc;            // 每个 ADC 采样对应的 HRTIM 计数
-    uint16_t lagDuty;           // 滞后臂占空比 CMP 值 (全桥)
+    uint16_t start;             // HRTIM开始点
+    uint16_t end;               // HRTIM结束点   
+    uint16_t highOn;            // 死区后高端开通HRTIM值
+    uint16_t highOff;           // 高端关闭(DUTY PPG占空比) 
+    uint16_t lowOn;             // 死区后低端开通
+    uint16_t lowOff;            // 低端关闭(prioed PPG周期)
+    uint16_t zero_cross_high;   // 高端过零点索引
+    uint16_t zero_cross_low;    // 低端过零点索引
+    uint16_t perAdc;            // 每个ADC对应的HRTIM值
+    uint16_t res;
 } PowerCalculatorInputDef;
 
 /* ========================== 峰值电流信息 ========================== */
@@ -32,8 +31,8 @@ typedef struct {
 typedef struct {
     uint32_t voltage;
     uint32_t current;
-		uint16_t peak_current;
-		uint16_t peak_num;
+	uint16_t peak_current;
+	uint16_t peak_num;
 } CalculatorResultDef;
 
 
@@ -47,12 +46,12 @@ typedef struct {
 
 typedef struct {
 	
-		IH_HrtimState	hrtim;			
+	IH_HrtimState	hrtim;			
 	
-		uint16_t 	peak_current;          // 峰值电流 (ADC 值)
+	uint16_t 	peak_current;          // 峰值电流 (ADC 值)
     uint16_t  active_current;        // 有功电流 (整数定标)
     uint16_t 	voltage;               // 瞬时电压均值 (ADC 值)    
-		uint16_t 	zero_cross_high;       // 上管过零点索引
+	uint16_t 	zero_cross_high;       // 上管过零点索引
 
 } IH_CycleDataDef;
 

@@ -1,127 +1,128 @@
-// ============================================================================
-// elec_params_io.h — 电参数计算模块 I/O 结构体 (v2.3 LINK+PARAMS)
-// ============================================================================
-// 输入: Calculator (HRTIM 时序 + 电流电压) — InputCallback 直穿赋值
-// 输出: PowerBase  (L, f_res, Q, R, P 等)
-// ============================================================================
-//
-// IO 头独立规则:
-//   elec_params_io.h 不 #include 任何其他模块的 IO 头。
-//   本模块所需的输入类型在此自包含定义。
-//   InputCallback (在 data_switcher.c) 将 Calculator 输出 LINK 地址
-//   直穿赋值给本模块的输入指针。
-//
-//   布局兼容性: ElecParams_CycleInput 与 Calculator_to_ElecParams_Output_Params
-//   的字段顺序/大小一致，确保指针直穿后字段偏移正确。
-//
-// ============================================================================
-#ifndef ELEC_PARAMS_IO_H
-#define ELEC_PARAMS_IO_H
+/**
+ * @file    elec_params_io.h
+ * @brief   ElecParams Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   base_class
+ *
+ * 电参数计算 — 20ms 周期计算 I_peak/L/f_res/Q/R/P 等
+ *
+ * 输入源:
+ *   Calculator → ElecParams  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
+ *
+ * 输出目标:
+ *   ElecParams → EKF_LKF  (ElecParams → EKF: 电参数观测值)
+ *   ElecParams → AppPower  (ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值))
+ */
+
+#ifndef ELECPARAMS_IO_H
+#define ELECPARAMS_IO_H
 
 #include <stdint.h>
-#include <stdbool.h>
 #include "std_module.h"
 
-// ========== 标定常数 ==================================================
-#define IH_C_FARAD          0.9e-6f     // 谐振电容 0.9 μF
-#define IH_I_SCALE          0.02523f    // I_adc → A
-#define IH_VDC_SCALE        0.10606f    // Vdc_adc → V
-#define IH_PHI_SCALE        0.1f        // phi 单位 0.1° → °
+#pragma pack(4)
 
-#define IH_I_PEAK_MIN_RATIO 0.3f        // I_peak < 中位数×0.3 丢弃
-#define IH_L_MIN_uH        10.0f        // 有效 L 下限
-#define IH_FRES_MIN_kHz    5.0f         // 有效 f_res 下限
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
 
-// 高电压采样窗口 (对应 adc_sensor.c num10=[4,5])
-// 相位角和 L 只使用此窗口内的周期
-#define IH_HV_WIN_NUM10_MIN 4           // 高电压段 ADC sample 起始序号
-#define IH_HV_WIN_NUM10_MAX 5           // 高电压段 ADC sample 结束序号
-#define IH_HV_WIN_CNT_MIN   1           // 每周期至少 N 次电压采样才算有效
-
-#define ELEC_CYCLE_MAX      20          // 内部计算最大周期数
-#define ELEC_POTMAX         4           // 炉头数 (与 CALC_POTMAX 一致)
-
-// ========== HRTIM 时序状态 ============================================
+/* ------------------------------------------------------------------
+ * ElecParams → EKF_LKF  输出参数  (ElecParams → EKF: 电参数观测值)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint16_t highOn;
-    uint16_t highOff;
-    uint16_t lowOn;
-    uint16_t lowOff;
-} ElecParams_HrtimState;
+    uint8_t valid;     /* 数据有效性 */
+    uint8_t res[3];     /* 保留 */
+    int32_t I_peak_A;     /* 峰值电流 (0.01A) */
+    int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
+    int32_t phi_deg;     /* 相位角 (0.01°) */
+    int32_t L_uH;     /* 等效电感 (0.01μH) */
+    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+    int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
+    int32_t P_W;     /* 有功功率 (0.01W) */
+    int32_t Q_factor;     /* 品质因数 (0.01) */
+} MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF);
 
-/* ===================================================================
- * 输入定义 — 布局与 Calculator_to_ElecParams_Output_Params 兼容
- * =================================================================== */
-
-/* 单周期数据 (与 Calculator 输出 params[i] 字段对齐, 32 bytes) */
 typedef struct {
-    ElecParams_HrtimState hrtim;        //  8 bytes
-    uint16_t peak_current;              //  2
-    uint8_t  pad[2];                    //  2
-    uint32_t active_current_sum_high;   //  4
-    uint32_t active_current_sum_low;    //  4
-    uint32_t voltage_sum;               //  4
-    uint16_t zero_cross_high;           //  2
-    uint16_t zero_cross_low;            //  2
-    uint16_t peak_point;                //  2
-    uint16_t voltage_count;             //  2
-} ElecParams_CycleInput;               // 32 bytes
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) params[4];
+} MODULE_OUTPUT_LINK(ElecParams, EKF_LKF);
 
-/* Calculator → ElecParams: 输入 LINK (布局与 Calculator 输出 LINK 一致) */
+/* ------------------------------------------------------------------
+ * ElecParams → AppPower  输出参数  (ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值))
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;             // ST_NEW (Calculator 产出后置位)
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  _enable;
+    uint8_t valid;     /* 数据有效性 */
+    uint8_t res[3];     /* 保留 */
+    int32_t I_peak_A;     /* 峰值电流 (0.01A) */
+    int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
+    int32_t phi_deg;     /* 相位角 (0.01°) */
+    int32_t L_uH;     /* 等效电感 (0.01μH) */
+    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+    int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
+    int32_t P_W;     /* 有功功率 (0.01W) */
+    int32_t Q_factor;     /* 品质因数 (0.01) */
+    int32_t I_rms;     /* 电流有效值 (A) — I_rms = I_peak × √2/2 */
+    int32_t Z_mag_ohm;     /* 阻抗模 (Ω) — Z = √(R² + X²) */
+    int32_t X_ohm;     /* 净电抗 (Ω) — X = X_L - X_C */
+} MODULE_OUTPUT_PARAMS(ElecParams, AppPower);
 
-    uint32_t *    shareBuff;           // ElecParams_Ws 工作区指针 (外部传入)
-    ElecParams_CycleInput cycles[ELEC_POTMAX * ELEC_CYCLE_MAX];
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(ElecParams, AppPower) params[4];
+} MODULE_OUTPUT_LINK(ElecParams, AppPower);
+
+/* ElecParams_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
+typedef struct {
+    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)  EKF_LKF_params;  /* → EKF_LKF */
+    MODULE_OUTPUT_LINK(ElecParams, AppPower)  AppPower_params;  /* → AppPower */
+} MODULE_OUTPUT(ElecParams);
+
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * Calculator → ElecParams  输入参数  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint16_t hrtim_highOff;     /* 上管关断 HRTIM 值 */
+    uint16_t hrtim_lowOff;     /* 下管关断 HRTIM 值 */
+    uint16_t hrtim_highOn;     /* 上管开通 HRTIM 值 */
+    uint16_t hrtim_lowOn;     /* 下管开通 HRTIM 值 */
+    uint16_t peak_current;     /* 峰值电流 ADC */
+    uint32_t active_current_sum_high;     /* 上管电流积分和 */
+    uint32_t active_current_sum_low;     /* 下管电流积分和 */
+    uint32_t voltage_sum;     /* 电压原始累加 */
+    uint16_t voltage_count;     /* 电压累加计数 */
+    uint16_t zero_cross_high;     /* 上管过零点 */
+    uint16_t zero_cross_low;     /* 下管过零点 */
+    uint16_t peak_point;     /* 峰值点 HRTIM 值 */
+} MODULE_INPUT_PARAMS(Calculator, ElecParams);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_INPUT_PARAMS(Calculator, ElecParams) *params;
 } MODULE_INPUT_LINK(Calculator, ElecParams);
 
-/* 输入包装: InputCallback 直穿赋值 input 指针 */
+/* ElecParams_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
-    MODULE_INPUT_LINK(Calculator, ElecParams)* input;
+    MODULE_INPUT_LINK(Calculator, ElecParams) *Calculator_params;  /* 指向 Calculator 输出的 LINK 列 */
 } MODULE_INPUT(ElecParams);
 
-/* ===================================================================
- * 输出定义 (ElecParams → PowerBase)
- * =================================================================== */
-
-typedef struct {
-    int32_t I_peak_A;
-    int32_t Vdc_mean;
-    int32_t phi_deg;
-    int32_t f_sw_Hz;
-
-    int32_t L_uH;
-    int32_t f_res_kHz;
-    int32_t Q_factor;
-    int32_t R_ohm;
-    int32_t I_rms;
-    int32_t P_W;
-    int32_t Z_mag_ohm;
-    int32_t X_ohm;
-
-    int32_t L_stable;
-    int32_t L_fast;
-    uint8_t event;          // 0=正常 1=抬锅 2=移锅 3=干烧
-    uint8_t valid;
-    uint8_t res[2];
-} MODULE_OUTPUT_PARAMS(ElecParams, PowerBase);
-
-/* ElecParams → PowerBase: 输出 LINK (每炉头) */
-typedef struct {
-    uint8_t  status;
-    uint8_t  event;
-    uint8_t  res[2];
-    MODULE_OUTPUT_PARAMS(ElecParams, PowerBase) params[ELEC_POTMAX];
-} MODULE_OUTPUT_LINK(ElecParams, PowerBase);
-
-typedef struct {
-    MODULE_OUTPUT_LINK(ElecParams, PowerBase)  head;
-} MODULE_OUTPUT(ElecParams);
+#pragma pack()
 
 /* ---- v2.3 统一接口 ---- */
 MODULE_IO_H(ElecParams);
 
-#endif /* ELEC_PARAMS_IO_H */
+#endif /* ELECPARAMS_IO_H */
+

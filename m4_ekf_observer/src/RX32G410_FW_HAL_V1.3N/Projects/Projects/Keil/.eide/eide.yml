@@ -26,122 +26,158 @@ virtualFolder:
       folders:
         - name: HAL
           files:
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_adc.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_adc_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_can.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_clc.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_comp.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_cordic.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_cortex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_crc.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dac.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dac_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dma.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dma_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_exti.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_flash.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_flash_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_fmac.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_gpio.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_hrtim.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_i2c.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_iwdg.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_opamp.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_opamp_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_pwr.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_pwr_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rcc.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rcc_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rtc.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rtc_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_spi.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_tim.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_tim_ex.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_uart.c
-            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_wwdg.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_adc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_adc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_can.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_clc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_comp.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_cordic.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_cortex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_crc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_dac.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_dac_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_dma.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_dma_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_exti.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_flash.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_flash_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_fmac.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_gpio.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_hrtim.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_i2c.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_iwdg.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_opamp.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_opamp_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_pwr.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_pwr_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_rcc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_rcc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_rtc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_rtc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_spi.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_tim.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_tim_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_uart.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/Src/rx32g4xx_hal_wwdg.c
           folders: []
     - name: DRV
       files:
-        - path: ../../drv/src/DRV_GPIO.C
-        - path: ../../drv/src/adc_processing.s
-        - path: ../../drv/src/adc_processing1.c
+        - path: ../../DRV/SRC/DRV_GPIO.C
+        - path: ../../DRV/SRC/drv_hrtim.c
       folders: []
     - name: APP
       files: []
       folders:
         - name: SYS
           files:
-            - path: ../../app/sys/src/S_PID.C
-            - path: ../../app/sys/src/Simulative_Uart.c
-            - path: ../../app/sys/src/s_time_base.c
-            - path: ../../app/sys/src/sys_task.c
-            - path: ../../app/sys/src/S_DATA_STACK.C
+            - path: ../../APP/sys/SRC/S_PID.C
+            - path: ../../APP/sys/SRC/Simulative_Uart.c
+            - path: ../../APP/sys/SRC/s_time_base.c
+            - path: ../../APP/sys/SRC/sys_task.c
+            - path: ../../APP/sys/SRC/S_DATA_STACK.C
           folders: []
         - name: POWER
           files:
-            - path: ../../app/POWER/src/app_task.c
-            - path: ../../app/POWER/src/APP_ZERO.C
+            - path: ../../APP/POWER/src/app_task.c
+            - path: ../../APP/POWER/src/APP_ZERO.C
           folders: []
     - name: INTERFACE
       files:
-        - path: ../../interface/src/Proto_SlaveI2C.C
+        - path: ../../INTERFACE/src/Proto_SlaveI2C.C
       folders: []
     - name: API
       files:
-        - path: ../../api/src/API_gpio.c
-        - path: ../../api/src/API_TIM.C
-        - path: ../../api/src/API_I2C.C
-        - path: ../../api/src/API_UART.C
-        - path: ../../api/src/API_DMA.C
-        - path: ../../api/src/API_FLASH.C
+        - path: ../../API/src/API_gpio.c
+        - path: ../../API/src/API_TIM.C
+        - path: ../../API/src/API_I2C.C
+        - path: ../../API/src/API_UART.C
+        - path: ../../API/src/API_DMA.C
+        - path: ../../API/src/API_FLASH.C
       folders: []
-    - name: base_class
+    - name: baseClass
       files:
-        - path: ../../base_class/src/CommClass.c
-        - path: ../../base_class/src/pluse.c
-        - path: ../../base_class/src/power_calculator.c
-        - path: ../../base_class/src/printMessage.c
-        - path: ../../base_class/src/queue.c
-        - path: ../../base_class/src/phase.c
+        - path: ../../BaseClass/src/CommClass.c
+        - path: ../../BaseClass/src/pluse.c
+        - path: ../../BaseClass/src/power_calculator.c
+        - path: ../../BaseClass/src/printMessage.c
+        - path: ../../BaseClass/src/queue.c
+        - path: ../../BaseClass/src/phase.c
+        - path: ../../BaseClass/src/power_calculator_fullbridge.c
+        - path: ../../BaseClass/src/wave_capture.c
+        - path: ../../BaseClass/src/ih_elec_params.c
+        - path: ../../../../../base_class/drv_hrtim_consumer.c
+        - path: ../../BaseClass/src/calculator.c
+        - path: ../../BaseClass/src/elec_params.c
+      folders: []
+    - name: powerGroup
+      files:
+        - path: ../../../../../app/power_output.c
+        - path: ../../../../../app/power_pan_if.c
+        - path: ../../../../../app/power_protect.c
+        - path: ../../../../../app/power_pid.c
+        - path: ../../LIB/APP/app_power_claude.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_pwm.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_pan_pulse.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_pan_count.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_isr.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_fmac.c
+        - path: ../../LIB/APP/powerGroup/drv/drv_protect.c
+        - path: ../../LIB/APP/powerGroup/mw/mw_shutdown.c
+        - path: ../../LIB/APP/powerGroup/mw/mw_startup.c
+        - path: ../../LIB/APP/powerGroup/mw/mw_protect.c
+        - path: ../../LIB/APP/powerGroup/mw/mw_current_limit.c
+        - path: ../../LIB/APP/powerGroup/ctrl/ctrl_power.c
+        - path: ../../LIB/APP/powerGroup/ctrl/ctrl_pan_state.c
+        - path: ../../LIB/APP/powerGroup/ctrl/ctrl_pot_type.c
+        - path: ../../LIB/APP/powerGroup/ctrl/ctrl_cycle.c
+        - path: ../../LIB/APP/powerGroup/ctrl/ctrl_zero.c
       folders: []
     - name: USER
       files:
-        - path: ../../users/src/main.c
-        - path: ../../users/src/rx32g4xx_it.c
+        - path: ../../Users/src/main.c
+        - path: ../../Users/src/rx32g4xx_it.c
       folders: []
     - name: output
       files:
         - path: rx410.sct
         - path: Output_ROM/Objects/RX32G410_ROM.sct
-        - path: ../../doc/readme.txt
+        - path: ../../DOC/readme.txt
       folders: []
     - name: ApiLib
       files:
-        - path: ../../lib/RX32G410_ROM.lib
+        - path: ../../LIB/RX32G410_ROM.lib
       folders: []
     - name: ApiLibSrc
       files:
-        - path: ../../lib/api/API_FMAC.C
-        - path: ../../lib/api/API_adc.c
-        - path: ../../lib/api/API_comp.c
-        - path: ../../lib/api/API_DAC.C
-        - path: ../../lib/api/API_hrtim.c
-        - path: ../../lib/api/API_OPAM.C
+        - path: ../../LIB/API/API_FMAC.C
+        - path: ../../LIB/API/API_adc.c
+        - path: ../../LIB/API/API_comp.c
+        - path: ../../LIB/API/API_DAC.C
+        - path: ../../LIB/API/API_hrtim.c
+        - path: ../../LIB/API/API_OPAM.C
+        - path: ../../LIB/API/API_hrtim_fullbridge.c
       folders: []
     - name: AppLibSrc
       files:
-        - path: ../../lib/app/APP_ADC.C
-        - path: ../../lib/app/app_power.c
+        - path: ../../LIB/APP/APP_ADC.C
+        - path: ../../LIB/APP/app_power.c
+        - path: ../../APP/POWER/src/app_power_drv.c
+        - path: ../../../../../app/adc_sensor.c
       folders: []
     - name: modbus
       files:
         - path: ../../modbus/src/Modbus_Lib_Init_An_Analysis.c
         - path: ../../modbus/src/Modbus_Analysis_Lib.c
+        - path: ../../../../../app/ekf/modbus_ekf_regs.c
       folders: []
     - name: TXT
       files:
         - path: ReadMe.txt
+      folders: []
+    - name: core
+      files:
+        - path: ../../core/data_switcher.c
       folders: []
 dependenceList: []
 outDir: build
@@ -152,16 +188,18 @@ targets:
     cppPreprocessAttrs:
       defineList:
         - RX32G410
-        - DEBUG_POWER_OUTx
-        - SimZerox
+        - DEBUG_POWER_OUT
+        - SimZero
         - I2C2_PORT
         - PrintMessage
         - Fmac9
         - CurrentFromTxa
-        - COMM_UARTX
+        - COMM_UARTx
         - TxaFmac
         - DEBUG_POWER_OUT_CONSTX
       incList:
+        - ../../../../../include
+        - ../../../../../app
         - ../../../Drivers/CMSIS/CM4/CoreSupport
         - ../../../Drivers/CMSIS/CM4/DeviceSupport/inc
         - ../../../Drivers/RX32G4xx_HAL_Driver/Inc
@@ -174,16 +212,26 @@ targets:
         - ../../INTERFACE/inc
         - ../../Users/inc
         - ../../modbus/inc
+        - ../../BaseClass/inc/IH_ElecParams
+        - ../../core
+        - ../../../../../base_class/inc
         - .cmsis/include
         - RTE/_BasicApp_ROM
       libList: []
     excludeList:
+      - <virtual_root>/DRV/drv_hrtim.c
       - <virtual_root>/APP/SYS/Simulative_Uart.c
-      - <virtual_root>/base_class/queue.c
+      - <virtual_root>/baseClass/power_calculator.c
+      - <virtual_root>/baseClass/queue.c
+      - <virtual_root>/baseClass/power_calculator_fullbridge.c
+      - <virtual_root>/powerGroup
       - <virtual_root>/output
       - <virtual_root>/ApiLib
+      - <virtual_root>/AppLibSrc/APP_ADC.C
+      - <virtual_root>/AppLibSrc/app_power_drv.c
       - <virtual_root>/TXT
-    settings: {}
+    settings:
+      debugger: cortex-debug
     toolchain: AC6
     toolchainConfigMap:
       AC6:

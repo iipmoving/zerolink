@@ -1,3 +1,41 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../../include_io/app_power_io.h"
+
+MODULE_SKELETON(AppPower);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appadc   : 1;  /* AppAdc 数据就绪 */
+        uint8_t calculator   : 1;  /* Calculator 数据就绪 */
+        uint8_t elecparams   : 1;  /* ElecParams 数据就绪 */
+        uint8_t ekf_lkf   : 1;  /* EKF_LKF 数据就绪 */
+    } bits;
+} AppPower_PipeFlags_t;
+
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppPower) *in  = (MODULE_INPUT(AppPower)*)g_input.para;
+    MODULE_OUTPUT(AppPower) *out = (MODULE_OUTPUT(AppPower)*)g_output.para;
+
+    /* === 输入段: 数据有效检查 === */
+    AppPower_PipeFlags_t flags = {0};
+    flags.bits.appadc = (in->AppAdc_params->status & ST_NEW) ? 1 : 0;
+    flags.bits.calculator = (in->Calculator_params->status & ST_NEW) ? 1 : 0;
+    flags.bits.elecparams = (in->ElecParams_params->status & ST_NEW) ? 1 : 0;
+    flags.bits.ekf_lkf = (in->EKF_LKF_params->status & ST_NEW) ? 1 : 0;
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppPower);
+
+// ===== [END AI GENERATED] =====
+
 /********************************************************************************
     FileName    :  app_power.c
     Author      :  rsl
@@ -30,7 +68,8 @@
 #include	"API_FMAC.H"
 
 #include	"app_power.h"
-#include "../include/app_power_io.h"
+//#include "../include/app_power_io.h"
+
 //#include	"APP_ADC.H"
 
 /* === __weak stubs — APP_ADC 接口 ===============================
@@ -658,8 +697,11 @@ enum
 //} Power_Output_t;
 
 AppPowerDef						PowerMem[POTNUM];						//炉头2
-static PowerBase_Input_t  g_inPara;				// 输入缓存
-static PowerBase_Output_t g_outPara;      //输出缓存                                    /* v2.0 Data Switcher 输出槽 */
+static MODULE_INPUT(AppPower)*  s_inPara;				// 输入缓存
+/* AppAdc 直通 LINK 别名 (INPUT_GET_SLOT 赋值 void*, 此处按 producer 类型访问) */
+
+
+static MODULE_OUTPUT(AppPower) s_outPara;      //输出缓存
                                   /* 指向 g_in, Switcher 填入数据后消费 */
 PowerInputDef					PowerInput[POTNUM];					//输入变量(通讯输入）
 AppPowerStaticDef			PowerStaticReg[POTNUM];			//定义两个炉寄存器空间
@@ -6330,19 +6372,22 @@ void		API_POWER_PanCheckPluse(void)
 
 void		Power_Adc_Input(void)
 {
+	
+
+	
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
     for (uint8_t ch = 0; ch < POTNUM; ch++) {
 
 
-				PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
-        PowerMem[ch].staticReg->current16 = 		g_inPara.pAdc[ch].current;
-				PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
+		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
+        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params->txa[ch];// 		s_AdcLink->params->txa[ch];
+		PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
 
 
-        PowerMem[ch].input->status.voltageAd = g_inPara.pAdc[ch].voltage>> 4;
-        PowerMem[ch].staticReg->PowerTxaFact =	g_inPara.pAdc[ch].power;
-        PowerMem[ch].staticReg->phaseValue = g_inPara.pAdc[ch].phase;;
-        PowerMem[ch].staticReg->limitQSum = g_inPara.pAdc[ch].current;;
+        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params->voltage>> 4;
+        PowerMem[ch].staticReg->PowerTxaFact =	s_inPara->AppAdc_params->params->power[ch];
+        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params->phase[ch];;
+        PowerMem[ch].staticReg->limitQSum = s_inPara->AppAdc_params->params->txa[ch];;
         PowerMem[ch].staticReg->PowerTxaFact >>= 6;
     }
 
@@ -6398,27 +6443,32 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
  * 输出: g_out (Power_Output_t) → Switcher 读取状态
  * ================================================================ */
 
-MODULE_SKELETON(APP_Power);
+
+
+/* ---- LINK params 存储 (每炉头独立) ---- */
 
 static void Init(void)
 {
-    g_input.para  = &g_inPara;					//实例化
-    g_output.para = &g_outPara;
+    g_input.para  = &s_inPara;				//它的实际初始化在输入回调里
+		g_input.info.inMax=3;
+		g_output.info.outMax=2;
+    g_output.para = &s_outPara;
+
 }
 
-static void ProcessInput(void)
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags)
 {
     uint8_t ch;
 
     /* ---- 输入段: 检查新数据 ---- */
 
 
-    g_output.info.status &= ~ST_NEW;
 
 
-		if(g_input.info.status & ST_NEW)
+
+		if(flags.bits.appadc)				//adc输入有效
 		{
-			g_input.info.status &= ~ST_NEW;	
+//			s_AdcLink->status &= ~ST_NEW;	
 			Power_Adc_Input();					//从缓存区获得ADC输入值
 		}
 
@@ -6430,6 +6480,6 @@ static void ProcessInput(void)
     g_output.info.status |= ST_OUT;
 }
 
-MODULE_EXPORT(APP_Power);
 
 //**********************************end of file********************************
+

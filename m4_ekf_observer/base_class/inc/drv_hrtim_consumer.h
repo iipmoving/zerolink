@@ -15,7 +15,7 @@
 #ifndef DRV_HRTIM_CONSUMER_H
 #define DRV_HRTIM_CONSUMER_H
 
-#include "core/std_module.h"
+#include "std_module.h"
 
 /* ---- v2.2 注册入口 ---- */
 MODULE_IO_H(DrvHrtim);

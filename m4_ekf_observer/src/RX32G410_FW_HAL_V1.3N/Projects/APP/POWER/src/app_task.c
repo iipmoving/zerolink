@@ -96,9 +96,41 @@ void Task_TimeChip0(void)
 
 }
 
-__attribute__((weak)) void Switcher_Run_Slot1(void) {}
+/**
+ * @brief Switcher模块Slot1时间片运行函数（弱定义）
+ * 
+ * 该函数为Switcher模块的时间片Slot1提供默认的空实现。
+ * 使用__attribute__((weak))属性声明为弱符号，允许用户在其他源文件中
+ * 提供同名函数的强定义来覆盖此默认实现。
+ * 
+ * Slot1是时间片序号之一，系统每1ms执行一个SLOT，各Slot按序轮转执行，
+ * 实现周期性任务调度机制。
+ * 
+ * @note 如果用户未提供自定义实现，系统将使用此空函数作为默认行为。
+ */
+__attribute__((weak)) void Switcher_Run_Slot1(void) {} 
+/** @brief Switcher模块初始化函数（弱定义）
+ * 
+ * 该函数为Switcher模块提供默认的空初始化实现。
+ * 使用__attribute__((weak))属性声明为弱符号，允许用户在其他源文件中
+ * 提供同名函数的强定义来覆盖此默认实现。
+ * 
+ * @note 如果用户未提供自定义实现，系统将使用此空函数作为默认行为。
+ */
 __attribute__((weak)) void Switcher_Init(void) {}
-
+/**
+ * @brief Switcher模块Tick任务入口函数（弱定义）
+ * 
+ * 该函数为Switcher模块的Tick任务提供默认的空实现，是每1ms空闲时间段的程序段入口。
+ * 使用__attribute__((weak))属性声明为弱符号，允许用户在其他源文件中
+ * 提供同名函数的强定义来覆盖此默认实现。
+ * 
+ * 该函数在时间片Slot执行之后调度，适用于需要低优先级处理的周期性任务，
+ * 
+ * 
+ * @note 如果用户未提供自定义实现，系统将使用此空函数作为默认行为。
+ */
+__attribute__((weak)) void Switcher_Run_TK(void) {}
 void Task_TimeChip1(void)
 {
 
@@ -158,12 +190,15 @@ void Task_TimeChip9(void)
 void Task_Tk(void)      //触摸扫描
 {
 
+#ifdef	COMM_UART	
 	Modbus_Protocol_Analysis_Main();
-		iic_bus_updata();
-		APP_ADC_TimDmaEnd();
-		APP_ADC_CalculatePower();
-//		API_ADC_DMA_RecoverTxa();
+#endif
 	
+	
+	iic_bus_updata();
+	APP_ADC_TimDmaEnd();
+	APP_ADC_CalculatePower();
+	Switcher_Run_TK();
 }
 
 

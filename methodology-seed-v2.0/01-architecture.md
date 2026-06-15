@@ -361,9 +361,9 @@ _io.h 后缀: 数据交换机公开接口 (app_power_io.h, app_adc_io.h)
 
 ### 每次编码后（强制）
 ```bash
-python tools/check_deps.py            # 层依赖检查
-python tools/check_weak_pairs.py      # __weak 配对检查
-python tools/check_structs.py         # 结构体一致性检查
+python ../.claude/tools/check_deps.py            # 层依赖检查
+python ../.claude/tools/check_weak_pairs.py      # __weak 配对检查
+python ../.claude/tools/check_structs.py         # 结构体一致性检查
 armcc -c ... → 0 error, 0 warning     # 编译验证
 ```
 

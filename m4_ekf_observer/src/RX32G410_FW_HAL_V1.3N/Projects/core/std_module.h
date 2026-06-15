@@ -1,6 +1,11 @@
 /**
  * @file    std_module.h
- * @brief   统一模块框架 — PULL 路由范式 (v2.2)
+ * @brief   统一模块框架 — PULL 路由范式 (v2.3)
+ *
+ * v2.3 新增: ISR 通路编译开关
+ *   - 定义 STD_MODULE_ENABLE_ISR=1 启用 ISR 通路 (PendSV 实时处理)
+ *   - 默认不启用，无需 ISR 的模块零开销
+ *   - ISR 通路提供独立 g_isr_input/g_isr_output 槽位，不与主循环冲突
  *
  * ================================================================
  * 核心原则：单向调用 — 下游拉 (InputCallback), 上游不推
@@ -17,20 +22,11 @@
  *   2. ProcessInput()          — 三段式: 输入段 → 计算段 → 输出段
  *   3. name##_OutputCallback() — weak 空壳, 仅 ST_OUT 时调用, 一般不用
  *
- * InputCallback — 常规路由方式:
- *   - DoWork 第一件事, 在 ProcessInput 之前执行
- *   - 中间层覆盖强符号: 从上游 g_output 读 → 写本模块 g_input
- *   - 不需要参数: 数据源和目标都在 s_slot[] 里, 规划阶段定好
- *   - 单向调用: 上游只写, 下游只拉, 互不知对方存在
- *
- * OutputCallback — 仅特殊场景:
- *   - ProcessInput 中间需要即时调用别的模块小功能
- *   - 需要跨模块即时同步状态 (紧急输出)
- *   - 一般不用, 默认空壳
- *
- * ISR 事件（中断服务）:
- *   紧急: 走独立回调函数，不碰 g_input/g_output
- *   不紧急: ISR 设标志，Switcher 检测后从 g_input 正常路径注入
+ * ISR 通路 (STD_MODULE_ENABLE_ISR=1):
+ *   1. ISR → Switcher_TriggerPendSV(source) → PendSV_Handler
+ *   2. PendSV → ISR_DoWork() 遍历注册的 ISR 模块
+ *   3. ISR_DoWork → ISR_InputCallback → ISR_ProcessInput → ISR_OutputCallback
+ *   4. 使用独立 g_isr_input/g_isr_output，不与主循环数据冲突
  *
  * ================================================================
  * 使用步骤:
@@ -40,9 +36,14 @@
  *   3. 实现 ProcessInput() — 三段式处理
  *   4. MODULE_EXPORT(模块名)          — 文件底部 (生成 GetIO)
  *   5. .h 中用 MODULE_IO_H(模块名)    — 声明 GetIO 签名
+ *
+ *   ISR 模块额外:
+ *   - 在 .c 文件顶部 #define STD_MODULE_ENABLE_ISR 1
+ *   - 实现 ISR_ProcessInput() — ISR 三段式处理
+ *   - .h 中用 MODULE_ISR_IO_H(模块名) — 声明 GetISR_IO 签名
  * ================================================================
  *
- * 引用: #include "core/std_module.h"
+ * 引用: #include "std_module.h"
  */
 
 #ifndef STD_MODULE_H
@@ -50,6 +51,11 @@
 
 #include <stdint.h>
 #include <string.h>
+
+/* ========== 0. ISR 开关默认值 ========== */
+#ifndef STD_MODULE_ENABLE_ISR
+    #define STD_MODULE_ENABLE_ISR  0
+#endif
 
 /* ========== 1. 状态位常量 ========== */
 enum {
@@ -60,33 +66,117 @@ enum {
 
 /* ========== 2. 信息头 ========== */
 typedef struct {
-    uint8_t status;   /* 组合 ST_INIT | ST_NEW | ST_OUT */
-    uint8_t res1;
+    uint8_t status;   /* 组合 ST_INIT | ST_NEW | ST_OUT, 输入输出结构体里使用 */
+    uint8_t inMax;    /* 输入 LINK 数量 (MODULE_INPUT 的 LINK 列数) */
     uint8_t route;    /* 路由标识 — 多炉头/多模式时区分数据路径 */
-    uint8_t res2;
+    uint8_t outMax;   /* 输出 LINK 数量 (MODULE_OUTPUT 的 LINK 列数) */
 } Info_Header;
 
-/* ========== 3. 统一参数组 ========== */
+/* ========== 3. 统一参数组 + 槽定义 ========== */
 typedef struct {
-    Info_Header info;     /* 状态 + 路由 */
+    Info_Header info;     /* 状态 + 路由 + in/out 数量 */
     void       *para;     /* 指向模块自定义 I/O 结构体 */
 } Para_Grp_t;
 
+/* Switcher 槽定义 — 绑定模块的三要素 */
+typedef struct {
+    uint8_t       idx;      /* 槽编号 */
+    uint8_t       res[3];
+    Para_Grp_t   *pIn;     /* 指向 g_input  (MODULE_INIT 时绑定 MODULE_INPUT) */
+    Para_Grp_t   *pOut;    /* 指向 g_output (MODULE_INIT 时绑定 MODULE_OUTPUT) */
+    void        (*pDoWork)(void);
+} ModuleSlotDef;
+
 /* ================================================================
- * 4. 骨架宏 — 每个模块 .c 文件调用一次
+ * 4. 骨架宏 — 根据 ISR 开关生成不同代码
  *
  *   参数: name = 模块名 (PascalCase, 与 MODULE_EXPORT 一致)
  *
- *   生成内容:
- *     - static Para_Grp_t g_input / g_output   (统一起点)
- *     - static void Init(void)                  (模块实现)
- *     - static void ProcessInput(void)          (模块实现)
- *     - weak void name_InputCallback(void)      (中间层覆盖)
- *     - weak void name_OutputCallback(pOut)     (按需覆盖)
- *     - static void DoWork(void)                (Switcher 调度入口)
+ *   生成内容 (ISR=0):
+ *     - static Para_Grp_t g_input / g_output
+ *     - static void Init(void)
+ *     - static void ProcessInput(void)
+ *     - weak void name_InputCallback(void)
+ *     - weak void name_OutputCallback(pOut)
+ *     - static void DoWork(void)
+ *
+ *   额外生成 (ISR=1):
+ *     - static Para_Grp_t g_isr_input / g_isr_output  (独立 ISR 槽位)
+ *     - static void ISR_ProcessInput(void)
+ *     - weak void name_ISR_InputCallback(void)
+ *     - weak void name_ISR_OutputCallback(pOut)
+ *     - static void ISR_DoWork(void)                  (PendSV 入口)
+ *     - static uint8_t g_isr_busy                     (重入保护)
  *
  *   注意: 一个 .c 文件只能调用一次 (g_input/g_output 是 static 全局)
  * ================================================================ */
+
+#if STD_MODULE_ENABLE_ISR
+
+/* ===== ISR 启用版 ===== */
+#define MODULE_SKELETON(name)                                            \
+    static Para_Grp_t g_input;                                          \
+    static Para_Grp_t g_output;                                         \
+    static Para_Grp_t g_isr_input;                                      \
+    static Para_Grp_t g_isr_output;                                     \
+    static uint8_t    g_init_done = 0;                                  \
+    static uint8_t    g_isr_busy = 0;                                    \
+                                                                         \
+    static void Init(void);                                              \
+    static void ProcessInput(void);                                      \
+    static void ISR_ProcessInput(void);                                  \
+                                                                         \
+    __attribute__((weak)) void name##_InputCallback(void)                \
+    { }                                                                  \
+                                                                         \
+    __attribute__((weak)) void name##_OutputCallback(Para_Grp_t *pOut)   \
+    { (void)pOut; }                                                      \
+                                                                         \
+    __attribute__((weak)) void name##_ISR_InputCallback(void)            \
+    { }                                                                  \
+                                                                         \
+    __attribute__((weak)) void name##_ISR_OutputCallback(Para_Grp_t *pOut)\
+    { (void)pOut; }                                                      \
+                                                                         \
+    static void Constructor(void) {                                      \
+        memset(&g_input,      0, sizeof(g_input));                       \
+        memset(&g_output,     0, sizeof(g_output));                      \
+        memset(&g_isr_input,  0, sizeof(g_isr_input));                   \
+        memset(&g_isr_output, 0, sizeof(g_isr_output));                  \
+        g_init_done = 0;                                                \
+        g_isr_busy = 0;                                                 \
+        Init();                                                         \
+        g_output.info.status      |= ST_INIT;                            \
+        g_isr_output.info.status  |= ST_INIT;                            \
+    }                                                                    \
+                                                                         \
+    static void DoWork(void) {                                           \
+        if (!g_init_done) { Constructor(); g_init_done = 1; }           \
+        name##_InputCallback();                 /* ① 输入拉取 */        \
+        ProcessInput();                         /* ② 消费→计算→产出 */ \
+        if ((g_output.info.status & ST_OUT)) {                          \
+            name##_OutputCallback(&g_output);   /* ③ 紧急输出 */        \
+            g_output.info.status &= ~ST_OUT;                            \
+        }                                                                \
+    }                                                                    \
+                                                                         \
+    static void ISR_DoWork(void) {                                       \
+        /* 主循环未初始化时跳过，不负责初始化 */                         \
+        if (!g_init_done) return;                                       \
+        if (g_isr_busy) return;                                         \
+        g_isr_busy = 1;                                                 \
+        name##_ISR_InputCallback();                                     \
+        ISR_ProcessInput();                                             \
+        if ((g_isr_output.info.status & ST_OUT)) {                      \
+            name##_ISR_OutputCallback(&g_isr_output);                   \
+            g_isr_output.info.status &= ~ST_OUT;                        \
+        }                                                                \
+        g_isr_busy = 0;                                                 \
+    }
+
+#else
+
+/* ===== ISR 未启用版 (原 v2.2, 零开销) ===== */
 #define MODULE_SKELETON(name)                                            \
     static Para_Grp_t g_input;                                          \
     static Para_Grp_t g_output;                                         \
@@ -119,12 +209,73 @@ typedef struct {
         }                                                                \
     }
 
+#endif /* STD_MODULE_ENABLE_ISR */
+
 /* ================================================================
- * 5. 导出宏 — 生成 GetIO 注册入口
+ * 5. IO 结构体命名约定宏 (LINK 范式)
+ *
+ *   两层结构: MODULE_OUTPUT_LINK / MODULE_INPUT_LINK 定义数据列,
+ *   MODULE_OUTPUT / MODULE_INPUT 定义引用结构体 (含 LINK 指针).
+ *
+ *   用法:
+ *     // 数据列定义 (原始数据指针)
+ *     typedef struct {
+ *         uint16_t *current;
+ *         uint16_t *voltage;
+ *     } MODULE_OUTPUT_LINK(APP_Adc, Power);    // → APP_Adc_to_Power_Output_Link
+ *
+ *     // 模块输出 (引用 LINK 实例)
+ *     typedef struct {
+ *         MODULE_OUTPUT_LINK(APP_Adc, Power) *AppPower_params;
+ *         MODULE_OUTPUT_LINK(APP_Adc, Calc)  *calc_params;
+ *     } MODULE_OUTPUT(PowerCalc);          // → PowerCalc_Output
+ *
+ *     // 模块输入 (与输出同构, 或为 NULL/inMax=0)
+ *     MODULE_INPUT(PowerCalc)              // → PowerCalc_Input
+ *
+ *   检查规则:
+ *     - MODULE_INPUT / MODULE_OUTPUT 配对 (可只有 Output)
+ *     - MODULE_OUTPUT_LINK 类型在 MODULE_OUTPUT 中被引用
+ * ================================================================ */
+#define MODULE_INPUT(name)        name##_Input
+#define MODULE_OUTPUT(name)       name##_Output
+#define MODULE_INPUT_LINK(owner, consumer)  owner##_to_##consumer##_Input_Link
+#define MODULE_OUTPUT_LINK(owner, consumer)  owner##_to_##consumer##_Output_Link
+
+#define MODULE_OUTPUT_PARAMS(owner, consumer)  owner##_to_##consumer##_Output_Params
+#define MODULE_INPUT_PARAMS(owner, consumer)   owner##_to_##consumer##_Input_Params
+#define MODULE_LINK(name)         name##_Link   /* 兼容旧名 */
+
+/* ======================u==========================================
+ * 6. 导出宏 — 生成 GetIO / GetISR_IO 注册入口
  *
  *   用法: MODULE_EXPORT(Power) → 生成 Power_GetIO(...)
  *   Switcher 通过此函数获取模块的 g_input/g_output/DoWork 指针
+ *
+ *   ISR=1 时额外生成 Power_GetISR_IO(...):
+ *   PendSV Switcher 通过此函数获取 ISR 通路指针
  * ================================================================ */
+
+#if STD_MODULE_ENABLE_ISR
+
+#define MODULE_EXPORT(module_name)                                       \
+    void module_name##_GetIO(Para_Grp_t **ppIn,                          \
+                             Para_Grp_t **ppOut,                         \
+                             void      (**ppDoWork)(void)) {             \
+        *ppIn     = &g_input;                                            \
+        *ppOut    = &g_output;                                           \
+        *ppDoWork = DoWork;                                              \
+    }                                                                    \
+    void module_name##_GetISR_IO(Para_Grp_t **ppIn,                      \
+                                 Para_Grp_t **ppOut,                     \
+                                 void      (**ppDoWork)(void)) {         \
+        *ppIn     = &g_isr_input;                                        \
+        *ppOut    = &g_isr_output;                                       \
+        *ppDoWork = ISR_DoWork;                                          \
+    }
+
+#else
+
 #define MODULE_EXPORT(module_name)                                       \
     void module_name##_GetIO(Para_Grp_t **ppIn,                          \
                              Para_Grp_t **ppOut,                         \
@@ -134,15 +285,29 @@ typedef struct {
         *ppDoWork = DoWork;                                              \
     }
 
+#endif /* STD_MODULE_ENABLE_ISR */
+
 /* ================================================================
- * 6. IO 头声明辅助宏 — 在 .h 中声明 GetIO 签名
+ * 6. IO 头声明辅助宏 — 在 .h 中声明 GetIO/GetISR_IO 签名
  *
  *   用法: MODULE_IO_H(Power) → 声明 void Power_GetIO(...)
  *   替代手写声明, 避免模块名拼写不一致
+ *
+ *   MODULE_ISR_IO_H(Power) → 声明 void Power_GetISR_IO(...)
+ *   ISR=0 时展开为空 (不会产生未定义引用)
  * ================================================================ */
 #define MODULE_IO_H(module_name)                                         \
     void module_name##_GetIO(Para_Grp_t **ppIn,                          \
                              Para_Grp_t **ppOut,                         \
                              void      (**ppDoWork)(void))
+
+#if STD_MODULE_ENABLE_ISR
+#define MODULE_ISR_IO_H(module_name)                                     \
+    void module_name##_GetISR_IO(Para_Grp_t **ppIn,                      \
+                                 Para_Grp_t **ppOut,                     \
+                                 void      (**ppDoWork)(void))
+#else
+#define MODULE_ISR_IO_H(module_name)
+#endif /* STD_MODULE_ENABLE_ISR */
 
 #endif /* STD_MODULE_H */

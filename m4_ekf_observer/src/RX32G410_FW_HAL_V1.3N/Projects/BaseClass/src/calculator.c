@@ -1,13 +1,47 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../../include_io/calculator_io.h"
+
+MODULE_SKELETON(Calculator);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appadc   : 1;  /* AppAdc 数据就绪 */
+    } bits;
+} Calculator_PipeFlags_t;
+
+static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(Calculator) *in  = (MODULE_INPUT(Calculator)*)g_input.para;
+    MODULE_OUTPUT(Calculator) *out = (MODULE_OUTPUT(Calculator)*)g_output.para;
+
+    /* === 输入段: 数据有效检查 === */
+    Calculator_PipeFlags_t flags = {0};
+    flags.bits.appadc = (in->AppAdc_params->status & ST_NEW) ? 1 : 0;
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(Calculator);
+
+// ===== [END AI GENERATED] =====
+
 /**
  * @file    calculator.c
  * @brief   Power Calculator Module (v2.2 PULL Architecture)
  * @layer   base_class
  */
 
-#include "../include/calculator_io.h"
+//#include "../include/calculator_io.h"
 
 #include <string.h>
 #include <math.h>
+
+#define	CALC_POTMAX 4
 
 /* ---- 硬件标定常数 ---- */
 #define V_SCALE         0.10606f    // V/count  (Vref/4096 / 分压比)
@@ -47,8 +81,7 @@ typedef struct {
 } PowerDirectAcc_t;
 static PowerDirectAcc_t s_power_acc[CALC_POTMAX];
 
-/* ---- v2.2 框架层骨架（使用标准宏）---- */
-MODULE_SKELETON(Calculator);
+
 
 /* ---- 内部函数声明 ---- */
 static uint16_t FindZeroCrossing(const uint16_t* current, uint16_t start, uint16_t end);
@@ -61,37 +94,35 @@ static CalculatorResultDef CalculateAuctalCurrent(uint16_t* resonant_current,
 static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out);
 static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uint16_t* voltage_data,Calculator_InputParams_t* input,MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *outPut);
 /* ---- 处理逻辑入口（每帧被调）---- */
-static void ProcessInput(void)
+static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags)
 {
-    MODULE_INPUT(Calculator)*   pIn = g_input.para;
-    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
+//    MODULE_INPUT(Calculator)*   pIn = g_input.para;
+//    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
-    if (pIn->input_params->status & ST_NEW)
+    if (in->AppAdc_params->status & ST_NEW)
     {
-				if(pIn->input_params->count)
+				if(in->AppAdc_params->count)
 				{	
-					ProcessAllHead(pIn, pOut);
+					ProcessAllHead(in, out);
 
-					pIn->input_params->status &= ~ST_NEW;
-					pOut->elec_params.status &= ~ST_NEW;
+					in->AppAdc_params->status &= ~ST_NEW;
+
 				}
 				else
 				{
 						// 完成 Calculator→PowerBase 直接参数平均值
-						uint8_t max_h = pIn->input_params->max_count;
+						uint8_t max_h = in->AppAdc_params->max_count;
 						for (uint8_t i = 0; i < max_h; i++) {
 						    if (s_power_acc[i].count > 0) {
-						        pOut->power_direct.params[i].resonant_current = (int32_t)(s_power_acc[i].resonant_current_sum / s_power_acc[i].count);
-						        pOut->power_direct.params[i].voltage = (s_power_acc[i].voltage_count_sum > 0) ? (int32_t)(s_power_acc[i].voltage_sum * 100 / s_power_acc[i].voltage_count_sum) : 0;
-						        pOut->power_direct.params[i].phase_angle = s_power_acc[i].phase_sum / s_power_acc[i].count;
-						        pOut->power_direct.params[i].valid = 1;
+						        out->AppPower_params.params[i].resonant_current = (int32_t)(s_power_acc[i].resonant_current_sum / s_power_acc[i].count);
+						        out->AppPower_params.params[i].voltage = (s_power_acc[i].voltage_count_sum > 0) ? (int32_t)(s_power_acc[i].voltage_sum * 100 / s_power_acc[i].voltage_count_sum) : 0;
+						        out->AppPower_params.params[i].phase_angle = s_power_acc[i].phase_sum / s_power_acc[i].count;
+						        out->AppPower_params.params[i].valid = 1;
 						    }
 						    memset(&s_power_acc[i], 0, sizeof(PowerDirectAcc_t));
-						}
-						pOut->power_direct.status |= ST_NEW;
-
-						pOut->elec_params.shareBuff=(uint32_t*)*(pIn->input_params->hrtim_values);	
-						 pOut->elec_params.status |= ST_NEW;			//20ms ELEC计算一次
+						}	
+						out->AppPower_params.status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
+						out->ElecParams_params.status &= ~ST_NEW;				//ELEC 模块进行计算。
 				}
 				
     }
@@ -100,7 +131,7 @@ static void ProcessInput(void)
 /* ---- 处理单个通道数据 ---- */
 static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out)
 {
-    uint8_t cycle_idx = head_in->input_params->count;  // 当前周期索引 1..19
+    uint8_t cycle_idx = head_in->AppAdc_params->count;  // 当前周期索引 1..19
 
     /* 输入有效性检查 */
     // if (!head_in->resonant_current || 
@@ -113,14 +144,14 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
     // }
 
 
-   for (int i = 0; i < head_in->input_params->max_count; i++) { 
+   for (int i = 0; i < head_in->AppAdc_params->max_count; i++) { 
 			
-	      uint16_t* voltage_point = (uint16_t*)head_in->input_params->voltage_data[i];
-        uint16_t* hrtim_point = (uint16_t*)head_in->input_params->hrtim_values[i];
-        uint16_t* current_point = (uint16_t*)head_in->input_params->resonant_current[i];
+	      uint16_t* voltage_point = (uint16_t*)head_in->AppAdc_params->params[i].voltage_data;
+        uint16_t* hrtim_point = (uint16_t*)head_in->AppAdc_params->params[i].hrtim_values;
+        uint16_t* current_point = (uint16_t*)head_in->AppAdc_params->params[i].resonant_current;
 
-			Calculator_InputParams_t* params_point =&head_in->input_params->params[i]; //这里存的是缓存的地址（4个）
-		MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.elec_params.params[i][cycle_idx];
+			Calculator_InputParams_t* params_point =head_in->AppAdc_params->params[i].input; //这里存的是缓存的地址（4个）
+		MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.ElecParams_params.params[i];
 
 		CalculatePower(current_point,hrtim_point,voltage_point,params_point,elec_params);
 
@@ -200,10 +231,10 @@ static void  CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,ui
         outPut->zero_cross_low=hrtim_values[phaseDown]; 
 
          // /* Step 4: 填充 HRTIM 状态 */
-        outPut->hrtim.highOff=input->highOff;
-        outPut->hrtim.lowOff=input->lowOff;
-        outPut->hrtim.highOn=input->highOn;
-        outPut->hrtim.lowOn=input->lowOn;
+        outPut->hrtim_highOff=input->highOff;
+        outPut->hrtim_lowOff=input->lowOff;
+        outPut->hrtim_highOn=input->highOn;
+        outPut->hrtim_lowOn=input->lowOn;
 
 
     }
@@ -403,4 +434,5 @@ static void Init(void)
 }
 
 /* ---- 导出 ---- */
-MODULE_EXPORT(Calculator);
+
+

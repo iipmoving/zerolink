@@ -16,7 +16,7 @@
  *   4. Route_output_apply  累加 ppg_delta → ISR 缓冲
  *   5. 收集影子变量 → g_output 反馈
  */
-#include "core/std_module.h"
+#include "std_module.h"
 #include "drv_hrtim_consumer.h"
 #include "app_power_hw_io.h"
 #include <string.h>

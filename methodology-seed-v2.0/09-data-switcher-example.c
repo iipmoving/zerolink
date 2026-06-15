@@ -19,7 +19,7 @@
 #include <string.h>
 
 /* ===================================================================
- * §0 std_module.h (core/std_module.h) — 每个模块 #include 一次
+ * §0 std_module.h (std_module.h) — 每个模块 #include 一次
  * ================================================================= */
 
 enum {
@@ -152,7 +152,7 @@ typedef struct {
 
 /* ======================== adc.c ================================== */
 #include "../include/adc_io.h"       /* 全路径 — 自己的 _io.h */
-#include "core/std_module.h"
+#include "std_module.h"
 
 static AdcOutData_t s_out;
 static uint8_t      _tick = 0;       /* 模拟 100ms 采一次 */
@@ -195,7 +195,7 @@ MODULE_EXPORT(Adc);
 
 /* ======================== power.c ================================ */
 #include "../include/power_io.h"      /* 全路径 — 自己的 _io.h */
-#include "core/std_module.h"
+#include "std_module.h"
 /* 不 include adc_io.h — 不知道 ADC 的存在 */
 
 static PowerInData_t  s_in;
@@ -266,7 +266,7 @@ void Adc_OnOutput(Para_Grp_t *pOut)
  * ================================================================= */
 
 /* ==================== data_switcher.c ============================ */
-#include "core/std_module.h"
+#include "std_module.h"
 #include "data_switcher.h"
 #include "../include/adc_io.h"        /* 特权: 全路径 include 所有 _io.h */
 #include "../include/power_io.h"

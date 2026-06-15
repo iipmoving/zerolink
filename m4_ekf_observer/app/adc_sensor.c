@@ -1,3 +1,34 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "app_adc_io.h"
+
+MODULE_SKELETON(AppAdc);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t _unused;
+    } bits;
+} AppAdc_PipeFlags_t;
+
+static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppAdc) *in  = (MODULE_INPUT(AppAdc)*)g_input.para;
+    MODULE_OUTPUT(AppAdc) *out = (MODULE_OUTPUT(AppAdc)*)g_output.para;
+
+    /* === 输入段: 数据有效检查 === */
+    AppAdc_PipeFlags_t flags = {0};
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppAdc);
+
+// ===== [END AI GENERATED] =====
+
 /**
  * @file    adc_sensor.c
  * @brief   AdcSensor 婴儿模块 — v2.2 PULL 范式 (替代 APP_ADC.C)
@@ -64,7 +95,7 @@ enum {
 /* ================================================================
  * MODULE_SKELETON — 必须在使用 g_input/g_output 之前
  * ================================================================ */
-MODULE_SKELETON(APP_Adc);
+MODULE_SKELETON(AppAdc);
 
 /* ---- 前置类型 (被前向声明引用) ---- */
 typedef struct {
@@ -261,7 +292,6 @@ static void Init(void)
  * ============================================================== */
 static void ProcessInput(void)
 {
-    APP_ADC_AVG_Fun();
 
     g_output.info.status &= ~ST_OUT;        //每次 都需要清除输出标志位
     uint8_t new_data = AdcValueFun();
@@ -1293,13 +1323,21 @@ void APP_ADC_TimDmaEnd(void)
         TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
         AdcFromApiDma20ms.count++;
 
-        if (AdcFromApiDma20ms.count <= 20 && AdcFromApiDma20ms.count > 1) {
+        if (AdcFromApiDma20ms.count <= 20 ) {
             API_GPIO_WritePin(DebugA_pin, 1);
 
-            APP_ADC_GetTxaPeiodPoint();
+					if(AdcFromApiDma20ms.count<=1)
+						{
+							TxA_ADC_AdcDmaBuff.step = TXA_StepFmacEnd;		//0时不进行DMA FAMC计算
+						}
+						else
+						{	
+							APP_ADC_GetTxaPeiodPoint();
 
-            if (APP_ADC_MesageBuff()) {
-            }
+							if (APP_ADC_MesageBuff()) {
+							}
+						}
+						
             API_GPIO_WritePin(DebugA_pin, 0);
         }
     }
@@ -1319,7 +1357,20 @@ void APP_ADC_CalculatePower(void)
     if (TxA_ADC_AdcDmaBuff.step == TXA_StepFmacEnd) {
         TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
         uint8_t count = AdcFromApiDma20ms.count - 1;
-
+			
+				if(count==0)
+				{						//直接计算20ms统计
+				
+				
+				}
+				else
+				{
+						
+				
+				}	
+				
+			
+#if 0		
         for (uint8_t potCh = 0; potCh < PotNum; potCh++) {
             if (inputArray[potCh].end > 0 && inputArray[potCh].highOff > 0) {
 
@@ -1332,6 +1383,9 @@ void APP_ADC_CalculatePower(void)
                 uint16_t* hrtimAdr = (uint16_t*)TxaHrtimBuff[potCh];
                 uint16_t* voltageAdr = (uint16_t*)TxaVcBuff[potCh];
 
+							
+				
+					
                 PowerResult result;
                 result = CalculatePower(currentAdr, hrtimAdr, voltageAdr, &inputArray[potCh]);
 
@@ -1357,8 +1411,11 @@ void APP_ADC_CalculatePower(void)
                 }
 
                 powerResult20ms[potCh].count = AdcFromApiDma20ms.count;
+							
             }
         }
+#endif					
+				
     }
 
     if (PrintMessageOut()) {
@@ -1379,4 +1436,5 @@ void APP_ADC_ComputeElecParams(void)
 }
 
 /* ====== 骨架 + 导出 ====== */
-MODULE_EXPORT(APP_Adc);
+MODULE_EXPORT(AppAdc);
+

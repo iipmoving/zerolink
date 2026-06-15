@@ -1,3 +1,35 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../../include_io/elec_params_io.h"
+
+MODULE_SKELETON(ElecParams);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t calculator   : 1;  /* Calculator 数据就绪 */
+    } bits;
+} ElecParams_PipeFlags_t;
+
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(ElecParams) *in  = (MODULE_INPUT(ElecParams)*)g_input.para;
+    MODULE_OUTPUT(ElecParams) *out = (MODULE_OUTPUT(ElecParams)*)g_output.para;
+
+    /* === 输入段: 数据有效检查 === */
+    ElecParams_PipeFlags_t flags = {0};
+    flags.bits.calculator = (in->Calculator_params->status & ST_NEW) ? 1 : 0;
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(ElecParams);
+
+// ===== [END AI GENERATED] =====
+
 // ============================================================================
 // elec_params.c — IH 电参数计算模块 (v2.3 LINK+PARAMS 架构)
 // 
@@ -116,7 +148,7 @@
 //  5. 计算 Q 值和等效电阻 R = ωL/Q
 // ============================================================================
 
-#include "../include/elec_params_io.h"
+//#include "../include/elec_params_io.h"
 #include <math.h>
 #include <string.h>
 
@@ -134,12 +166,25 @@ static MODULE_INPUT(ElecParams)*   s_inPara;    // 输入来自 Calculator (Inpu
 static MODULE_OUTPUT(ElecParams)  s_outPara;    // 输出参数缓冲区
 
 /* ---- LINK params 存储 (每炉头独立) ---- */
-static MODULE_OUTPUT_PARAMS(ElecParams, PowerBase)  s_drvParam[4];
+static MODULE_OUTPUT_PARAMS(ElecParams, AppPower)  s_drvParam[4];
 
 #define	 PERIO_CNT   20 
 
-// 模块骨架
-MODULE_SKELETON(ElecParams);
+#define	ELEC_POTMAX		4
+
+
+
+#define IH_C_FARAD          0.9e-6f     // 谐振电容 0.9 μF
+#define IH_I_SCALE          0.02523f    // I_adc → A
+#define IH_VDC_SCALE        0.10606f    // Vdc_adc → V
+#define IH_PHI_SCALE        0.1f        // phi 单位 0.1° → °
+#define IH_I_PEAK_MIN_RATIO 0.3f        // I_peak < 中位数×0.3 丢弃
+#define IH_L_MIN_uH        10.0f        // 有效 L 下限
+#define IH_FRES_MIN_kHz    5.0f         // 有效 f_
+
+#define		IH_HV_WIN_CNT_MIN		4						//相位角取值范围（20个点分成2个10ms 里面的高点， 4和5）
+
+
 
 // ========== 内部辅助函数 ====================================================
 
@@ -255,7 +300,7 @@ typedef struct {
 
  
 static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
-                                const ElecParams_CycleInput *cycles,
+                                const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles,
                                 ElecParams_Ws *ws)
 {
     if (result == NULL || cycles == NULL ) return 0;
@@ -268,7 +313,7 @@ static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
     uint8_t phi_n = 0, vn = 0, pn = 0;
 
     for (uint8_t i = 1; i < PERIO_CNT; i++) {
-        const ElecParams_CycleInput *c = &cycles[i];
+        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *c = &cycles[i];
 
         // ADC 值 → 实际物理量转换
         float I_pk = (float)c->peak_current  * IH_I_SCALE;
@@ -276,11 +321,11 @@ static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
             ? (float)c->voltage_sum / (float)c->voltage_count : 0.0f;
         float Vdc = v_avg * IH_VDC_SCALE;
 
-        float loff = (float)c->hrtim.lowOff;
+        float loff = (float)c->hrtim_lowOff;
         ws->f_sw[i] = (loff > 0.0f) ? (HRTIM_CLK_HZ / loff) : 0.0f;
 
-        float cond  = (float)(c->hrtim.highOff - c->hrtim.highOn);
-        float delta = (float)c->zero_cross_high - (float)c->hrtim.highOn;
+        float cond  = (float)(c->hrtim_highOff - c->hrtim_highOn);
+        float delta = (float)c->zero_cross_high - (float)c->hrtim_highOn;
         float phi_i = (cond > 0.0f) ? (delta / cond * 180.0f) : 0.0f;
 
         // ---- L_raw: 只从高电压段有效周期（累加求平均）----
@@ -393,16 +438,16 @@ static void Init(void) {
  */
 ElecParams_Ws		new;
 #include	"API_gpio.h"
-static void ProcessInput(void) {
-    ElecParams_Input   *in  = (ElecParams_Input *)g_input.para;
-    ElecParams_Output  *out = (ElecParams_Output *)g_output.para;
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags)
+ {
+
 
     /* ====== 输入段 ====== */
     // 检查是否有新的输入数据（数据层 status）
-    if (!(in->input->status & ST_NEW)) return;
+    if (!(in->Calculator_params->status & ST_NEW)) return;
 
     API_GPIO_WritePin(DebugB_pin, 1);
-    in->input->status &= ~ST_NEW;
+    in->Calculator_params->status &= ~ST_NEW;
     // 从输入 LINK 获取共享工作区
 	
 
@@ -425,10 +470,10 @@ static void ProcessInput(void) {
         memset(&result, 0, sizeof(ElecParams_CalcResult));
 
         // 指向当前炉头的 20 周期数据块
-        const ElecParams_CycleInput *cycles = &in->input->cycles[h * PERIO_CNT];
+        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h * PERIO_CNT];
         uint8_t calc_ok = ElecParams_Calc(&result, cycles, ws);
 
-        ElecParams_to_PowerBase_Output_Params *p = &out->head.params[h];
+        MODULE_OUTPUT_PARAMS(ElecParams, AppPower) *p = &out->AppPower_params.params[h];
         if (!calc_ok) {
             memset(p, 0, sizeof(*p));
             p->valid = 0;
@@ -448,18 +493,17 @@ static void ProcessInput(void) {
         p->P_W        = FLOAT_TO_INT(result.P_W);
         p->Z_mag_ohm  = FLOAT_TO_INT(result.Z_mag_ohm);
         p->X_ohm      = FLOAT_TO_INT(result.X_ohm);
-        p->L_stable   = FLOAT_TO_INT(result.L_uH);
-        p->L_fast     = FLOAT_TO_INT(result.L_uH);
-        p->event      = 0;
+//        p->L_stable   = FLOAT_TO_INT(result.L_uH);
+//        p->L_fast     = FLOAT_TO_INT(result.L_uH);
+//        p->event      = 0;
         p->valid      = result.valid;
     }
 
     API_GPIO_WritePin(DebugB_pin, 0);
     // 更新状态 — 写输出 LINK status + 清除输入 LINK status
-    out->head.status |= ST_OUT;
+    out->AppPower_params.status |= ST_OUT;
 
 }
 
-// ========== 模块导出 ========================================================
-// 将 ElecParams 模块注册到系统模块框架
-MODULE_EXPORT(ElecParams);
+
+

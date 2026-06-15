@@ -1,161 +1,118 @@
 /**
  * @file    data_switcher.c
- * @brief   Data Switcher — PULL 路由调度器 (v2.2)
+ * @brief   Data Switcher — PULL 路由调度器 (v2.3 LINK+PARAMS)
  * @layer   core
  *
- * Phase 2 单文件模式: APP_Power (app_power.c) 作为唯一功率模块。
- * PowerBase / PowerCalc 暂时排除 (IncludeInBuild=0)。
- *
- * 数据流（20ms 一周期内）：
- *   Slot 0: AppAdc.DoWork      → g_out (AdcBlock_t*)
- *   Slot 1: APP_Power.DoWork    → InputCallback PULL AdcBlock_t.inputValue
- *                               → ProcessInput: ADC 分发 + PowerTypeFun()
- *
- * APP_Power_InputCallback = 强符号 (本文件提供): 从 AppAdc.g_out PULL 数据
+ * ================================================================
+ * [AI GENERATED] 此文件由 codeGen 自动生成，请勿手动修改
+ * 修改方式: 编辑 project.json → 运行 GUI / code_gen.py 重新生成
+ * ================================================================
  */
 
 #include "std_module.h"
 #include "data_switcher.h"
-#include "../include/app_adc_io.h"
-#include "../include/app_power_io.h"
 
-/* ---- APP_Power_GetIO 外部声明 (MODULE_EXPORT 在 app_power.c 生成) ---- */
-void APP_Power_GetIO(Para_Grp_t **ppIn,
-                     Para_Grp_t **ppOut,
-                     void      (**ppDoWork)(void));
+/* IO 接口文件 — 全模块接入 */
+#include "../include_io/app_adc_io.h"
+#include "../include_io/app_power_io.h"
+#include "../include_io/calculator_io.h"
+#include "../include_io/elec_params_io.h"
+//#include "../include_io/drv_hrtim_io.h"
+#include "../include_io/ekf_lkf_io.h"
 
-/* ---- DrvHrtim_GetIO (base_class/drv_hrtim_consumer.c MODULE_EXPORT) ---- */
-void DrvHrtim_GetIO(Para_Grp_t **ppIn,
-                    Para_Grp_t **ppOut,
-                    void      (**ppDoWork)(void));
-
-/* ===== 模块槽位枚举 ===== */
+/* ===== 模块槽位索引 (使用 SLOT 宏) ===== */
 typedef enum {
-    SLOT_ADC       = 0,
-    SLOT_APP_POWER = 1,
-    SLOT_DRV       = 2,
-    SLOT_COUNT
+    SLOT(AppAdc) = 0,
+    SLOT(AppPower) = 1,
+    SLOT(Calculator) = 2,
+    SLOT(ElecParams) = 3,
+    SLOT(EKF_LKF) = 4,
+    SLOT(COUNT)
 } SwitcherSlot_t;
 
-/* ===== Module Slot ===== */
-typedef struct {
-    SwitcherSlot_t  idx;
-    unsigned char   res[3];
-    Para_Grp_t     *pIn;
-    Para_Grp_t     *pOut;
-    void          (*pDoWork)(void);
-} ModuleSlotDef;
-
 static ModuleSlotDef s_slot[SLOT_COUNT];
-
-/* ---- 影子结构: 与 app_power.c:Power_Input_t 布局一致 ---- */
-typedef struct {
-    uint8_t  status;
-    uint8_t  res[3];
-    uint32_t inputValue[30];
-} PwrInShadow;
 
 /* ================================================================
  * Switcher_Init — 注册全部模块的 GetIO
  * ================================================================ */
 void Switcher_Init(void)
 {
-    APP_Adc_GetIO(&s_slot[SLOT_ADC].pIn,
-                  &s_slot[SLOT_ADC].pOut,
-                  &s_slot[SLOT_ADC].pDoWork);
-
-    APP_Power_GetIO(&s_slot[SLOT_APP_POWER].pIn,
-                    &s_slot[SLOT_APP_POWER].pOut,
-                    &s_slot[SLOT_APP_POWER].pDoWork);
-
-    DrvHrtim_GetIO(&s_slot[SLOT_DRV].pIn,
-                   &s_slot[SLOT_DRV].pOut,
-                   &s_slot[SLOT_DRV].pDoWork);
-}
-
-void 		ADC_to_Power_Link(void)
-{
-				APP_Adc_Output_t *adc_out = s_slot[SLOT_ADC].pOut->para;
-			  PowerBase_Input_t  *pwr_in  =s_slot[SLOT_APP_POWER].pIn->para;
-	
-				for(unsigned char i=0;i<ADC_POTMAX;i++)
-				{
-					pwr_in->pAdc[i].current=adc_out->txa[i];
-					pwr_in->pAdc[i].voltage=adc_out->voltage;
-					pwr_in->pAdc[i].bottom=adc_out->bottom[i];
-					pwr_in->pAdc[i].igbt=adc_out->igbt[i];
-					pwr_in->pAdc[i].phase=adc_out->phase[i];
-					pwr_in->pAdc[i].phaseDown=adc_out->phaseDown[i];
-					pwr_in->pAdc[i].ceilQ=adc_out->ceilQ[i];
-				}
-
-}	
-
-
-
-
-/* ================================================================
- * APP_Power_InputCallback (强符号) — 从 AppAdc PULL 数据
- *
- * 覆盖 MODULE_SKELETON(APP_Power) 生成的 weak 空壳。
- * 从 s_slot[SLOT_ADC].pOut 拉 AdcBlock_t.inputValue[30]
- * 写入 s_slot[SLOT_APP_POWER].pIn → g_in.inputValue[30]
- * ================================================================ */
-void APP_Power_InputCallback(void)
-{
-
-
-
-		if(s_slot[SLOT_ADC].pOut->info.status&=ST_NEW)
-		{
-		
-				//中间层从各个模块对数据进行搬运
-//ADC 转换			
-				APP_Adc_Output_t *adc_out = s_slot[SLOT_ADC].pOut->para;
-			
-				for(unsigned char i=0;i<ADC_POTMAX;i++)
-				{
-					 		ADC_to_Power_Link();
-					
-					
-					
-				}
-	
-//				
-				
-				
-				s_slot[SLOT_APP_POWER].pIn->info.status |= ST_NEW;
-		}	
-		
-
+    SLOT_GETIO(AppAdc);
+    SLOT_GETIO(AppPower);
+    SLOT_GETIO(Calculator);
+    SLOT_GETIO(ElecParams);
+    SLOT_GETIO(EKF_LKF);
 }
 
 /* ================================================================
- * Switcher_Run_Slot1 — 按序调 DoWork
- *
- * DoWork 内部: InputCallback(PULL) → ProcessInput → OutputCallback(按需)
+ * InputCallback 强符号实现 — 覆盖 MODULE_SKELETON 生成的 weak 空壳
+ * 数据流: Producer → Consumer (PULL)
  * ================================================================ */
+
+INPUT_CALLBACK(AppAdc, AppPower)
+{
+    INPUT_GET_SLOT(AppAdc, AppPower);
+    INPUT_GET_SLOT(Calculator, AppPower);
+    INPUT_GET_SLOT(ElecParams, AppPower);
+    INPUT_GET_SLOT(EKF_LKF, AppPower);
+}
+
+
+INPUT_CALLBACK(AppAdc, Calculator)
+{
+    INPUT_GET_SLOT(AppAdc, Calculator);
+}
+
+
+INPUT_CALLBACK(ElecParams, EKF_LKF)
+{
+    INPUT_GET_SLOT(ElecParams, EKF_LKF);
+}
+
+
+INPUT_CALLBACK(Calculator, ElecParams)
+{
+    INPUT_GET_SLOT(Calculator, ElecParams);
+}
+
+/* ================================================================
+ * Switcher_Slot_{Module} — 单模块独立执行
+ * ================================================================ */
+
+void Switcher_Slot_AppAdc(void) { s_slot[SLOT_AppAdc].pDoWork(); }
+void Switcher_Slot_AppPower(void) { s_slot[SLOT_AppPower].pDoWork(); }
+void Switcher_Slot_Calculator(void) { s_slot[SLOT_Calculator].pDoWork(); }
+void Switcher_Slot_ElecParams(void) { s_slot[SLOT_ElecParams].pDoWork(); }
+void Switcher_Slot_EKF_LKF(void) { s_slot[SLOT_EKF_LKF].pDoWork(); }
+
+/* ================================================================
+ * Switcher_Run_All — 一次执行全部模块 (批量模式)
+ * ================================================================ */
+void Switcher_Run_All(void)
+{
+    Switcher_Slot_AppAdc();
+    Switcher_Slot_AppPower();
+    Switcher_Slot_Calculator();
+    Switcher_Slot_ElecParams();
+    Switcher_Slot_EKF_LKF();
+}
+
+/* ================================================================
+ * Switcher_Run_{name} — SLOT 调用链条 (由 project.json slot_chains 定义)
+ * ================================================================ */
+
+/* Slot1 — 1ms 实时控制: AppAdc → AppPower */
 void Switcher_Run_Slot1(void)
 {
-    /* Slot 0: ADC */
-    s_slot[SLOT_ADC].pDoWork();
-
-    /* Slot 1: APP_Power (InputCallback pulls ADC data from Slot 0) */
-    s_slot[SLOT_APP_POWER].pDoWork();
-
-    /* Middleware: APP_Power → DrvHrtim (hw_cmd) */
-    {
-        PowerBase_Output_t *app_out = (PowerBase_Output_t *)s_slot[SLOT_APP_POWER].pOut->para;
-        memcpy(s_slot[SLOT_DRV].pIn->para, &app_out->hw_cmd, sizeof(PowerHw_Command_t));
-        s_slot[SLOT_DRV].pIn->info.status |= ST_NEW;
-    }
-
-    /* Slot 2: DrvHrtim */
-    s_slot[SLOT_DRV].pDoWork();
-
-    /* Middleware: DrvHrtim → APP_Power (hw_status feedback) */
-    {
-        PowerBase_Input_t *app_in = (PowerBase_Input_t *)s_slot[SLOT_APP_POWER].pIn->para;
-        memcpy(&app_in->hw_status, s_slot[SLOT_DRV].pOut->para, sizeof(PowerHw_Status_t));
-    }
+    Switcher_Slot_AppAdc();
+    Switcher_Slot_AppPower();
 }
+
+/* TK — 20ms 周期: Calculator → ElecParams → EKF_LKF */
+void Switcher_Run_TK(void)
+{
+    Switcher_Slot_Calculator();
+    Switcher_Slot_ElecParams();
+    Switcher_Slot_EKF_LKF();
+}
+

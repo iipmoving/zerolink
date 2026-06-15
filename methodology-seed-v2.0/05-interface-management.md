@@ -119,11 +119,11 @@ typedef struct {
 ```
 人/AI 编辑 cfg/structs.json
         ↓
-python tools/generate_structs.py
+python ../.claude/tools/generate_structs.py
         ↓
 生成各模块 types.h (带 AUTO-GENERATED 标记)
         ↓
-python tools/check_structs.py  ← 验证一致性
+python ../.claude/tools/check_structs.py  ← 验证一致性
 ```
 
 详见 `07-struct-generation.md`。

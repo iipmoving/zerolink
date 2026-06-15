@@ -449,7 +449,7 @@ void API_I2C1_EV_IRQHandler(void)
 			else
 			{
 				
-				API_GPIO_WritePin(DebugB_pin,1);
+
 
 				I2cStatus=I2C_WAIT_ADDR;
 
@@ -478,7 +478,7 @@ void API_I2C1_EV_IRQHandler(void)
 					}
 				}else
 				{
-					API_GPIO_WritePin(DebugB_pin,1);
+
 					I2cStatus=I2C_WAIT_ADDR;
 					
 					__HAL_I2C_DISABLE_IT(&I2c1Handle,I2C_CR2_ITBUFEN);
@@ -584,7 +584,7 @@ void API_I2C1_EV_IRQHandler(void)
 ////		I2C1_Stop();						//关中断
 //	}		
 
-	API_GPIO_WritePin(DebugB_pin,0);
+
 }	
 
 
@@ -609,7 +609,7 @@ void	API_I2C1_ER_IRQHandler(void)
 	if(__HAL_I2C_GET_FLAG(&I2c1Handle,I2C_FLAG_BERR))			//总线错误
 
 	{
-	API_GPIO_WritePin(DebugB_pin,1);
+
 
 	
 		__HAL_I2C_CLEAR_FLAG(&I2c1Handle,I2C_FLAG_BERR);			//恢复I2C总线
@@ -632,7 +632,6 @@ void	API_I2C1_ER_IRQHandler(void)
 
 #endif
 
-	API_GPIO_WritePin(DebugB_pin,0);	
 }	
 
 void  API_I2C_CheckBuffMax(void)

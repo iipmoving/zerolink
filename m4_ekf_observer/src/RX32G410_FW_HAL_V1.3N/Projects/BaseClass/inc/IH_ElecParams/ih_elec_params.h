@@ -14,11 +14,24 @@ extern "C" {
 #endif
 
 // ========== 标定常数 ==================================================
+// ---------------------- 硬件参数 ----------------------
 #define IH_C_FARAD          0.9e-6f     // 谐振电容 0.9 μF
-#define IH_I_SCALE          0.02523f    // I_adc → A
-#define IH_VDC_SCALE        0.10606f    // Vdc_adc → V
+
+// 电压采样电路参数 (单位: Ω)
+#define IH_VDC_R_PULLUP     0.0f        // 母线电压上拉电阻
+#define IH_VDC_R_PULLDOWN   0.0f        // 母线电压下拉电阻
+
+// 谐振电流采样电路参数
+#define IH_I_CT_RATIO       0.0f        // 互感器变比 (次级/初级)
+#define IH_I_R_PULLUP       0.0f        // 谐振电流上拉电阻 (Ω)
+#define IH_I_R_PULLDOWN     0.0f        // 谐振电流下拉电阻 (Ω)
+
+// ---------------------- 标定系数 ----------------------
+#define IH_I_SCALE          0.02523f    // I_adc → A (ADC值转实际电流)
+#define IH_VDC_SCALE        0.10606f    // Vdc_adc → V (ADC值转实际电压)
 #define IH_PHI_SCALE        0.1f        // phi 单位 0.1° → °
 
+// ---------------------- 滤波参数 ----------------------
 #define IH_I_PEAK_MIN_RATIO 0.3f        // I_peak < 中位数×0.3 丢弃
 #define IH_L_MIN_uH        10.0f        // 有效 L 下限
 #define IH_FRES_MIN_kHz    5.0f         // 有效 f_res 下限

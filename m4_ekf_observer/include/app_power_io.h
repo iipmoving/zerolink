@@ -1,130 +1,130 @@
 /**
  * @file    app_power_io.h
- * @brief   PowerBase Data Switcher IO interface
- * @layer   app (Data Switcher IO)
+ * @brief   AppPower Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 多输入源: APP_Adc (ADC 数据), Comm (命令), Drv (硬件反馈)
- * 单一输出: Drv (功率控制命令)
+ * 功率控制 PID — 从 AppAdc/Calculator/EKF_LKF 拉取数据
  *
- * APP_Adc → PowerBase: field-by-field copy (布局不同, InputCallback 搬运)
- * Comm    → PowerBase: 命令解析后写入
- * Drv     → PowerBase: 10ms 硬件状态反馈
- * PowerBase → Drv:    每炉头 ppg_delta + power_state
+ * 输入源:
+ *   AppAdc → AppPower  (ADC → Power: 电压/电流/相位等功率控制参数)
+ *   Calculator → AppPower  (Calculator → AppPower: 20ms 周期累积平均值 (谐振电流/电压/相位角))
+ *   ElecParams → AppPower  (ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值))
+ *   EKF_LKF → AppPower  (EKF → Power: 卡尔曼滤波后的负载参数 (R/L/f_res))
  */
 
-#ifndef APP_POWER_IO_H
-#define APP_POWER_IO_H
+#ifndef APPPOWER_IO_H
+#define APPPOWER_IO_H
 
 #include <stdint.h>
 #include "std_module.h"
-//#include "app_power_hw_io.h"
 
 #pragma pack(4)
 
-#define POWER_POTMAX  4
+/* ========== OUTPUT (无) — 本模块没有输出 ========== */
 
-/* ===================================================================
- * 参数定义 (数据列) — 定义模块间传输的数据结构
- * =================================================================== */
-
-/* APP_Adc → PowerBase: 每炉头 ADC 数据
- * (布局与 ADC 端 MODULE_OUTPUT_PARAMS(APP_Adc, Power) 不同,
- *  InputCallback 中逐字段搬运) */
+/* AppPower_Output — 无输出 */
 typedef struct {
-    uint16_t current;
-    uint16_t voltage;
-    uint16_t igbt;
-    uint16_t bottom;
-    uint16_t phase;
-    uint16_t phaseDown;
-    uint16_t ceilQ;
-    uint16_t power;
-} MODULE_INPUT_PARAMS(APP_Adc, PowerBase);
+    uint8_t  res[4];
+} MODULE_OUTPUT(AppPower);
 
-/* Comm → PowerBase: 每炉头 MODBUS 命令 */
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppAdc → AppPower  输入参数  (ADC → Power: 电压/电流/相位等功率控制参数)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint16_t target_power;
-    uint8_t  power_on;
-    uint8_t  res;
-} MODULE_INPUT_PARAMS(Comm, PowerBase);
+    uint16_t voltage;     /* 母线电压 ADC */
+    uint16_t power[4];     /* 每炉头功率 ADC */
+    uint16_t txa[4];     /* 每炉头谐振电流 ADC */
+    uint16_t phase[4];     /* 每炉头相位 ADC */
+} MODULE_INPUT_PARAMS(AppAdc, AppPower);
 
-/* PowerBase → Drv: 每炉头功率控制输出 */
 typedef struct {
-    int16_t  ppg_delta;
-    uint8_t  delta_valid;
-    uint8_t  power_state;
-    uint8_t  res[2];
-} MODULE_OUTPUT_PARAMS(PowerBase, Drv);
-
-/* Calculator → PowerBase: 每炉头直接参数 (Calculator 累加平均) */
-typedef struct {
-    int32_t resonant_current;
-    int32_t phase_angle;
-    int32_t voltage;
-    uint8_t valid;
-    uint8_t res[3];
-} MODULE_INPUT_PARAMS(Calculator, PowerBase);
-
-/* ===================================================================
- * LINK 连接器 (4 字节 INFO + params 指针)
- * =================================================================== */
-
-/* APP_Adc → PowerBase: 输入 LINK */
-typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_INPUT_PARAMS(APP_Adc, PowerBase)* params[POWER_POTMAX];
-} MODULE_INPUT_LINK(APP_Adc, PowerBase);
+    MODULE_INPUT_PARAMS(AppAdc, AppPower) *params;
+} MODULE_INPUT_LINK(AppAdc, AppPower);
 
-/* Comm → PowerBase: 输入 LINK */
+/* ------------------------------------------------------------------
+ * Calculator → AppPower  输入参数  (Calculator → AppPower: 20ms 周期累积平均值 (谐振电流/电压/相位角))
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
+    int32_t resonant_current;     /* 谐振电流均值 (0.01A) */
+    int32_t voltage;     /* 母线电压均值 (0.01V) */
+    int32_t phase_angle;     /* 相位角 (0.01°) */
+    uint8_t valid;     /* 数据有效性 */
+} MODULE_INPUT_PARAMS(Calculator, AppPower);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_INPUT_PARAMS(Comm, PowerBase) params[POWER_POTMAX];
-} MODULE_INPUT_LINK(Comm, PowerBase);    //这里声明的是实例 
+    MODULE_INPUT_PARAMS(Calculator, AppPower) *params;
+} MODULE_INPUT_LINK(Calculator, AppPower);
 
-/* Calculator → PowerBase: 输入 LINK */
+/* ------------------------------------------------------------------
+ * ElecParams → AppPower  输入参数  (ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值))
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  res[2];
-    MODULE_INPUT_PARAMS(Calculator, PowerBase) params[POWER_POTMAX];
-} MODULE_INPUT_LINK(Calculator, PowerBase);    //这里声明的是实例
+    uint8_t valid;     /* 数据有效性 */
+    int32_t I_peak_A;     /* 峰值电流 (0.01A) */
+    int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
+    int32_t phi_deg;     /* 相位角 (0.01°) */
+    int32_t L_uH;     /* 等效电感 (0.01μH) */
+    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+    int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
+    int32_t P_W;     /* 有功功率 (0.01W) */
+    int32_t Q_factor;     /* 品质因数 (0.01) */
+    int32_t I_rms;     /* 电流有效值 (A) — I_rms = I_peak × √2/2 */
+    int32_t Z_mag_ohm;     /* 阻抗模 (Ω) — Z = √(R² + X²) */
+    int32_t X_ohm;     /* 净电抗 (Ω) — X = X_L - X_C */
+} MODULE_INPUT_PARAMS(ElecParams, AppPower);
 
-/* PowerBase → Drv: 输出 LINK */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(PowerBase, Drv) params[POWER_POTMAX];
-} MODULE_OUTPUT_LINK(PowerBase, Drv);    //这里声明的是实例 
+    MODULE_INPUT_PARAMS(ElecParams, AppPower) *params;
+} MODULE_INPUT_LINK(ElecParams, AppPower);
 
-/* ===================================================================
- * 输入引用结构体 — 汇集所有输入源
- * =================================================================== */
+/* ------------------------------------------------------------------
+ * EKF_LKF → AppPower  输入参数  (EKF → Power: 卡尔曼滤波后的负载参数 (R/L/f_res))
+ * ------------------------------------------------------------------ */
 typedef struct {
-    MODULE_INPUT_LINK(APP_Adc, PowerBase)  adc;   /* 从 APP_Adc 来 */
-    MODULE_INPUT_LINK(Comm, PowerBase)     comm;  /* 从 Comm 来 */
-    MODULE_INPUT_LINK(Calculator, PowerBase) calc; /* 从 Calculator 来 */
-//    PowerHw_Status_t                       hw_status;           /* 从 Drv 来 (10ms 反馈) */
-} MODULE_INPUT(PowerBase);      //这里声明的是实例 
+    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+    int32_t L_uH;     /* 等效电感 (0.01μH) */
+    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t Q_factor;     /* 品质因数 (0.01) */
+    uint8_t valid;     /* 数据有效性 */
+} MODULE_INPUT_PARAMS(EKF_LKF, AppPower);
 
-/* ===================================================================
- * 输出引用结构体
- * =================================================================== */
 typedef struct {
-    MODULE_OUTPUT_LINK(PowerBase, Drv)  head;                /* 每炉头输出 → Drv */
-//    PowerHw_Command_t                   hw_cmd;                 /* → DRV 命令 (10ms) */
-} MODULE_OUTPUT(PowerBase);
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_INPUT_PARAMS(EKF_LKF, AppPower) *params;
+} MODULE_INPUT_LINK(EKF_LKF, AppPower);
+
+/* AppPower_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
+typedef struct {
+    MODULE_INPUT_LINK(AppAdc, AppPower) *AppAdc_params;  /* 指向 AppAdc 输出的 LINK 列 */
+    MODULE_INPUT_LINK(Calculator, AppPower) *Calculator_params;  /* 指向 Calculator 输出的 LINK 列 */
+    MODULE_INPUT_LINK(ElecParams, AppPower) *ElecParams_params;  /* 指向 ElecParams 输出的 LINK 列 */
+    MODULE_INPUT_LINK(EKF_LKF, AppPower) *EKF_LKF_params;  /* 指向 EKF_LKF 输出的 LINK 列 */
+} MODULE_INPUT(AppPower);
 
 #pragma pack()
 
 /* ---- v2.3 统一接口 ---- */
-MODULE_IO_H(PowerBase);
+MODULE_IO_H(AppPower);
 
-#endif /* APP_POWER_IO_H */
+#endif /* APPPOWER_IO_H */
+

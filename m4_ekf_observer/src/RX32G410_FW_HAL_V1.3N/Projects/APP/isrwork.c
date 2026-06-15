@@ -1,37 +1,25 @@
 /**
  * @file    isrwork.c
- * @brief   ISRWORK 模块 — ISR 实时处理入口 (v2.3)
+ * @brief   ISRWORK 模块 — ISR 实时处理入口 (v2.3 示例)
  * @layer   app
  *
- * 输入:
- *   - A_Data_t: 来自 ModuleA
- *   - B_Data_t: 来自 ModuleB
- *   - C_Data_t: 来自 ModuleC
- *   - isr_source: ISR 来源标识
- *
- * 输出:
- *   - ISRWORK_OutData_t: 处理结果
- *
- * 两条通路:
- *   1. 主循环: Switcher_Run_Slot1() → ISRWORK_DoWork()
- *   2. PendSV: PendSV_Handler() → Switcher_Run_ISR_Slot() → ISRWORK_DoWork()
+ * 注意: 此文件是 v2.3 架构示例，需要根据实际模块重新设计。
+ * v2.3 不提供 DECLARE_MODULE_OUTPUT 宏 (破坏封装)，
+ * 跨模块 ISR 数据应通过 GetISR_IO 或中间层管理。
  *
  * 使用:
- *   1. #include "core/std_module_v2.3.h"
- *   2. MODULE_SKELETON(ISRWORK)
- *   3. 实现 Init() + ProcessInput()
- *   4. MODULE_EXPORT(ISRWORK)
- *   5. 在 Switcher_PendSV_Init() 后调用 Switcher_RegisterModule("ISRWORK", ...)
+ *   1. #define STD_MODULE_ENABLE_ISR 1
+ *   2. #include "std_module.h"
+ *   3. MODULE_SKELETON(ISRWORK)
+ *   4. 实现 Init() + ProcessInput() + ISR_ProcessInput()
+ *   5. MODULE_EXPORT(ISRWORK)
+ *   6. 在 Switcher_PendSV_Init() 后注册 Switcher_RegisterISRModule(ISRWORK_GetISR_IO)
  */
 
-#include "core/std_module_v2.3.h"
-#include "core/pendsv_switcher.h"
+#define STD_MODULE_ENABLE_ISR  1
+#include "std_module.h"
+#include "pendsv_switcher.h"
 #include <string.h>
-
-/* ========== 模块依赖: 声明外部 g_output ========== */
-DECLARE_MODULE_OUTPUT(ModuleA);
-DECLARE_MODULE_OUTPUT(ModuleB);
-DECLARE_MODULE_OUTPUT(ModuleC);
 
 /* ========== 1. 输入数据结构 ========== */
 #pragma pack(4)
@@ -41,7 +29,7 @@ typedef struct {
     uint8_t  c_valid;
     uint8_t  isr_source;    /* ISR 来源标识 */
     uint8_t  res[4];        /* 对齐填充 */
-    
+
     uint16_t a_value;       /* ModuleA 数据 */
     uint16_t b_value;       /* ModuleB 数据 */
     uint16_t c_value;       /* ModuleC 数据 */
@@ -68,90 +56,73 @@ MODULE_SKELETON(ISRWORK);
 static void CollectInput(void)
 {
     ISRWORK_InData_t *in = (ISRWORK_InData_t *)g_input.para;
-    
-    /* 从 ModuleA 收集数据 */
-    if (g_ModuleA_output.para != NULL) {
-        uint16_t *pA = (uint16_t *)g_ModuleA_output.para;
-        in->a_value = *pA;
-        in->a_valid = 1;
-    }
-    
-    /* 从 ModuleB 收集数据 */
-    if (g_ModuleB_output.para != NULL) {
-        uint16_t *pB = (uint16_t *)g_ModuleB_output.para;
-        in->b_value = *pB;
-        in->b_valid = 1;
-    }
-    
-    /* 从 ModuleC 收集数据 */
-    if (g_ModuleC_output.para != NULL) {
-        uint16_t *pC = (uint16_t *)g_ModuleC_output.para;
-        in->c_value = *pC;
-        in->c_valid = 1;
-    }
-    
+    /* TODO: 通过 GetISR_IO 或中间层从其他模块获取数据 */
+
     /* 记录 ISR 来源 */
     in->isr_source = g_isr_source;
-    
+
     g_input.info.status |= ST_NEW;
 }
 
-/* ========== 5. ProcessInput: 三段式处理 ========== */
-static void ProcessInput(void)
+/* ========== 5. ISR_ProcessInput: PendSV 通路三段式处理 ========== */
+static void ISR_ProcessInput(void)
 {
-    ISRWORK_InData_t  *in  = (ISRWORK_InData_t *)g_input.para;
-    ISRWORK_OutData_t *out = (ISRWORK_OutData_t *)g_output.para;
-    
+    ISRWORK_InData_t  *in  = (ISRWORK_InData_t *)g_isr_input.para;
+    ISRWORK_OutData_t *out = (ISRWORK_OutData_t *)g_isr_output.para;
+
     /* ① 输入段: 收集数据 */
     CollectInput();
-    
-    if (!(g_input.info.status & ST_NEW)) {
-        return;  /* 无新数据，直接返回 */
+
+    if (!(g_isr_input.info.status & ST_NEW)) {
+        return;
     }
-    
+
     /* ② 计算段: 根据 ISR 来源选择处理策略 */
     switch (in->isr_source) {
         case ISR_SOURCE_ADC:
-            /* ADC ISR: 融合 A 和 B 数据 */
+            /* ADC ISR: 快速处理 */
             if (in->a_valid && in->b_valid) {
                 out->fused_value = (in->a_value + in->b_value) / 2;
             }
             break;
-            
+
         case ISR_SOURCE_TIMER:
-            /* Timer ISR: 完整融合 A+B+C */
             if (in->a_valid && in->b_valid && in->c_valid) {
                 out->fused_value = (in->a_value + in->b_value + in->c_value) / 3;
             }
             break;
-            
+
         case ISR_SOURCE_FAULT:
-            /* Fault ISR: 故障处理 */
             out->fault_code = 0x1234;
             break;
-            
+
         default:
-            /* 通用处理 */
             break;
     }
-    
-    /* ③ 输出段: 置结果有效标志 */
+
+    /* ③ 输出段 */
     out->result_valid = 1;
-    g_output.info.status |= ST_OUT;
-    
-    /* 清除输入标志 */
-    g_input.info.status &= ~ST_NEW;
+    g_isr_output.info.status |= ST_OUT;
+    g_isr_input.info.status &= ~ST_NEW;
 }
 
-/* ========== 6. Init: 初始化 ========== */
+/* ========== 6. ProcessInput: 主循环通路三段式处理 ========== */
+static void ProcessInput(void)
+{
+    /* 主循环中 ISRWORK 的处理逻辑 (如有需要) */
+}
+
+/* ========== 7. Init: 初始化 ========== */
 static void Init(void)
 {
     memset(&s_in,  0, sizeof(s_in));
     memset(&s_out, 0, sizeof(s_out));
-    
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+
+    g_input.para       = &s_in;
+    g_output.para      = &s_out;
+    g_isr_input.para   = &s_in;   /* ISR 和主循环共用输入缓冲 (示例) */
+    g_isr_output.para  = &s_out;  /* ISR 和主循环共用输出缓冲 (示例) */
 }
 
-/* ========== 7. 导出模块 ========== */
+/* ========== 8. 导出模块 ========== */
 MODULE_EXPORT(ISRWORK);
