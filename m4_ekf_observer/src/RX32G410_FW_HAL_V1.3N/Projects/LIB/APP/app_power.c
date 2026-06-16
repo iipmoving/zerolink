@@ -14,6 +14,10 @@ typedef union {
     } bits;
 } AppPower_PipeFlags_t;
 
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppPower)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppPower)  s_outPara;   // 输出参数缓冲区
+
 static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -6369,6 +6373,30 @@ void		API_POWER_PanCheckPluse(void)
 		
 	
 }	
+void	Power_Calculator_Input(void)
+{
+
+//	    /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
+//    for (uint8_t ch = 0; ch < POTNUM; ch++) {
+
+
+//		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
+//        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params->txa[ch];// 		s_AdcLink->params->txa[ch];
+//		PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
+
+
+//        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params->voltage>> 4;
+//        PowerMem[ch].staticReg->PowerTxaFact =	s_inPara->AppAdc_params->params->power[ch];
+//        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params->phase[ch];;
+//        PowerMem[ch].staticReg->limitQSum = s_inPara->AppAdc_params->params->txa[ch];;
+//        PowerMem[ch].staticReg->PowerTxaFact >>= 6;
+//    }
+//	
+	
+	
+}	
+
+
 
 void		Power_Adc_Input(void)
 {
@@ -6380,15 +6408,15 @@ void		Power_Adc_Input(void)
 
 
 		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
-        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params->txa[ch];// 		s_AdcLink->params->txa[ch];
+        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params[ch].txa;// 		s_AdcLink->params->txa[ch];
 		PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
 
 
-        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params->voltage>> 4;
-        PowerMem[ch].staticReg->PowerTxaFact =	s_inPara->AppAdc_params->params->power[ch];
-        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params->phase[ch];;
-        PowerMem[ch].staticReg->limitQSum = s_inPara->AppAdc_params->params->txa[ch];;
-        PowerMem[ch].staticReg->PowerTxaFact >>= 6;
+        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params[ch].voltage>> 4;
+
+        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params[ch].phase;
+
+
     }
 
 }
@@ -6452,6 +6480,10 @@ static void Init(void)
     g_input.para  = &s_inPara;				//它的实际初始化在输入回调里
 		g_input.info.inMax=3;
 		g_output.info.outMax=2;
+	
+		s_outPara.res[0]=1;
+
+	
     g_output.para = &s_outPara;
 
 }
@@ -6466,18 +6498,23 @@ static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *ou
 
 
 
-		if(flags.bits.appadc)				//adc输入有效
+		if(in->AppAdc_params->status&ST_NEW)				//adc输入有效
 		{
-//			s_AdcLink->status &= ~ST_NEW;	
-			Power_Adc_Input();					//从缓存区获得ADC输入值
-		}
 
+//			Power_Adc_Input();					//从缓存区获得ADC输入值
+		}
+		if(in->Calculator_params->status&ST_NEW)
+		{
+					Power_Calculator_Input();					//从缓存区获得ADC输入值
+		}	
+		
+		
 
     /* ---- 计算段 + 输出段 ---- */
     PowerTypeFun();
 
 
-    g_output.info.status |= ST_OUT;
+
 }
 
 

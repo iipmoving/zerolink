@@ -79,6 +79,12 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append(f"}} {mod_name}_PipeFlags_t;")
     lines.append("")
 
+    # ---- 数据实体（模块私有）----
+    lines.append("/* ---- 数据实体（模块私有）---- */")
+    lines.append(f"static MODULE_INPUT({mod_name})*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改")
+    lines.append(f"static MODULE_OUTPUT({mod_name})  s_outPara;   // 输出参数缓冲区")
+    lines.append("")
+
     # user_Process 前向声明 — 统一签名, NULL 由用户内部处理
     lines.append(f"static void user_Process(MODULE_INPUT({mod_name}) *in, MODULE_OUTPUT({mod_name}) *out, {mod_name}_PipeFlags_t flags);")
     lines.append("")

@@ -11,6 +11,10 @@ typedef union {
     } bits;
 } ElecParams_PipeFlags_t;
 
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(ElecParams)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(ElecParams)  	s_outPara;   // 输出参数缓冲区实体
+
 static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -419,7 +423,8 @@ static void Init(void) {
     s_inPara = NULL;
     memset(&s_outPara, 0, sizeof(s_outPara));
 
-
+		s_outPara.AppPower_params.res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
+			s_outPara.EKF_LKF_params.res[0]=5;			//CONSET_OUT :ELC_TO_EKF
 
     g_input.para  = &s_inPara;
     g_output.para = &s_outPara;
@@ -504,6 +509,4 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
     out->AppPower_params.status |= ST_OUT;
 
 }
-
-
 

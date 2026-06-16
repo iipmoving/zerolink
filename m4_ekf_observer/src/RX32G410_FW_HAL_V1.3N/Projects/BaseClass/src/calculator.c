@@ -11,6 +11,10 @@ typedef union {
     } bits;
 } Calculator_PipeFlags_t;
 
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(Calculator)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
+
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -67,19 +71,13 @@ typedef struct {
     uint16_t voltage_count;
 } CalculatorResultDef;
 
-/* ---- 数据实体（模块私有）---- */
-static MODULE_INPUT(Calculator)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
-static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
-
 /* ---- Calculator → PowerBase 直接参数累加器 ---- */
 typedef struct {
-    uint32_t resonant_current_sum;   // peak_current 累加和
-    uint32_t voltage_sum;            // voltage_sum 累加和
-    uint16_t voltage_count_sum;      // voltage_count 累加和
-    uint16_t count;                  // 周期计数
-    int32_t  phase_sum;              // 相位角累加和 (0.01° × count)
+    uint32_t resonant_current;   // peak_current 累加和
+    uint32_t voltage;            // voltage_sum 累加和
+    int32_t  phase;              // 相位角累加和 (0.01° × count)
 } PowerDirectAcc_t;
-static PowerDirectAcc_t s_power_acc[CALC_POTMAX];
+//static PowerDirectAcc_t s_power_acc[CALC_POTMAX];
 
 
 
@@ -99,30 +97,36 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 //    MODULE_INPUT(Calculator)*   pIn = g_input.para;
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
+		out->ElecParams_params.status &= ~ST_NEW;				//ELEC 模块进行计算。
+		out->AppPower_params.status &= ~ST_NEW;				//ELEC 模块进行计算。
+	
     if (in->AppAdc_params->status & ST_NEW)
     {
 				if(in->AppAdc_params->count)
 				{	
-					ProcessAllHead(in, out);
+					ProcessAllHead(in, out);			//对每1ms数据进行计算
 
 					in->AppAdc_params->status &= ~ST_NEW;
 
 				}
 				else
 				{
-						// 完成 Calculator→PowerBase 直接参数平均值
+						// 完成 Calculator→PowerBase 直接参数平均值 // 每20ms计算一次
+					
+						out->ElecParams_params.status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
+					
 						uint8_t max_h = in->AppAdc_params->max_count;
-						for (uint8_t i = 0; i < max_h; i++) {
-						    if (s_power_acc[i].count > 0) {
-						        out->AppPower_params.params[i].resonant_current = (int32_t)(s_power_acc[i].resonant_current_sum / s_power_acc[i].count);
-						        out->AppPower_params.params[i].voltage = (s_power_acc[i].voltage_count_sum > 0) ? (int32_t)(s_power_acc[i].voltage_sum * 100 / s_power_acc[i].voltage_count_sum) : 0;
-						        out->AppPower_params.params[i].phase_angle = s_power_acc[i].phase_sum / s_power_acc[i].count;
-						        out->AppPower_params.params[i].valid = 1;
-						    }
-						    memset(&s_power_acc[i], 0, sizeof(PowerDirectAcc_t));
+						for (uint8_t i = 0; i < CALC_POTMAX; i++) {
+//						    if (s_power_acc[i].count > 0) {
+//						        out->AppPower_params.params[i].resonant_current = (int32_t)(s_power_acc[i].resonant_current_sum / s_power_acc[i].count);
+//						        out->AppPower_params.params[i].voltage = (s_power_acc[i].voltage_count_sum > 0) ? (int32_t)(s_power_acc[i].voltage_sum * 100 / s_power_acc[i].voltage_count_sum) : 0;
+//						        out->AppPower_params.params[i].phase_angle = s_power_acc[i].phase_sum / s_power_acc[i].count;
+//						        out->AppPower_params.params[i].valid = 1;
+//						    }
+//						    memset(&s_power_acc[i], 0, sizeof(PowerDirectAcc_t));
 						}	
 						out->AppPower_params.status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
-						out->ElecParams_params.status &= ~ST_NEW;				//ELEC 模块进行计算。
+
 				}
 				
     }
@@ -144,37 +148,56 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
     // }
 
 
-   for (int i = 0; i < head_in->AppAdc_params->max_count; i++) { 
+   for (int i = 0; i < CALC_POTMAX; i++) { 
 			
 	      uint16_t* voltage_point = (uint16_t*)head_in->AppAdc_params->params[i].voltage_data;
         uint16_t* hrtim_point = (uint16_t*)head_in->AppAdc_params->params[i].hrtim_values;
         uint16_t* current_point = (uint16_t*)head_in->AppAdc_params->params[i].resonant_current;
 
 			Calculator_InputParams_t* params_point =head_in->AppAdc_params->params[i].input; //这里存的是缓存的地址（4个）
-		MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.ElecParams_params.params[i];
+		MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.ElecParams_params.params[i][cycle_idx];
 
 		CalculatePower(current_point,hrtim_point,voltage_point,params_point,elec_params);
 
 		// 累加 Calculator → PowerBase 直接参数
 		if (elec_params->peak_current > 0) {
-		    s_power_acc[i].resonant_current_sum += elec_params->peak_current;
-		    int32_t cond = (int32_t)params_point->highOff - (int32_t)params_point->highOn;
-		    if (cond > 0) {
-		        int32_t delta = (int32_t)elec_params->zero_cross_high - (int32_t)params_point->highOn;
-		        s_power_acc[i].phase_sum += delta * 18000 / cond;
-		    }
-		    s_power_acc[i].voltage_sum += elec_params->voltage_sum;
-		    s_power_acc[i].voltage_count_sum += elec_params->voltage_count;
-		    s_power_acc[i].count++;
-		}
+
+			
+			//-----------------------------------------------------------				
+
+
+		uint64_t		sumCurrent=elec_params->active_current_sum_high+elec_params->active_current_sum_low;
+				sumCurrent/=elec_params->hrtim_lowOff;      //电流值
+
+//瞬时电压			
+			
+				
+			
+				head_out->AppPower_params.params[i].voltage=elec_params->voltage_sum/elec_params->voltage_count;
+				
+        head_out->AppPower_params.params[i].resonant_current=sumCurrent;
+
+				
+
+            uint32_t angle=elec_params->zero_cross_high-elec_params->hrtim_highOn;
+						
+
 					
+               angle*=PHASE_DEG_BASE;		//相位角（180度为单位）
+               angle/=elec_params->hrtim_highOff-elec_params->hrtim_highOn;
+             head_out->AppPower_params.params[i].phase_angle=angle;
+
+
+				}	
+
+
+
     }
+	}
+//----------------------------------------------------------------			
 
-
-
-    /* 初始化输出 */
-    // memset(head_out, 0, sizeof(Calculator_OutHead_t));
-}
+			
+			
 
 static void  CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uint16_t* voltage_data,Calculator_InputParams_t* input,MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *outPut)
 {
@@ -218,6 +241,8 @@ static void  CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,ui
             sumLow  = sumUp.current;
         }
 
+
+	
         /* 填充基本结果 — 原始积分值，ElecParams 浮点除 */
         outPut->active_current_sum_high = sumHigh;
         outPut->active_current_sum_low  = sumLow;
@@ -235,6 +260,9 @@ static void  CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,ui
         outPut->hrtim_lowOff=input->lowOff;
         outPut->hrtim_highOn=input->highOn;
         outPut->hrtim_lowOn=input->lowOn;
+
+
+
 
 
     }
@@ -428,11 +456,14 @@ static void Init(void)
 //    memset(&s_inPara,  0, sizeof(s_inPara)); 
 	s_inPara=NULL;
     memset(&s_outPara, 0, sizeof(s_outPara));
+		s_outPara.AppPower_params.res[0]=2;						//CONSET_OUT :CALC_TO_APPPOWER
+			s_outPara.ElecParams_params.res[0]=3;				//CONSET_OUT: CALC_TO_ELEC
+	
     g_input.para   = &s_inPara;		//在输入回调里初始化
-	g_input.info.status =0;
+		g_input.info.status =0;
     g_output.para  = &s_outPara;
+
 }
 
 /* ---- 导出 ---- */
-
 

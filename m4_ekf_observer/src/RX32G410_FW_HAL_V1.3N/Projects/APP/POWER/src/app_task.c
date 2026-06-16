@@ -133,17 +133,17 @@ __attribute__((weak)) void Switcher_Init(void) {}
 __attribute__((weak)) void Switcher_Run_TK(void) {}
 void Task_TimeChip1(void)
 {
-
+		Time_Base();
 //	API_TIM_TGO_PPG_SINGLE_Start();
+		APP_POWER_CompSetValue();
 
- 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
 
 }
 void Task_TimeChip2(void)
 {
 //       API_GPIO_WritePin(DebugB_pin,1);
 
-		APP_POWER_CompSetValue();
+ 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
 //////		 API_GPIO_WritePin(DebugB_pin,0);
 
 }

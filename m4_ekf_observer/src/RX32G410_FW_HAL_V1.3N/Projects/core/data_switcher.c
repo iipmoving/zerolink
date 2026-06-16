@@ -113,6 +113,6 @@ void Switcher_Run_TK(void)
 {
     Switcher_Slot_Calculator();
     Switcher_Slot_ElecParams();
-    Switcher_Slot_EKF_LKF();
+//    Switcher_Slot_EKF_LKF();
 }
 

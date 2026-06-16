@@ -1435,6 +1435,5 @@ void APP_ADC_ComputeElecParams(void)
     }
 }
 
-/* ====== 骨架 + 导出 ====== */
-MODULE_EXPORT(AppAdc);
+
 
