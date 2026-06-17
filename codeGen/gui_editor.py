@@ -17,6 +17,9 @@ from tkinter import ttk, filedialog, messagebox
 import json
 import os
 import sys
+import time
+import threading
+import queue
 import json
 import subprocess
 import shutil
@@ -48,12 +51,32 @@ class ConfigEditor:
         self._selected_pipe = None  # 当前选中的 pipe dict (引用)
         self._field_item_map = {}   # {Treeview iid: field_dict} 用于嵌套字段编辑
 
+        # ---- 硬编码项目路径 ----
+        self._hardcoded_keil_file = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src\RX32G410_FW_HAL_V1.3N\Projects\Projects\Keil\ReTek.uvprojx"
+        self._hardcoded_output_root = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF"
+        self._hardcoded_project_src = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src"
+
         # ---- 构建 UI ----
         self._build_menu()
         self._build_main_area()
         self._build_bottom_bar()
 
         self.status("就绪 — 打开 JSON 配置文件开始编辑")
+
+        # 自动填充硬编码路径
+        self._auto_fill_hardcoded_paths()
+
+        # ---- 后台线程消息队列 (Claude CLI 输出) ----
+        self._claude_queue = queue.Queue()
+        self.root.after(100, self._poll_claude_queue)
+
+    def _auto_fill_hardcoded_paths(self):
+        """自动填充 KEIL 路径和输出目录"""
+        if hasattr(self, '_ref_keil_path'):
+            self._ref_keil_path.config(text=self._hardcoded_keil_file)
+        if hasattr(self, '_ref_output_dir'):
+            self._ref_output_dir.delete(0, tk.END)
+            self._ref_output_dir.insert(0, self._hardcoded_output_root)
 
     # ================================================================
     # 菜单
@@ -118,6 +141,7 @@ class ConfigEditor:
         ttk.Label(pf, text="输出根目录:").grid(row=row, column=0, sticky=tk.W)
         self.entry_output_root = ttk.Entry(pf)
         self.entry_output_root.grid(row=row, column=1, sticky=tk.EW, padx=4)
+        self.entry_output_root.bind("<KeyRelease>", lambda e: self._on_output_root_change())
         pf.columnconfigure(1, weight=1)
         row += 1
 
@@ -498,6 +522,7 @@ class ConfigEditor:
         self._ref_filtered_files = []
         self._ref_imported_config = None
         self._ref_last_keil_dir = ""    # 记住上次 KEIL 项目目录
+        self._ref_last_output_dir = ""  # 记住上次输出目录
         self._ref_last_export_dir = ""  # 记住上次导出目录
 
     # ----- 重构辅助 -----
@@ -672,6 +697,7 @@ class ConfigEditor:
             return
         self._ref_last_keil_dir = os.path.dirname(path)
         self._ref_keil_path.config(text=path)
+        self._ref_last_output_dir = path  # 也记住 KEIL 路径用于持久化
         self._ref_log_append(f"[INFO] 解析 KEIL 项目: {path}")
         try:
             whitelist_str = self._ref_whitelist.get().strip()
@@ -684,10 +710,6 @@ class ConfigEditor:
             self._ref_log_append(f"  白名单 '{whitelist}' 过滤后: {len(filtered)} 个候选")
             self._ref_rebuild_file_list()
             self._ref_log_append("[OK] 文件列表已加载，勾选要重构的文件")
-            proj_dir = os.path.dirname(path)
-            parent = os.path.dirname(proj_dir)
-            self._ref_output_dir.delete(0, tk.END)
-            self._ref_output_dir.insert(0, os.path.join(parent, "src2"))
         except Exception as e:
             self._ref_log_append(f"[ERROR] {e}")
             messagebox.showerror("解析失败", str(e))
@@ -761,11 +783,22 @@ class ConfigEditor:
             messagebox.showerror("导入失败", str(e))
 
     # ----- Step 4 -----
+        except Exception as e:
+            self._ref_log_append(f"[ERROR] {e}")
+            messagebox.showerror("解析失败", str(e))
+
+    def _on_output_root_change(self):
+        """输出根目录变化时，记住目录"""
+        val = self.entry_output_root.get().strip()
+        if val and os.path.isdir(val):
+            self._ref_last_output_dir = val
+
     def _ref_cmd_browse_output(self):
         path = filedialog.askdirectory(title="选择输出目录")
         if path:
             self._ref_output_dir.delete(0, tk.END)
             self._ref_output_dir.insert(0, path)
+            self._ref_last_output_dir = path  # 记住输出目录
 
     def _ref_cmd_generate(self):
         config = self._ref_imported_config
@@ -898,6 +931,9 @@ class ConfigEditor:
         ttk.Button(bar, text="仅 switcher", command=lambda: self.cmd_generate("switcher")).pack(side=tk.LEFT, padx=2)
         ttk.Button(bar, text="仅 modules", command=lambda: self.cmd_generate("modules")).pack(side=tk.LEFT, padx=2)
         ttk.Button(bar, text="⟳ 强制刷新", command=self.cmd_force_refresh).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Button(bar, text="AI 生成 project.json", command=self.cmd_generate_project_via_claude).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text="Python 扫描", command=self.cmd_scan_python).pack(side=tk.LEFT, padx=2)
 
         self.lbl_status = ttk.Label(bar, relief=tk.SUNKEN, anchor=tk.W, padding=(4, 2))
         self.lbl_status.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(12, 0))
@@ -916,9 +952,15 @@ class ConfigEditor:
         self.pipes = data.get("pipes", [])
         self.slot_order = data.get("slot_order", [m["name"] for m in self.modules])
 
+        # 加载持久化的目录
+        meta = data.get("_meta", {})
+        self._ref_last_keil_dir = meta.get("last_keil_dir", "")
+        self._ref_last_output_dir = meta.get("last_output_dir", "")
+
         # 填充链条
         self.chain_tree.delete(*self.chain_tree.get_children())
-        for ch in data.get("slot_chains", []):
+        slot_chains = data.get("slot_chains", [])
+        for ch in slot_chains:
             self.chain_tree.insert("", tk.END, values=(ch["name"], " → ".join(ch["modules"]), ch.get("comment", "")))
 
         # 填充项目设置
@@ -978,6 +1020,10 @@ class ConfigEditor:
             "pipes": self.pipes,
             "slot_order": self.slot_order,
             "slot_chains": slot_chains,
+            "_meta": {
+                "last_keil_dir": self._ref_last_keil_dir,
+                "last_output_dir": self._ref_last_output_dir,
+            },
         }
 
     def cmd_open(self):
@@ -1962,6 +2008,280 @@ class ConfigEditor:
             except tk.TclError:
                 pass
         self.status("强制刷新完成")
+
+    # ================================================================
+    # AI 生成 project.json (通过 Claude Code CLI)
+    # ================================================================
+    def cmd_generate_project_via_claude(self):
+        """通过 Claude CLI 生成 project.json（CREATE_NEW_CONSOLE + 文件轮询）"""
+        output_root = self._hardcoded_output_root
+        proj_dir = self._hardcoded_project_src
+        keil_dir = os.path.dirname(self._hardcoded_keil_file)
+        proj_name = "m4_ekf_observer"
+
+        self.status("正在通过 Claude CLI 生成 project.json ...")
+        self.root.update()
+
+        if not hasattr(self, "_ref_terminal_text"):
+            self._create_terminal_panel()
+
+        self._ref_terminal_text.delete("1.0", tk.END)
+        self._ref_terminal_text.config(state=tk.NORMAL)
+        self._ref_terminal_text.insert(tk.END, "=" * 60 + "\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] 输出: " + output_root + "\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] KEIL: " + self._hardcoded_keil_file + "\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] 项目: " + proj_name + "\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] CREATE_NEW_CONSOLE 模式 — Claude 在新窗口运行\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] 首次启动约需 10-15 秒（Node.js 加载）\n")
+        self._ref_terminal_text.config(state=tk.DISABLED)
+        self.notebook.select(self.notebook.index("end") - 1)
+
+        thread = threading.Thread(
+            target=self._run_claude_gen,
+            args=(proj_dir, proj_name, keil_dir, output_root),
+            daemon=True,
+        )
+        thread.start()
+
+    def _run_claude_gen(self, proj_dir, proj_name, keil_dir, output_root):
+        """后台线程：CREATE_NEW_CONSOLE 启动 Claude CLI（有 TTY，skill 可正常执行）
+
+        Claude 在 TTY 模式下可以正常写入文件。我们轮询检测 project.json 文件。
+        """
+        import subprocess as sp
+        import traceback
+        from generate_project_json import find_keil_project, _find_claude_exe
+
+        debug_log = os.path.join(os.path.abspath(output_root), "claude_debug.log")
+        os.makedirs(os.path.dirname(debug_log), exist_ok=True)
+
+        def _log(msg):
+            self._terminal_append(msg)
+            try:
+                with open(debug_log, "a", encoding="utf-8") as f:
+                    f.write(msg)
+            except Exception:
+                pass
+
+        try:
+            abs_proj_dir = os.path.abspath(proj_dir)
+            abs_output_dir = os.path.abspath(output_root)
+            json_poll_path = os.path.join(abs_proj_dir, "codeGen", "out", proj_name, "project.json")
+            _log(f"[INFO] polling path: {json_poll_path}\n")
+
+            keil_files = find_keil_project(keil_dir if keil_dir else proj_dir)
+            if not keil_files:
+                _log(f"[ERROR] 未找到 .uvprojx 文件\n")
+                self.root.after(0, lambda: messagebox.showerror("错误", "未找到 .uvprojx 文件"))
+                return
+            keil_path = keil_files[0]
+
+            prompt = f"""/gen-json {proj_name}
+
+请按照 gen-json SKILL 的要求，扫描当前项目并生成 project.json。
+
+项目根目录: {abs_proj_dir}
+KEIL 项目文件: {keil_path}
+
+注意:
+- output_root 必须使用绝对路径: {abs_proj_dir}
+- 最终 JSON 写入 codeGen/out/{proj_name}/project.json
+- 严格遵循 SKILL 的铁律: 未读完所有源文件前不得写入 JSON
+- 生成后用 python -c 验证 JSON 语法
+- 完成后报告: 模块数、管道数、嵌套 struct 处理情况
+"""
+
+            claude_cmd = _find_claude_exe()
+            if not claude_cmd:
+                _log(f"[ERROR] 未找到 claude 命令\n")
+                return
+
+            _log(f"[INFO] 启动 Claude CLI (PIPE 模式 + dangerously-skip-permissions)...\n")
+            _log(f"[INFO] Claude 首次加载约需 10-15 秒（Node.js 启动）\n")
+            _log(f"[INFO] 输出将实时显示在此终端\n")
+            _log(f"[INFO] 项目目录: {abs_proj_dir}\n")
+            _log("=" * 60 + "\n")
+
+            # PIPE 模式 — --dangerously-skip-permissions 自动批准工具调用
+            proc = sp.Popen(
+                [claude_cmd, "--dangerously-skip-permissions", "-p", prompt],
+                cwd=abs_proj_dir,
+                stdout=sp.PIPE,
+                stderr=sp.STDOUT,
+            )
+
+            _log(f"[INFO] Claude 进程已启动 (PID: {proc.pid})\n")
+            _log(f"[INFO] 等待 Claude 输出...\n\n")
+
+            elapsed = 0
+            max_wait = 600
+            last_size = [0]
+
+            while elapsed < max_wait:
+                time.sleep(2)
+                elapsed += 2
+
+                # 检查文件大小变化
+                if os.path.exists(json_poll_path):
+                    try:
+                        size = os.path.getsize(json_poll_path)
+                        delta = size - last_size[0]
+                        last_size[0] = size
+                        if delta > 0:
+                            _log(f"[INFO] project.json 增大 {delta}B (总计 {size}B)\n")
+                    except:
+                        pass
+
+                # 尝试读取并验证 JSON
+                if os.path.exists(json_poll_path):
+                    try:
+                        with open(json_poll_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        _log(f"\n[OK] project.json 已生成 ({elapsed}s)\n")
+                        _log(f"[OK] 模块数: {len(data.get('modules', []))}\n")
+                        _log(f"[OK] 管道数: {len(data.get('pipes', []))}\n")
+                        # 复制到自定义输出目录
+                        custom_path = os.path.join(abs_output_dir, "project.json")
+                        os.makedirs(abs_output_dir, exist_ok=True)
+                        shutil.copy2(json_poll_path, custom_path)
+                        _log(f"[OK] 已复制到: {custom_path}\n")
+                        self.root.after(0, lambda d=data, jp=custom_path: self._load_and_show_success(d, jp))
+                        return
+                    except json.JSONDecodeError as e:
+                        _log(f"[INFO] JSON 尚未完成写入，继续等待...\n")
+
+                if elapsed % 30 == 0:
+                    _log(f"  ... 已等待 {elapsed}s / {max_wait}s\n")
+
+            _log(f"\n[ERROR] 等待超时 ({max_wait}s)\n")
+            _log(f"[HINT] 检查 Claude 窗口是否仍在运行\n")
+            try:
+                proc.kill()
+            except:
+                pass
+
+        except Exception as e:
+            _log(f"[ERROR] {e}\n")
+            _log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("错误", str(e)))
+        finally:
+            self.root.after(0, lambda: self.status("就绪"))
+            self.root.after(0, lambda: self.status("就绪"))
+
+    # ── Python 快速扫描（已范式化项目用） ──
+    def cmd_scan_python(self):
+        """通过 Python 扫描器直接生成 project.json（无需 Claude CLI）"""
+        output_root = self._hardcoded_output_root
+        proj_dir = self._hardcoded_project_src
+        proj_name = "m4_ekf_observer"
+
+        self.status("正在扫描源码生成 project.json ...")
+        self.root.update()
+
+        if not hasattr(self, "_ref_terminal_text"):
+            self._create_terminal_panel()
+
+        self._ref_terminal_text.delete("1.0", tk.END)
+        self._ref_terminal_text.config(state=tk.NORMAL)
+        self._ref_terminal_text.insert(tk.END, "=" * 60 + "\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] Python 快速扫描器\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] 仅适用于已范式化项目\n")
+        self._ref_terminal_text.insert(tk.END, "[INFO] 输出: " + output_root + "\n")
+        self._ref_terminal_text.config(state=tk.DISABLED)
+        self.notebook.select(self.notebook.index("end") - 1)
+
+        thread = threading.Thread(
+            target=self._run_py_scanner,
+            args=(proj_dir, proj_name, output_root),
+            daemon=True,
+        )
+        thread.start()
+
+    def _run_py_scanner(self, proj_dir, proj_name, output_root):
+        """后台线程：运行 Python 扫描器"""
+        import traceback
+        from scan_project import scan_project
+
+        debug_log = os.path.join(os.path.abspath(output_root), "scanner_debug.log")
+        os.makedirs(os.path.dirname(debug_log), exist_ok=True)
+
+        def _log(msg):
+            self._terminal_append(msg)
+            try:
+                with open(debug_log, "a", encoding="utf-8") as f:
+                    f.write(msg)
+            except Exception:
+                pass
+
+        try:
+            _log(f"[INFO] 扫描目录: {proj_dir}\n")
+            _log("=" * 60 + "\n")
+
+            data = scan_project(proj_dir, proj_name=proj_name)
+            json_path = os.path.join(os.path.abspath(output_root), "project.json")
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            _log(f"[OK] 扫描完成！\n")
+            _log(f"[OK] 模块数: {len(data['modules'])}\n")
+            for m in data['modules']:
+                _log(f"      {m['name']:16s} layer={m['layer']:12s}\n")
+            _log(f"[OK] 管道数: {len(data['pipes'])}\n")
+            _log(f"[OK] 已写入: {json_path}\n")
+
+            self.root.after(0, lambda d=data, jp=json_path: self._load_and_show_success(d, jp))
+        except Exception as e:
+            _log(f"[ERROR] {e}\n")
+            _log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("扫描失败", str(e)))
+        finally:
+            self.root.after(0, lambda: self.status("就绪"))
+
+    def _create_terminal_panel(self):
+        """创建终端显示面板"""
+        terminal_tab = ttk.Frame(self.notebook)
+        self.notebook.add(terminal_tab, text="终端输出")
+
+        term_frame = ttk.Frame(terminal_tab)
+        term_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        self._ref_terminal_text = tk.Text(term_frame, wrap=tk.WORD, font=("Consolas", 9), bg="#1e1e1e", fg="#d4d4d4")
+        self._ref_terminal_text.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(term_frame, orient=tk.VERTICAL, command=self._ref_terminal_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._ref_terminal_text.config(yscrollcommand=scrollbar.set)
+
+    def _terminal_append(self, text):
+        """从后台线程调用 — 将消息放入队列 (线程安全)"""
+        self._claude_queue.put(text)
+
+    def _poll_claude_queue(self):
+        """主线程轮询：将队列中的消息刷新到终端 Text widget"""
+        try:
+            while True:
+                text = self._claude_queue.get_nowait()
+                self._ref_terminal_text.config(state=tk.NORMAL)
+                self._ref_terminal_text.insert(tk.END, text)
+                self._ref_terminal_text.see(tk.END)
+                self._ref_terminal_text.config(state=tk.DISABLED)
+        except queue.Empty:
+            pass
+        self.root.after(100, self._poll_claude_queue)
+
+    def _load_and_show_success(self, data, json_path):
+        """加载生成的 project.json 并显示成功对话框"""
+        self._load_config_data(data, json_path)
+        self.config_path = json_path
+        self.status(f"project.json 已生成并加载: {json_path}")
+        messagebox.showinfo(
+            "生成成功",
+            f"project.json 已生成并自动加载。\n\n"
+            f"模块数: {len(data.get('modules', []))}\n"
+            f"管道数: {len(data.get('pipes', []))}\n"
+            f"文件: {json_path}"
+        )
 
     def cmd_check(self):
         """运行全部检查"""
