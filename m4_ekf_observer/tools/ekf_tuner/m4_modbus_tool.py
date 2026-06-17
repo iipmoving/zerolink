@@ -27,6 +27,7 @@ import time
 import csv
 import argparse
 import threading
+import struct
 from datetime import datetime
 from collections import OrderedDict
 
@@ -89,6 +90,14 @@ CAPTURE_START_ADDR = 0x5000
 CAPTURE_HEADER_WORDS = 6
 CAPTURE_MAX_DATA_WORDS = 4000
 CAPTURE_FRAME_WORDS = CAPTURE_HEADER_WORDS + CAPTURE_MAX_DATA_WORDS
+
+# --- Telemetry 0x7000 区: Calculator→ElecParams 数据流 ---
+TELEM_START_ADDR = 0x7000
+TELEM_TOTAL_WORDS = 390  # 4 ctrl + 20×18 calc + 26 elec
+TELEM_CTRL_WORDS = 4
+TELEM_CALC_PERIODS = 20
+TELEM_CALC_WORDS = 18
+TELEM_ELEC_WORDS = 26  # 12 float (24 words) + valid (2 words)
 
 # --- 可读写控制寄存器: 0x2000-0x2014 ---
 WRITE_REGS = {
@@ -366,6 +375,59 @@ class M4ModbusClient:
             result["delta_ppg_signed"] = delta_raw
         return result
 
+    def read_telemetry_pipe(self) -> dict | None:
+        """读取 Telemetry 0x7000 区: Calculator 输入副本 + ElecParams 输出"""
+        raw = self.read_registers(TELEM_START_ADDR, TELEM_TOTAL_WORDS)
+        if raw is None:
+            return None
+
+        result = {"timestamp": datetime.now().isoformat(timespec='milliseconds')}
+
+        # 控制寄存器
+        result["ctrl_start"] = raw[0]
+        result["ctrl_reserved"] = raw[1]
+        result["status"] = raw[2]
+        result["ctrl_reserved2"] = raw[3]
+
+        # Calculator: 20周期 × 18字段
+        calc_periods = []
+        for p in range(TELEM_CALC_PERIODS):
+            base = TELEM_CTRL_WORDS + p * TELEM_CALC_WORDS
+            period = {}
+            period["hrtim_highOff"]  = raw[base + 0]
+            period["hrtim_lowOff"]   = raw[base + 1]
+            period["hrtim_highOn"]   = raw[base + 2]
+            period["hrtim_lowOn"]    = raw[base + 3]
+            period["peak_current"]   = raw[base + 4]
+            period["act_curr_high"]  = (raw[base + 6] << 16) | raw[base + 5]
+            period["act_curr_low"]   = (raw[base + 8] << 16) | raw[base + 7]
+            period["volt_sum"]       = (raw[base + 10] << 16) | raw[base + 9]
+            period["voltage_count"]  = raw[base + 11]
+            period["zero_cross_high"] = raw[base + 12]
+            period["zero_cross_low"] = raw[base + 13]
+            period["peak_point"]     = raw[base + 14]
+            calc_periods.append(period)
+        result["calc_periods"] = calc_periods
+
+        # ElecParams: 12 float → 从 raw[4 + 360] 开始, 每float=2words
+        ep_base = TELEM_CTRL_WORDS + TELEM_CALC_PERIODS * TELEM_CALC_WORDS
+        float_names = [
+            "I_peak_A", "Vdc_mean", "phi_deg", "f_sw_Hz",
+            "L_uH", "f_res_kHz", "Q_factor", "R_ohm",
+            "I_rms", "P_W", "Z_mag_ohm", "X_ohm"
+        ]
+        elec = {}
+        for i, name in enumerate(float_names):
+            w0 = raw[ep_base + i * 2]
+            w1 = raw[ep_base + i * 2 + 1]
+            uint32_val = w1 << 16 | w0
+            bytes_val = struct.pack('<I', uint32_val)
+            elec[name] = struct.unpack('<f', bytes_val)[0]
+        elec["valid"] = raw[ep_base + 24]
+        result["elec"] = elec
+
+        return result
+
     # ---- WaveCapture 0x5000 读取 ----
     MAX_READ_WORDS = 120  # 响应 ≤ 245B (MCU RX buf = 256)
 
@@ -634,6 +696,7 @@ def interactive_mode(client: M4ModbusClient):
 ├──────────────────────────────────────────────┤
 │  r     读取全部遥测寄存器                     │
 │  ekf   读取 EKF 遥测寄存器 (0x1020)           │
+│  telem 读取 Telemetry 数据流 (0x7000)          │
 │  p N   设定功率为 N 瓦 (例: p 1000)           │
 │  on    启动加热                                │
 │  on fan 启动加热 + 风机全速 (0xAA)            │
@@ -694,6 +757,22 @@ def interactive_mode(client: M4ModbusClient):
                 print(f"  freq_hz          = {ekf.get('freq_hz', 0)} Hz")
                 print(f"  phase_deg        = {ekf.get('phase_deg', 0):.1f} °")
                 print(f"  delta_ppg_signed = {ekf.get('delta_ppg_signed', 0)}")
+
+        elif parts[0] == 'telem':
+            telem = client.read_telemetry_pipe()
+            if telem:
+                print(f"\n=== Telemetry 数据流 @ {telem['timestamp']} ===")
+                print(f"  控制: start={telem['ctrl_start']} status=0x{telem['status']:02X}")
+                print(f"  --- Calculator 输入 (20周期, head=0) ---")
+                for p, cp in enumerate(telem["calc_periods"]):
+                    print(f"  [{p:2d}] hOff={cp['hrtim_highOff']:5d} lOff={cp['hrtim_lowOff']:5d} "
+                          f"hOn={cp['hrtim_highOn']:5d} lOn={cp['hrtim_lowOn']:5d} "
+                          f"Ipk={cp['peak_current']:5d} vc={cp['voltage_count']:3d} "
+                          f"zcH={cp['zero_cross_high']:5d} zcL={cp['zero_cross_low']:5d} "
+                          f"pp={cp['peak_point']:5d}")
+                print(f"  --- ElecParams 输出 (float) ---")
+                for name, val in telem["elec"].items():
+                    print(f"    {name:16s} = {val}")
 
         elif parts[0] == 'p' and len(parts) >= 2:
             # 设定功率
@@ -890,6 +969,8 @@ def main():
                         help="波形图时间窗口秒数 (默认: 30)")
     parser.add_argument("--read-ekf", action="store_true",
                         help="单次读取 EKF 遥测寄存器 (0x1020)")
+    parser.add_argument("--read-telem", action="store_true",
+                        help="单次读取 Telemetry 数据流 (0x7000)")
 
     args = parser.parse_args()
 
@@ -941,6 +1022,21 @@ def main():
                     print(f"  freq_hz         = {ekf.get('freq_hz', 0)} Hz")
                     print(f"  phase_deg       = {ekf.get('phase_deg', 0):.1f} °")
                     print(f"  delta_ppg_signed= {ekf.get('delta_ppg_signed', 0)}")
+            elif args.read_telem:
+                telem = client.read_telemetry_pipe()
+                if telem:
+                    print(f"\n=== Telemetry 数据流 @ {telem['timestamp']} ===")
+                    print(f"  控制: start={telem['ctrl_start']} status=0x{telem['status']:02X}")
+                    print(f"  --- Calculator 输入 (20周期, head=0) ---")
+                    for p, cp in enumerate(telem["calc_periods"]):
+                        print(f"  [{p:2d}] hOff={cp['hrtim_highOff']:5d} lOff={cp['hrtim_lowOff']:5d} "
+                              f"hOn={cp['hrtim_highOn']:5d} lOn={cp['hrtim_lowOn']:5d} "
+                              f"Ipk={cp['peak_current']:5d} vc={cp['voltage_count']:3d} "
+                              f"zcH={cp['zero_cross_high']:5d} zcL={cp['zero_cross_low']:5d} "
+                              f"pp={cp['peak_point']:5d}")
+                    print(f"  --- ElecParams 输出 (float) ---")
+                    for name, val in telem["elec"].items():
+                        print(f"    {name:16s} = {val}")
             else:
                 interactive_mode(client)
 
