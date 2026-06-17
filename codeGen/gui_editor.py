@@ -2113,6 +2113,29 @@ KEIL 项目文件: {keil_path}
             _log(f"[INFO] Claude 进程已启动 (PID: {proc.pid})\n")
             _log(f"[INFO] 等待 Claude 输出...\n\n")
 
+            # 后台线程：读取 stdout（Claude 批量模式无中间输出，完成后集中显示）
+            drain_done = threading.Event()
+            all_chunks = []
+
+            def drain():
+                try:
+                    while True:
+                        chunk = proc.stdout.read1(65536)
+                        if not chunk:
+                            break
+                        text = chunk.decode('utf-8', errors='replace')
+                        all_chunks.append(text)
+                        self._terminal_append(text)
+                except (ValueError, OSError):
+                    pass
+                except Exception:
+                    pass
+                finally:
+                    drain_done.set()
+
+            drain_thread = threading.Thread(target=drain, daemon=True)
+            drain_thread.start()
+
             elapsed = 0
             max_wait = 600
             last_size = [0]
@@ -2154,18 +2177,17 @@ KEIL 项目文件: {keil_path}
                     _log(f"  ... 已等待 {elapsed}s / {max_wait}s\n")
 
             _log(f"\n[ERROR] 等待超时 ({max_wait}s)\n")
-            _log(f"[HINT] 检查 Claude 窗口是否仍在运行\n")
             try:
                 proc.kill()
             except:
                 pass
+            drain_done.wait(timeout=5)
 
         except Exception as e:
             _log(f"[ERROR] {e}\n")
             _log(traceback.format_exc())
             self.root.after(0, lambda: messagebox.showerror("错误", str(e)))
         finally:
-            self.root.after(0, lambda: self.status("就绪"))
             self.root.after(0, lambda: self.status("就绪"))
 
     # ── Python 快速扫描（已范式化项目用） ──
