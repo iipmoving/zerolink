@@ -1,0 +1,31 @@
+{
+    "modules": [
+        {"name": "AppCommMgr", "layer": "app"},
+        {"name": "AppPower", "layer": "app"},
+        {"name": "AppProtect", "layer": "app"},
+        {"name": "AppCooking", "layer": "app"},
+        {"name": "AppHmi", "layer": "app"},
+        {"name": "AppSegAlign", "layer": "app"},
+        {"name": "DrvKey", "layer": "drv"},
+        {"name": "DrvCommMgr", "layer": "drv"},
+        {"name": "DrvBuzzer", "layer": "drv"},
+        {"name": "DrvDisplay", "layer": "drv"}
+    ],
+    "producers": {
+        "AppPower": ["AppCommMgr", "AppProtect", "AppCooking"],
+        "AppHmi": ["DrvKey", "AppPower"],
+        "AppCooking": ["DrvKey", "AppCommMgr"],
+        "AppProtect": ["AppCommMgr"],
+        "AppSegAlign": ["DrvKey"],
+        "DrvDisplay": ["AppHmi"],
+        "DrvCommMgr": ["AppPower"]
+    },
+    "consumers": {
+        "AppCommMgr": ["AppPower", "AppCooking", "AppProtect"],
+        "AppPower": ["DrvCommMgr", "AppHmi"],
+        "AppProtect": ["AppPower"],
+        "AppCooking": ["AppPower"],
+        "AppHmi": ["DrvDisplay", "DrvBuzzer"],
+        "DrvKey": ["AppHmi", "AppCooking", "AppSegAlign"]
+    }
+}

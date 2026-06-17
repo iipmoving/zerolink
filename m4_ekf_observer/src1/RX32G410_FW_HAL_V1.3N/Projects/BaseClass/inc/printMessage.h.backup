@@ -1,0 +1,56 @@
+/********************************************************************************
+    FileName    :  s_sensor.h
+    Author      :  rsl
+    Version     :  V1.0.1
+    Brief       :  各个传感器的检测与保护
+
+    Date        :  2018-10-17
+    Modify      :
+                   2018-10-17 创建
+
+    Copyright (c)    Foshan XinSun Electronic Technology CO.,Ltd
+********************************************************************************/
+#ifndef   PRINT_MESSAGE_H
+#define   PRINT_MESSAGE_H
+
+
+
+/********************************************Head Files*/
+
+#include	<stdint.h>
+
+#define     PRINT_MESSAGE_BUFF_SIZE      (8)        //信息索引个数
+
+typedef struct    
+{
+    uint16_t size;
+    uint16_t   res;
+    uint16_t* buff;
+}MessageBuffDef;
+
+
+typedef struct          //ntc传感器极限参数
+{
+    MessageBuffDef  array[PRINT_MESSAGE_BUFF_SIZE];                /*第一数据地址首址*/
+
+    MessageBuffDef 	paraArray;			        //参数数据地址
+ 
+    uint8_t num;            /*信息序号*/
+    uint8_t res1;
+    uint8_t res2;
+    uint8_t res3;        
+}MessageDef;
+
+enum
+{
+    PAN_MESSAGE=0,      //检锅信息
+    TXA_MESSAGE,        //谐振电流FMAC
+    CURRENT_MESSAGE,    //谐振电流计算结果
+};
+
+
+uint8_t    PrintMessagePush(MessageDef messageIn);   //将需要打印的数据压到堆里
+uint8_t    PrintMessageOut(void);
+#endif
+
+//**********************************end of file********************************

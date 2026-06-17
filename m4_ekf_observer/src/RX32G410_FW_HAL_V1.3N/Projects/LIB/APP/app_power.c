@@ -18,6 +18,10 @@ typedef union {
 static MODULE_INPUT(AppPower)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(AppPower)  s_outPara;   // 输出参数缓冲区
 
+
+
+
+
 static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -28,8 +32,6 @@ static void ProcessInput(void)
     /* === 输入段: 数据有效检查 === */
     AppPower_PipeFlags_t flags = {0};
     flags.bits.appadc = (in->AppAdc_params->status & ST_NEW) ? 1 : 0;
-    flags.bits.calculator = (in->Calculator_params->status & ST_NEW) ? 1 : 0;
-    flags.bits.elecparams = (in->ElecParams_params->status & ST_NEW) ? 1 : 0;
     flags.bits.ekf_lkf = (in->EKF_LKF_params->status & ST_NEW) ? 1 : 0;
 
     /* === 计算段: 用户业务 === */
@@ -75,6 +77,9 @@ MODULE_EXPORT(AppPower);
 //#include "../include/app_power_io.h"
 
 //#include	"APP_ADC.H"
+
+
+
 
 /* === __weak stubs — APP_ADC 接口 ===============================
  * Pair C: Adc_TxaAvgReset      — TXA 滤波重置
@@ -701,12 +706,8 @@ enum
 //} Power_Output_t;
 
 AppPowerDef						PowerMem[POTNUM];						//炉头2
-static MODULE_INPUT(AppPower)*  s_inPara;				// 输入缓存
-/* AppAdc 直通 LINK 别名 (INPUT_GET_SLOT 赋值 void*, 此处按 producer 类型访问) */
 
 
-static MODULE_OUTPUT(AppPower) s_outPara;      //输出缓存
-                                  /* 指向 g_in, Switcher 填入数据后消费 */
 PowerInputDef					PowerInput[POTNUM];					//输入变量(通讯输入）
 AppPowerStaticDef			PowerStaticReg[POTNUM];			//定义两个炉寄存器空间
 AppPowerKeepDef				PowerKeepReg[POTNUM];			//定义两个炉寄存器空间(不清零）
@@ -1149,6 +1150,7 @@ void	APP_POWER_CompSetValue(void)
 	uint32_t ovpValue,curValue;
 	curValue=PowerMem[0].staticReg->OvpValue;			//在多个电流限制里取最大值 
 
+	uint8_t  nowPowerOn=0;					//有炉头在工作
 	
 	for(uint8_t i=0;i<POTNUM;i++)
 	{
@@ -1172,13 +1174,25 @@ void	APP_POWER_CompSetValue(void)
 			{
 				curValue=PowerMem[i].staticReg->OvpValue;
 			}
+			if(PowerMem[i].staticReg->flag.bit.ppgOn)
+			{
+					nowPowerOn++;
+			}	
+			
 	
 	}
-			if(curValue<0x40)
+		if(curValue<0x40)
 		{
 				curValue=0x40;
 		}	
 		PowerOvpValueAll=curValue<<4;
+		
+		if(nowPowerOn==0)				//没有加热，关AWD
+		{
+				PowerOvpValueAll=0xfff;
+		}	
+		
+		
 #ifdef		DEBUG_POWER_OUT			//屏蔽过流保护
 		 PowerOvpValueAll=0xfff;
 #endif		
@@ -1226,21 +1240,23 @@ void			PowerTypeFun(void)
 
 //-----设定多个炉头的状态---------------------------------------	
 	
-//#if		PotChWorkAll
+#if		PotChWorkAll
 		
 		PowerControlFun(i);
 
-//#endif	
+#endif	
 		
 	}
 
 
 
-//#if		PotChWorkAll	
+#if		PotChWorkAll	
 
-//#else	
-//		PowerControlFun(PotChWork);
-//#endif
+#else	
+
+		PowerControlFun(PotChWork);
+
+#endif
 
 #ifdef	DebugOutPc		
 
@@ -2859,10 +2875,13 @@ INT8U s_ppg_fun(void)
 			}
 
 
-	
+
 
 
 		t_power_adc_trig = g_power_adc_trig;
+			
+			
+
 
 #if 1																//两种功率获取模式，一种通过电阻采样，一种通过谐振电流互感器采样
 			t_ic_value=CurrentValue;
@@ -3577,7 +3596,7 @@ INT8U s_pan_check_fun(void)
 		
 
 		
-		
+//			API_GPIO_WritePin(DebugB_pin,1);	
 		if(Time_GetMs100Flg())
 		{
 
@@ -3585,9 +3604,9 @@ INT8U s_pan_check_fun(void)
 			{
 				g_surge_delay++;
 			}
-				
+			
 		}
-		
+//		API_GPIO_WritePin(DebugB_pin,0);			
 
 		if(g_surge_delay==POT_TYPE_DELAY1)
 		{
@@ -4564,7 +4583,7 @@ void	reset_ppg_limit(void)
 	PowerDeadCnt=0;
 	PowerCycleBaseDuty=START_FRE_PWM;
 	PowerCycleDoubleDuty=START_FRE_PWM;
-	PhaseController_Init(&PowerControl->staticReg->potPhase);	//重新相位定义基准
+//	PhaseController_Init(&PowerControl->staticReg->potPhase);	//重新相位定义基准
 }
 
 
@@ -6373,55 +6392,50 @@ void		API_POWER_PanCheckPluse(void)
 		
 	
 }	
-void	Power_Calculator_Input(void)
+void	Power_EKF_Input(MODULE_INPUT(AppPower) *in)
 {
+		if(in->EKF_LKF_params->status&ST_NEW)				//adc输入有效
+		{
+			in->EKF_LKF_params->status&=ST_NEW;
 
+			MODULE_INPUT_PARAMS(EKF_LKF, AppPower)  elecOut[4];	
 //	    /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
-//    for (uint8_t ch = 0; ch < POTNUM; ch++) {
-
-
-//		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
-//        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params->txa[ch];// 		s_AdcLink->params->txa[ch];
-//		PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
-
-
-//        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params->voltage>> 4;
-//        PowerMem[ch].staticReg->PowerTxaFact =	s_inPara->AppAdc_params->params->power[ch];
-//        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params->phase[ch];;
-//        PowerMem[ch].staticReg->limitQSum = s_inPara->AppAdc_params->params->txa[ch];;
-//        PowerMem[ch].staticReg->PowerTxaFact >>= 6;
-//    }
+			memcpy(elecOut,	&in->EKF_LKF_params->params[0], sizeof(MODULE_INPUT_PARAMS(EKF_LKF, AppPower) )*4);
 //	
-	
-	
+		}
 }	
 
 
 
-void		Power_Adc_Input(void)
+void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 {
 	
 
-	
+		if(in->AppAdc_params->status&ST_NEW)				//adc输入有效
+		{
+			in->AppAdc_params->status&=ST_NEW;
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
     for (uint8_t ch = 0; ch < POTNUM; ch++) {
 
 
-		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
-        PowerMem[ch].staticReg->current16 =s_inPara->AppAdc_params->params[ch].txa;// 		s_AdcLink->params->txa[ch];
-		PowerMem[ch].input->status.currentAd = PowerControl->staticReg->current16 >> 2;		//为了通讯显示
+				PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
+        PowerMem[ch].staticReg->current16 =in->AppAdc_params->params[ch].current;// 		s_AdcLink->params->txa[ch];
+				PowerMem[ch].input->status.currentAd = PowerMem[ch].staticReg->current16 >> 2;		//为了通讯显示
 
 
-        PowerMem[ch].input->status.voltageAd = s_inPara->AppAdc_params->params[ch].voltage>> 4;
+        PowerMem[ch].input->status.voltageAd = in->AppAdc_params->params[ch].voltage>> 4;
 
-        PowerMem[ch].staticReg->phaseValue = s_inPara->AppAdc_params->params[ch].phase;
+        PowerMem[ch].staticReg->phaseValue = in->AppAdc_params->params[ch].phase;
+				PowerMem[ch].input->status.bottomAd = in->AppAdc_params->params[ch].bottom>> 4;
+				PowerMem[ch].input->status.igbtAd = in->AppAdc_params->params[ch].igbt>> 4;
 
-
+				PowerMem[ch].input->status.equivalentResistance=powerPhase/10;			//度数
     }
 
+	}	
 }
 
-
+#if 0
 
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
 
@@ -6464,6 +6478,8 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
     /* 谐振电流 (平均有功电流, 16位) */
     ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;
 }
+#endif
+
 /* ====== v2.2 MODULE_SKELETON + MODULE_EXPORT ======
  * APP_Power_GetIO → Switcher 注册入口
  * DoWork 内部: InputCallback (weak 空壳) → ProcessInput → OutputCallback (weak 空壳)
@@ -6498,16 +6514,10 @@ static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *ou
 
 
 
-		if(in->AppAdc_params->status&ST_NEW)				//adc输入有效
-		{
+			Power_Adc_Input(in);					//从缓存区获得ADC输入值
 
-//			Power_Adc_Input();					//从缓存区获得ADC输入值
-		}
-		if(in->Calculator_params->status&ST_NEW)
-		{
-					Power_Calculator_Input();					//从缓存区获得ADC输入值
-		}	
-		
+
+			Power_EKF_Input(in);
 		
 
     /* ---- 计算段 + 输出段 ---- */

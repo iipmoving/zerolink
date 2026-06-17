@@ -1,0 +1,570 @@
+*** Using Compiler 'V6.12', folder: 'C:\Keil_v5\ARM\ARMCLANG\Bin'
+Build target 'BasicApp_ROM'
+compiling rx32g4xx_hal.c...
+compiling rx32g4xx_hal_clc.c...
+compiling system_rx32g4xx.c...
+compiling rx32g4xx_hal_can.c...
+compiling rx32g4xx_hal_adc_ex.c...
+compiling rx32g4xx_hal_cordic.c...
+compiling rx32g4xx_hal_dma.c...
+compiling rx32g4xx_hal_dac.c...
+compiling rx32g4xx_hal_adc.c...
+compiling rx32g4xx_hal_crc.c...
+compiling rx32g4xx_hal_comp.c...
+compiling rx32g4xx_hal_cortex.c...
+compiling rx32g4xx_hal_dac_ex.c...
+compiling rx32g4xx_hal_dma_ex.c...
+compiling rx32g4xx_hal_exti.c...
+compiling rx32g4xx_hal_flash.c...
+compiling rx32g4xx_hal_flash_ex.c...
+compiling rx32g4xx_hal_fmac.c...
+compiling rx32g4xx_hal_gpio.c...
+compiling rx32g4xx_hal_opamp.c...
+compiling rx32g4xx_hal_iwdg.c...
+compiling rx32g4xx_hal_pwr.c...
+compiling rx32g4xx_hal_opamp_ex.c...
+compiling rx32g4xx_hal_pwr_ex.c...
+compiling rx32g4xx_hal_rcc.c...
+compiling rx32g4xx_hal_rcc_ex.c...
+compiling rx32g4xx_hal_rtc.c...
+compiling rx32g4xx_hal_spi.c...
+compiling rx32g4xx_hal_rtc_ex.c...
+compiling rx32g4xx_hal_i2c.c...
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(25): warning: 'PWM_SF' macro redefined [-Wmacro-redefined]
+#define PWM_SF              384000000UL
+        ^
+../../API/inc\API_HRTIM.h(81): note: previous definition is here
+#define PWM_SF  SysPWM_Frequency*PWM_DIV/2      //PWM分频后频率 -半为DUTY
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(30): warning: 'START_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define START_FRE_PWM       (PWM_SF / 40000)        /* 软启动 40kHz */
+        ^
+../../API/inc\API_HRTIM.h(160): note: previous definition is here
+#define START_FRE_PWM                           FRE_40K_PWM                     //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(31): warning: 'MIN_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MIN_FRE_PWM         (PWM_SF / 29500)        /* 钢锅上限 29.5kHz */
+        ^
+../../API/inc\API_HRTIM.h(152): note: previous definition is here
+#define MIN_FRE_PWM                     (PWM_SF/MIN_FRE)        //minimum PWM frequency 对应PWM值
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(32): warning: 'MAX_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MAX_FRE_PWM         (PWM_SF / 60000)        /* 最大频率 60kHz */
+        ^
+../../API/inc\API_HRTIM.h(156): note: previous definition is here
+#define MAX_FRE_PWM                     (PWM_SF/MAX_FRE)        //maximum PWM frequency 对应PWM值                            
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(33): warning: 'MID_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MID_FRE_PWM         (PWM_SF / 22500)        /* 铁锅上限 22.5kHz */
+        ^
+../../API/inc\API_HRTIM.h(151): note: previous definition is here
+#define MID_FRE_PWM                     (PWM_SF/MID_FRE)        //minimum PWM frequency 对应PWM值
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(34): warning: 'LARGE_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define LARGE_FRE_PWM       (PWM_SF / 21500)        /* 大功率上限 21.5kHz */
+        ^
+../../API/inc\API_HRTIM.h(150): note: previous definition is here
+#define LARGE_FRE_PWM                   (PWM_SF/LARGE_FRE)      //minimum PWM frequency 对应PWM值
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(35): warning: 'PAN_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define PAN_FRE_PWM         (PWM_SF / 60000)        /* 检锅频率 60kHz */
+        ^
+../../API/inc\API_HRTIM.h(157): note: previous definition is here
+#define PAN_FRE_PWM                     (PWM_SF/FRE_PAN)                        //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(36): warning: 'POTTYPE2_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define POTTYPE2_FRE_PWM    (PWM_SF / 38000)        /* 第二检锅频率 38kHz */
+        ^
+../../API/inc\API_HRTIM.h(161): note: previous definition is here
+#define POTTYPE2_FRE_PWM                FRE_38K_PWM                     //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(40): warning: 'MAX_FRE_PERIOD' macro redefined [-Wmacro-redefined]
+#define MAX_FRE_PERIOD      (MAX_FRE_PWM * 2)       /* 最大周期 */
+        ^
+../../API/inc\API_HRTIM.h(163): note: previous definition is here
+#define MAX_FRE_PERIOD          MAX_FRE_PWM*2
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(43): warning: 'FRE_27K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_27K_PWM         (PWM_SF / 27000)
+        ^
+../../API/inc\API_HRTIM.h(130): note: previous definition is here
+#define FRE_27K_PWM                     (PWM_SF/FRE_27K)                        //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(44): warning: 'FRE_30K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_30K_PWM         (PWM_SF / 30000)
+        ^
+../../API/inc\API_HRTIM.h(134): note: previous definition is here
+#define FRE_30K_PWM                     (PWM_SF/FRE_30K)                        //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(45): warning: 'FRE_40K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_40K_PWM         (PWM_SF / 40000)
+        ^
+../../API/inc\API_HRTIM.h(137): note: previous definition is here
+#define FRE_40K_PWM                     (PWM_SF/FRE_40K)                        //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(46): warning: 'FRE_50K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_50K_PWM         (PWM_SF / 50000)
+        ^
+../../API/inc\API_HRTIM.h(141): note: previous definition is here
+#define FRE_50K_PWM                     (PWM_SF/FRE_50K)                        //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(47): warning: 'FRE_55K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_55K_PWM         (PWM_SF / 55000)
+        ^
+../../API/inc\API_HRTIM.h(142): note: previous definition is here
+#define FRE_55K_PWM                     (PWM_SF/FRE_55K)                        //移锅判断 PWM frequency
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(50): warning: 'FRE_500K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_500K_PWM        (PWM_SF / 500000)       /* 768 */
+        ^
+../../API/inc\API_HRTIM.h(143): note: previous definition is here
+#define FRE_500K_PWM            (PWM_SF/FRE_500K)                       //移锅判断 PWM frequency    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(51): warning: 'FRE_1000K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_1000K_PWM       (PWM_SF / 1000000)      /* 384 */
+        ^
+../../API/inc\API_HRTIM.h(144): note: previous definition is here
+#define FRE_1000K_PWM           (PWM_SF/FRE_1000K)                      //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(52): warning: 'FRE_2000K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_2000K_PWM       (PWM_SF / 2000000)      /* 192 */
+        ^
+../../API/inc\API_HRTIM.h(145): note: previous definition is here
+#define FRE_2000K_PWM           (PWM_SF/FRE_2000K)                      //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(59): warning: 'DTS2US' macro redefined [-Wmacro-redefined]
+#define DTS2US              (DTS1 * 2)
+        ^
+../../API/inc\API_HRTIM.h(178): note: previous definition is here
+#define         DTS2US                          DTS1*2
+                ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(60): warning: 'DTS3US' macro redefined [-Wmacro-redefined]
+#define DTS3US              (DTS1 * 3)
+        ^
+../../API/inc\API_HRTIM.h(179): note: previous definition is here
+#define         DTS3US                          DTS1*3//DTS1US*4                //0XE0+4500/DTS_PER_0xE0-32             //DT=（32+DTG[4:0]）× Tdtg，其中 Tdtg = 16 × TDTS；
+                ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(61): warning: 'DTS4US' macro redefined [-Wmacro-redefined]
+#define DTS4US              (DTS1 * 4)
+        ^
+../../API/inc\API_HRTIM.h(180): note: previous definition is here
+#define         DTS4US                          DTS1*4//DTS1US*4                //0XE0+4500/DTS_PER_0xE0-32             //DT=（32+DTG[4:0]）× Tdtg，其中 Tdtg = 16 × TDTS；
+                ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(62): warning: 'DTS6US' macro redefined [-Wmacro-redefined]
+#define DTS6US              0xFF
+        ^
+../../API/inc\API_HRTIM.h(182): note: previous definition is here
+#define         DTS6US                          0xff
+                ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(70): warning: 'IRON_LOAD_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define IRON_LOAD_FRE_PWM   (PWM_SF / LOAD_FRE_IRON)
+        ^
+../../API/inc\API_HRTIM.h(124): note: previous definition is here
+#define IRON_LOAD_FRE_PWM               (PWM_SF/LOAD_FRE_IRON)                  //minimum PWM frequency 对应PWM值
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(71): warning: 'STEEL_LOAD_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define STEEL_LOAD_FRE_PWM  (PWM_SF / LOAD_FRE_STEEL)
+        ^
+../../API/inc\API_HRTIM.h(125): note: previous definition is here
+#define STEEL_LOAD_FRE_PWM              (PWM_SF/LOAD_FRE_STEEL)                 //minimum PWM frequency 对应PWM值
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(76): warning: 'FRE_PER_ADC' macro redefined [-Wmacro-redefined]
+#define FRE_PER_ADC         FRE_1000K_PWM            /* 0.5us = 384 ticks */
+        ^
+../../API/inc\API_HRTIM.h(322): note: previous definition is here
+#define         FRE_PER_ADC             HRTIM_ADJ                       //0.5us
+                ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(82): error: redefinition of enumerator 'PotCh1'
+    PotCh1      = 0,        /* 炉头 1 */
+    ^
+../../API/inc\API_HRTIM.h(20): note: previous definition is here
+        PotCh1=0,       //      Pot1_TimerIndex=HRTIM_TIMERINDEX_TIMER_B,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(83): error: redefinition of enumerator 'PotCh2'
+    PotCh2      = 1,        /* 炉头 2 */
+    ^
+../../API/inc\API_HRTIM.h(21): note: previous definition is here
+        PotCh2,         //Pot2_TimerIndex=HRTIM_TIMERINDEX_TIMER_E,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(84): error: redefinition of enumerator 'PotCh3'
+    PotCh3      = 2,        /* 炉头 3 */
+    ^
+../../API/inc\API_HRTIM.h(22): note: previous definition is here
+        PotCh3,         //Pot3_TimerIndex=HRTIM_TIMERINDEX_TIMER_A,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(85): error: redefinition of enumerator 'PotCh4'
+    PotCh4      = 3,        /* 炉头 4 */
+    ^
+../../API/inc\API_HRTIM.h(23): note: previous definition is here
+        PotCh4,         //Pot4_TimerIndex=HRTIM_TIMERINDEX_TIMER_D,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(86): error: redefinition of enumerator 'PotChTest1'
+    PotChTest1  = 4,        /* 测试通道 */
+    ^
+../../API/inc\API_HRTIM.h(24): note: previous definition is here
+        PotChTest1,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(87): error: redefinition of enumerator 'PotChBase'
+    PotChBase   = 5,        /* 基准通道 */
+    ^
+../../API/inc\API_HRTIM.h(25): note: previous definition is here
+        PotChBase,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(88): error: redefinition of enumerator 'PotMax'
+    PotMax      = 6,
+    ^
+../../API/inc\API_HRTIM.h(27): note: previous definition is here
+        PotMax, 
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(89): error: redefinition of enumerator 'PotAll'
+    PotAll      = 0xFF,
+    ^
+../../API/inc\API_HRTIM.h(28): note: previous definition is here
+        PotAll=0xff,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(90): error: redefinition of enumerator 'PotNum'
+    PotNum      = PotChTest1 /* 实际炉头数 */
+    ^
+../../API/inc\API_HRTIM.h(29): note: previous definition is here
+        PotNum=PotChTest1,
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(99): error: typedef redefinition with different types ('struct PPGvalueDef' vs 'struct PPGvalueDef')
+} PPGvalueDef;
+  ^
+../../API/inc\API_HRTIM.h(38): note: previous definition is here
+}PPGvalueDef;   
+ ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(19): warning: In file included from...../../../../../include\app_power_hw_param.h(106): error: typedef redefinition with different types ('struct PPGpointDef' vs 'struct PPGpointDef')
+} PPGpointDef;
+  ^
+../../API/inc\API_HRTIM.h(47): note: previous definition is here
+}PPGpointDef;   
+ ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(18): error: typedef redefinition with different types ('struct PPGvalueDef' vs 'struct PPGvalueDef')
+} PPGvalueDef;
+  ^
+../../API/inc\API_HRTIM.h(38): note: previous definition is here
+}PPGvalueDef;   
+ ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(30): warning: 'FRE_29K' macro redefined [-Wmacro-redefined]
+#define FRE_29K                         29000
+        ^
+../../API/inc\API_HRTIM.h(102): note: previous definition is here
+#define FRE_29K                         29500   //移锅判断 PWM frequency                                    
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(45): warning: 'LOAD_FRE_STEEL' macro redefined [-Wmacro-redefined]
+#define LOAD_FRE_STEEL          28000           // 钢锅负载频率
+        ^
+../../../../../include\app_power_hw_param.h(69): note: previous definition is here
+#define LOAD_FRE_STEEL      30000               /* 钢锅移锅频率 */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(48): warning: 'MIN_FRE' macro redefined [-Wmacro-redefined]
+#define MIN_FRE                 20000           // 最小频率
+        ^
+../../API/inc\API_HRTIM.h(90): note: previous definition is here
+#define MIN_FRE                         29500   /*/32d8 minimum PWM frequency HZ ns //第一级最大频率（钢锅最大频率）*/
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(50): warning: 'LARGE_FRE' macro redefined [-Wmacro-redefined]
+#define LARGE_FRE                       40000           // 大频率
+        ^
+../../API/inc\API_HRTIM.h(88): note: previous definition is here
+#define LARGE_FRE                       21500   //4b00 minimum PWM frequency HZ ns //最大频率（BOAST档）*/
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(51): warning: 'MID_FRE' macro redefined [-Wmacro-redefined]
+#define MID_FRE                 30000           // 中等频率
+        ^
+../../API/inc\API_HRTIM.h(89): note: previous definition is here
+#define MID_FRE                         22500   //442e minimum PWM frequency HZ ns //中间级最大频率（铁锅最大频率）*/
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(52): warning: 'FRE_SOFTSTART' macro redefined [-Wmacro-redefined]
+#define FRE_SOFTSTART           30000           // 软启动频率
+        ^
+../../API/inc\API_HRTIM.h(117): note: previous definition is here
+#define FRE_SOFTSTART                   80000                   //100K软启动
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(56): warning: 'PWM_SF' macro redefined [-Wmacro-redefined]
+#define PWM_SF                          120000000       // HRTIM 时钟频率 120MHz
+        ^
+../../../../../include\app_power_hw_param.h(25): note: previous definition is here
+#define PWM_SF              384000000UL
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(63): warning: 'IRON_LOAD_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define IRON_LOAD_FRE_PWM               (PWM_SF/LOAD_FRE_IRON)          // 铁锅负载 PWM 值
+        ^
+../../../../../include\app_power_hw_param.h(70): note: previous definition is here
+#define IRON_LOAD_FRE_PWM   (PWM_SF / LOAD_FRE_IRON)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(64): warning: 'STEEL_LOAD_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define STEEL_LOAD_FRE_PWM              (PWM_SF/LOAD_FRE_STEEL)         // 钢锅负载 PWM 值
+        ^
+../../../../../include\app_power_hw_param.h(71): note: previous definition is here
+#define STEEL_LOAD_FRE_PWM  (PWM_SF / LOAD_FRE_STEEL)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(70): warning: 'FRE_27K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_27K_PWM                     (PWM_SF/FRE_27K)
+        ^
+../../../../../include\app_power_hw_param.h(43): note: previous definition is here
+#define FRE_27K_PWM         (PWM_SF / 27000)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(73): warning: 'FRE_30K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_30K_PWM                     (PWM_SF/FRE_30K)
+        ^
+../../../../../include\app_power_hw_param.h(44): note: previous definition is here
+#define FRE_30K_PWM         (PWM_SF / 30000)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(76): warning: 'FRE_40K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_40K_PWM                     (PWM_SF/FRE_40K)
+        ^
+../../../../../include\app_power_hw_param.h(45): note: previous definition is here
+#define FRE_40K_PWM         (PWM_SF / 40000)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(79): warning: 'FRE_50K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_50K_PWM                     (PWM_SF/FRE_50K)
+        ^
+../../../../../include\app_power_hw_param.h(46): note: previous definition is here
+#define FRE_50K_PWM         (PWM_SF / 50000)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(80): warning: 'FRE_55K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_55K_PWM                     (PWM_SF/FRE_55K)
+        ^
+../../../../../include\app_power_hw_param.h(47): note: previous definition is here
+#define FRE_55K_PWM         (PWM_SF / 55000)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(81): warning: 'FRE_500K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_500K_PWM            (PWM_SF/FRE_500K)
+        ^
+../../../../../include\app_power_hw_param.h(50): note: previous definition is here
+#define FRE_500K_PWM        (PWM_SF / 500000)       /* 768 */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(82): warning: 'FRE_1000K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_1000K_PWM           (PWM_SF/FRE_1000K)
+        ^
+../../../../../include\app_power_hw_param.h(51): note: previous definition is here
+#define FRE_1000K_PWM       (PWM_SF / 1000000)      /* 384 */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(83): warning: 'FRE_2000K_PWM' macro redefined [-Wmacro-redefined]
+#define FRE_2000K_PWM           (PWM_SF/FRE_2000K)
+        ^
+../../../../../include\app_power_hw_param.h(52): note: previous definition is here
+#define FRE_2000K_PWM       (PWM_SF / 2000000)      /* 192 */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(87): warning: 'LARGE_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define LARGE_FRE_PWM           (PWM_SF/LARGE_FRE)
+        ^
+../../../../../include\app_power_hw_param.h(34): note: previous definition is here
+#define LARGE_FRE_PWM       (PWM_SF / 21500)        /* 大功率上限 21.5kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(88): warning: 'MID_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MID_FRE_PWM             (PWM_SF/MID_FRE)
+        ^
+../../../../../include\app_power_hw_param.h(33): note: previous definition is here
+#define MID_FRE_PWM         (PWM_SF / 22500)        /* 铁锅上限 22.5kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(89): warning: 'MIN_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MIN_FRE_PWM             (PWM_SF/MIN_FRE)
+        ^
+../../../../../include\app_power_hw_param.h(31): note: previous definition is here
+#define MIN_FRE_PWM         (PWM_SF / 29500)        /* 钢锅上限 29.5kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(90): warning: 'MAX_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define MAX_FRE_PWM             (PWM_SF/MAX_FRE)
+        ^
+../../../../../include\app_power_hw_param.h(32): note: previous definition is here
+#define MAX_FRE_PWM         (PWM_SF / 60000)        /* 最大频率 60kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(91): warning: 'PAN_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define PAN_FRE_PWM             (PWM_SF/FRE_PAN)
+        ^
+../../../../../include\app_power_hw_param.h(35): note: previous definition is here
+#define PAN_FRE_PWM         (PWM_SF / 60000)        /* 检锅频率 60kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(95): warning: 'START_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define START_FRE_PWM           FRE_40K_PWM             // 启动频率
+        ^
+../../../../../include\app_power_hw_param.h(30): note: previous definition is here
+#define START_FRE_PWM       (PWM_SF / 40000)        /* 软启动 40kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(96): warning: 'POTTYPE2_FRE_PWM' macro redefined [-Wmacro-redefined]
+#define POTTYPE2_FRE_PWM        FRE_38K_PWM             // 第二种炉头类型频率
+        ^
+../../../../../include\app_power_hw_param.h(36): note: previous definition is here
+#define POTTYPE2_FRE_PWM    (PWM_SF / 38000)        /* 第二检锅频率 38kHz */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(100): warning: 'MAX_FRE_PERIOD' macro redefined [-Wmacro-redefined]
+#define MAX_FRE_PERIOD          MAX_FRE_PWM*2
+        ^
+../../../../../include\app_power_hw_param.h(40): note: previous definition is here
+#define MAX_FRE_PERIOD      (MAX_FRE_PWM * 2)       /* 最大周期 */
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(133): warning: 'DTS2US' macro redefined [-Wmacro-redefined]
+#define         DTS2US                          DTS1*2
+                ^
+../../../../../include\app_power_hw_param.h(59): note: previous definition is here
+#define DTS2US              (DTS1 * 2)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(134): warning: 'DTS3US' macro redefined [-Wmacro-redefined]
+#define         DTS3US                          DTS1*3//DTS1US*4                //0XE0+4500/DTS_PER_0xE0-32             //DT=（32+DTG[4:0]）× Tdtg，其中 Tdtg = 16 × TDTS；
+                ^
+../../../../../include\app_power_hw_param.h(60): note: previous definition is here
+#define DTS3US              (DTS1 * 3)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(135): warning: 'DTS4US' macro redefined [-Wmacro-redefined]
+#define         DTS4US                          DTS1*4//DTS1US*4                //0XE0+4500/DTS_PER_0xE0-32             //DT=（32+DTG[4:0]）× Tdtg，其中 Tdtg = 16 × TDTS；
+                ^
+../../../../../include\app_power_hw_param.h(61): note: previous definition is here
+#define DTS4US              (DTS1 * 4)
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(20): warning: In file included from...../../APP/POWER/inc\app_power_constants.h(137): warning: 'DTS6US' macro redefined [-Wmacro-redefined]
+#define         DTS6US                          0xff
+                ^
+../../../../../include\app_power_hw_param.h(62): note: previous definition is here
+#define DTS6US              0xFF
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(59): error: use of undeclared identifier 'POTNUM'
+} s_pwm[POTNUM];
+        ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(69): error: use of undeclared identifier 'POTNUM'
+    if (ch >= POTNUM) return;
+              ^
+../../LIB/APP/powerGroup/drv/drv_pwm.c(105): error: use of undeclared identifier 'POTNUM'
+    if (ch >= POTNUM) return;
+              ^
+53 warnings and 15 errors generated.
+compiling drv_pwm.c...
+compiling rx32g4xx_hal_wwdg.c...
+compiling drv_hrtim_consumer.c...
+compiling rx32g4xx_hal_hrtim.c...
+compiling rx32g4xx_hal_uart.c...
+compiling drv_pan_pulse.c...
+../../LIB/APP/powerGroup/drv/drv_fmac.c(27): error: conflicting types for 'pulse_check_process'
+uint8_t pulse_check_process(int16_t* data, uint16_t len);
+        ^
+../../BaseClass/inc\pluse.h(36): note: previous declaration is here
+uint8_t    pulse_check_process(uint16_t* buff,uint16_t size);//返回检锅数
+           ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(102): warning: implicit declaration of function 'API_POWER_PanCheckPluse' is invalid in C99 [-Wimplicit-function-declaration]
+        API_POWER_PanCheckPluse();
+        ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(112): warning: In file included from...../../BaseClass/inc\printMessage.h(52): error: conflicting types for 'PrintMessagePush'
+uint8_t    PrintMessagePush(MessageDef messageIn);   //将需要打印的数据压到堆里
+           ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(28): note: previous declaration is here
+int PrintMessagePush(void* msg);
+    ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(118): error: use of undeclared identifier 'Pan_ADC_AdcDmaBuff'
+    message.array[0].buff = Pan_ADC_AdcDmaBuff;
+                            ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(120): error: use of undeclared identifier 'Pan_ADC_AdcFmacBuff'
+    message.array[1].buff = Pan_ADC_AdcFmacBuff + 4;
+                            ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(154): error: conflicting types for 'API_POWER_PanCheckPluse'
+void API_POWER_PanCheckPluse(void)
+     ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(102): note: previous implicit declaration is here
+        API_POWER_PanCheckPluse();
+        ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(165): error: use of undeclared identifier 'Pan_ADC_AdcFmacBuff'
+            Pan_ADC_AdcFmacBuff + FmacLeve / 2,
+            ^
+1 warning and 6 errors generated.
+compiling drv_fmac.c...
+compiling drv_pan_count.c...
+compiling drv_isr.c...
+../../LIB/APP/powerGroup/drv/drv_protect.c(22): error: conflicting types for 'API_DAC_COMP_SetValue'
+void API_DAC_COMP_SetValue(uint8_t ch, uint32_t value);
+     ^
+../../API/inc\API_DAC.h(15): note: previous declaration is here
+void    API_DAC_COMP_SetValue(uint8_t ch, uint8_t value);               //设置单个比较器比较电压
+        ^
+1 error generated.
+compiling drv_protect.c...
+compiling rx32g4xx_hal_tim_ex.c...
+compiling mw_shutdown.c...
+compiling rx32g4xx_hal_tim.c...
+compiling mw_protect.c...
+../../LIB/APP/app_power_claude.c(114): error: expected identifier or '('
+        if (DNTR(DNTR_T34A)->num) {
+        ^
+../../LIB/APP/app_power_claude.c(118): error: expected identifier or '('
+        DNTR(DNTR_T12A)->num = 0;
+        ^
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(118): error: expected ')'
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(118): note: to match this '('
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                  ^
+../../LIB/APP/app_power_claude.c(119): error: expected identifier or '('
+        DNTR(DNTR_T34A)->num = 0;
+        ^
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(119): error: expected ')'
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(119): note: to match this '('
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                  ^
+../../LIB/APP/app_power_claude.c(120): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(123): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(126): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(649): error: unknown type name 'Power_Input_t'
+static Power_Input_t  g_in;
+       ^
+../../LIB/APP/app_power_claude.c(650): error: unknown type name 'Power_Output_t'; did you mean 'PowerBase_Output_t'?
+static Power_Output_t g_out;                                          /* v2.0 Data Switcher 输出槽 */
+       ^~~~~~~~~~~~~~
+       PowerBase_Output_t
+../../../../../include\../include/app_power_io.h(74): note: 'PowerBase_Output_t' declared here
+} PowerBase_Output_t;
+  ^
+../../LIB/APP/app_power_claude.c(651): error: unknown type name 'Power_Input_t'
+static const Power_Input_t *_adc;                                     /* 指向 g_in, Switcher 填入数据后消费 */
+             ^
+../../LIB/APP/app_power_claude.c(1381): warning: implicit declaration of function 'getOvpValueAdj' is invalid in C99 [-Wimplicit-function-declaration]
+        getOvpValueAdj();                                                                               //保存到各个炉头的OVP值
+        ^
+../../LIB/APP/app_power_claude.c(5570): warning: implicit declaration of function 'getTxaDmaCircleValue' is invalid in C99 [-Wimplicit-function-declaration]
+                getTxaDmaCircleValue((uint16_t*)txaBuff,value,num,PotAwdNum*2);         //将循环队列中的数据拷贝到缓存
+                ^
+../../LIB/APP/app_power_claude.c(5577): warning: implicit declaration of function 'APP_ADC_getOverAdcChannel' is invalid in C99 [-Wimplicit-function-declaration]
+                                if(APP_ADC_getOverAdcChannel(&value[i],PowerOvpValueAll,PotAwdNum))             //T1A产生过流
+                                   ^
+../../LIB/APP/app_power_claude.c(5601): error: #endif without #if
+#endif
+ ^
+../../LIB/APP/app_power_claude.c(5603): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(5680): error: unknown type name 'Power_Input_t'
+    _adc = (const Power_Input_t *)g_input.para;
+                  ^
+../../LIB/APP/app_power_claude.c(5707): error: no member named 'status' in 'struct PowerBase_Output'
+    g_out.status |= 0x02;            /* v2.0 就绪 */
+    ~~~~~ ^
+../../LIB/APP/app_power_claude.c(5768): error: unterminated conditional directive
+#if 0 /* Moved to powerGroup/drv/drv_fmac.c */
+ ^
+3 warnings and 16 errors generated.
+compiling app_power_claude.c...
+compiling Modbus_Lib_Init_An_Analysis.c...
+compiling mw_current_limit.c...
+compiling mw_startup.c...
+compiling API_hrtim_fullbridge.c...
+"Y:\410\RX32G410_ROM.axf" - 38 Error(s), 57 Warning(s).
+Target not created.
+Build Time Elapsed:  00:00:04

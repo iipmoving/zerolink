@@ -1,0 +1,314 @@
+version: "4.1"
+name: ReTek
+type: ARM
+deviceName: null
+packDir: null
+srcDirs: []
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: CMSIS
+      files:
+        - path: ../../../Drivers/CMSIS/CM4/DeviceSupport/src/system_rx32g4xx.c
+      folders: []
+    - name: Startup
+      files:
+        - path: ../../../Drivers/Startup/Keil/startup_rx32g410.s
+      folders: []
+    - name: Middlewares
+      files:
+        - path: ../../../Middlewares/System/src/system_bsp.c
+        - path: ../../../Middlewares/System/src/system_init.c
+      folders: []
+    - name: Drivers
+      files: []
+      folders:
+        - name: HAL
+          files:
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_adc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_adc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_can.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_clc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_comp.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_cordic.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_cortex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_crc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dac.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dac_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dma.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_dma_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_exti.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_flash.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_flash_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_fmac.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_gpio.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_hrtim.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_i2c.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_iwdg.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_opamp.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_opamp_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_pwr.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_pwr_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rcc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rcc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rtc.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_rtc_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_spi.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_tim.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_tim_ex.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_uart.c
+            - path: ../../../Drivers/RX32G4xx_HAL_Driver/src/rx32g4xx_hal_wwdg.c
+          folders: []
+    - name: DRV
+      files:
+        - path: ../../drv/src/DRV_GPIO.C
+        - path: ../../drv/src/adc_processing.s
+        - path: ../../drv/src/adc_processing1.c
+      folders: []
+    - name: APP
+      files: []
+      folders:
+        - name: SYS
+          files:
+            - path: ../../app/sys/src/S_PID.C
+            - path: ../../app/sys/src/Simulative_Uart.c
+            - path: ../../app/sys/src/s_time_base.c
+            - path: ../../app/sys/src/sys_task.c
+            - path: ../../app/sys/src/S_DATA_STACK.C
+          folders: []
+        - name: POWER
+          files:
+            - path: ../../app/POWER/src/app_task.c
+            - path: ../../app/POWER/src/APP_ZERO.C
+          folders: []
+    - name: INTERFACE
+      files:
+        - path: ../../interface/src/Proto_SlaveI2C.C
+      folders: []
+    - name: API
+      files:
+        - path: ../../api/src/API_gpio.c
+        - path: ../../api/src/API_TIM.C
+        - path: ../../api/src/API_I2C.C
+        - path: ../../api/src/API_UART.C
+        - path: ../../api/src/API_DMA.C
+        - path: ../../api/src/API_FLASH.C
+      folders: []
+    - name: base_class
+      files:
+        - path: ../../base_class/src/CommClass.c
+        - path: ../../base_class/src/pluse.c
+        - path: ../../base_class/src/power_calculator.c
+        - path: ../../base_class/src/printMessage.c
+        - path: ../../base_class/src/queue.c
+        - path: ../../base_class/src/phase.c
+      folders: []
+    - name: USER
+      files:
+        - path: ../../users/src/main.c
+        - path: ../../users/src/rx32g4xx_it.c
+      folders: []
+    - name: output
+      files:
+        - path: rx410.sct
+        - path: Output_ROM/Objects/RX32G410_ROM.sct
+        - path: ../../doc/readme.txt
+      folders: []
+    - name: ApiLib
+      files:
+        - path: ../../lib/RX32G410_ROM.lib
+      folders: []
+    - name: ApiLibSrc
+      files:
+        - path: ../../lib/api/API_FMAC.C
+        - path: ../../lib/api/API_adc.c
+        - path: ../../lib/api/API_comp.c
+        - path: ../../lib/api/API_DAC.C
+        - path: ../../lib/api/API_hrtim.c
+        - path: ../../lib/api/API_OPAM.C
+      folders: []
+    - name: AppLibSrc
+      files:
+        - path: ../../lib/app/APP_ADC.C
+        - path: ../../lib/app/app_power.c
+      folders: []
+    - name: modbus
+      files:
+        - path: ../../modbus/src/Modbus_Lib_Init_An_Analysis.c
+        - path: ../../modbus/src/Modbus_Analysis_Lib.c
+      folders: []
+    - name: TXT
+      files:
+        - path: ReadMe.txt
+      folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: 46cce3c816f3d53625388c0a4a341d46
+targets:
+  BasicApp_ROM:
+    cppPreprocessAttrs:
+      defineList:
+        - RX32G410
+        - DEBUG_POWER_OUTx
+        - SimZerox
+        - I2C2_PORT
+        - PrintMessage
+        - Fmac9
+        - CurrentFromTxa
+        - COMM_UARTX
+        - TxaFmac
+        - DEBUG_POWER_OUT_CONSTX
+      incList:
+        - ../../../Drivers/CMSIS/CM4/CoreSupport
+        - ../../../Drivers/CMSIS/CM4/DeviceSupport/inc
+        - ../../../Drivers/RX32G4xx_HAL_Driver/Inc
+        - ../../../Middlewares/System/inc
+        - ../../API/inc
+        - ../../APP/POWER/inc
+        - ../../APP/sys/inc
+        - ../../BaseClass/inc
+        - ../../DRV/INC
+        - ../../INTERFACE/inc
+        - ../../Users/inc
+        - ../../modbus/inc
+        - .cmsis/include
+        - RTE/_BasicApp_ROM
+      libList: []
+    excludeList:
+      - <virtual_root>/APP/SYS/Simulative_Uart.c
+      - <virtual_root>/base_class/queue.c
+      - <virtual_root>/output
+      - <virtual_root>/ApiLib
+      - <virtual_root>/TXT
+    settings: {}
+    toolchain: AC6
+    toolchainConfigMap:
+      AC6:
+        archExtensions: ""
+        cpuType: Cortex-M4
+        floatingPointHardware: single
+        options:
+          version: 3
+          afterBuildTasks:
+            - name: "[Copy linker output for Keil User Commands]"
+              abortAfterFailed: true
+              command: mkdir ${KEIL_OUTPUT_DIR} & copy "${OutDir}\${ProjectName}.axf" "${KEIL_OUTPUT_DIR}\${KEIL_OUTPUT_NAME}.axf"
+              disable: false
+            - name: fromelf.exe --bin -o "$L@L.bin" "#L"
+              abortAfterFailed: true
+              command: fromelf.exe --bin -o "${KEIL_OUTPUT_DIR}\${KEIL_OUTPUT_NAME}.bin" "${KEIL_OUTPUT_DIR}\${KEIL_OUTPUT_NAME}.axf"
+              disable: false
+          asm-compiler:
+            $use: asm
+            defines: []
+            misc-controls: ""
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            language-c: c99
+            language-cpp: c++11
+            link-time-optimization: false
+            one-elf-section-per-function: true
+            optimization: level-0
+            plain-char-is-signed: true
+            short-enums#wchar: true
+            warnings: ac5-like-warnings
+          global:
+            output-debug-info: enable
+            use-microLIB: true
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            misc-controls: --diag_suppress=L6329
+            output-format: elf
+            ro-base: "0x08000000"
+            rw-base: "0x20000000"
+            xo-base: ""
+        scatterFilePath: rx410.sct
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 3
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x10000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 3
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x80000"
+                startAddr: "0x8000000"
+              tag: IROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: IROM
+        useCustomScatterFile: true
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+    uploader: JLink

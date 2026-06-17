@@ -40,6 +40,7 @@ void Switcher_Init(void)
     SLOT_GETIO(AppAdc);
     SLOT_GETIO(AppPower);
     SLOT_GETIO(Calculator);
+
     SLOT_GETIO(ElecParams);
     SLOT_GETIO(EKF_LKF);
 }
@@ -49,28 +50,53 @@ void Switcher_Init(void)
  * 数据流: Producer → Consumer (PULL)
  * ================================================================ */
 
-INPUT_CALLBACK(AppAdc, AppPower)
+INPUT_CALLBACK(AppAdc)
 {
+    INPUT_GET_SLOT(Calculator, AppAdc);
+//    do { \
+//        MODULE_OUTPUT(Calculator) *__out = \
+//            (MODULE_OUTPUT(Calculator) *)s_slot[SLOT(Calculator)].pOut->para; \
+//        MODULE_INPUT(AppAdc)   *__in  = \
+//            (MODULE_INPUT(AppAdc)   *)s_slot[SLOT(AppAdc)].pIn->para; \
+//        __in->Calculator_params = (void*)&__out->AppAdc_params; \
+//    } while (0);		
+	
+	
+}
+INPUT_CALLBACK(AppPower)
+{
+	
+//    do { \
+//        MODULE_OUTPUT(AppAdc) *__out = \
+//            (MODULE_OUTPUT(AppAdc) *)s_slot[SLOT(AppAdc)].pOut->para; \
+//        MODULE_INPUT(AppPower)   *__in  = \
+//            (MODULE_INPUT(AppPower)   *)s_slot[SLOT(AppPower)].pIn->para; \
+//        __in->AppAdc_params = (void*)&__out->AppPower_params; \
+//    } while (0);	
+		
+	
     INPUT_GET_SLOT(AppAdc, AppPower);
-    INPUT_GET_SLOT(Calculator, AppPower);
-    INPUT_GET_SLOT(ElecParams, AppPower);
+//    INPUT_GET_SLOT(ElecParams, AppPower);
     INPUT_GET_SLOT(EKF_LKF, AppPower);
+
+
+	
 }
 
 
-INPUT_CALLBACK(AppAdc, Calculator)
+INPUT_CALLBACK(Calculator)
 {
     INPUT_GET_SLOT(AppAdc, Calculator);
 }
 
 
-INPUT_CALLBACK(ElecParams, EKF_LKF)
+INPUT_CALLBACK(EKF_LKF)
 {
     INPUT_GET_SLOT(ElecParams, EKF_LKF);
 }
 
 
-INPUT_CALLBACK(Calculator, ElecParams)
+INPUT_CALLBACK(ElecParams)
 {
     INPUT_GET_SLOT(Calculator, ElecParams);
 }
@@ -90,11 +116,11 @@ void Switcher_Slot_EKF_LKF(void) { s_slot[SLOT_EKF_LKF].pDoWork(); }
  * ================================================================ */
 void Switcher_Run_All(void)
 {
-    Switcher_Slot_AppAdc();
-    Switcher_Slot_AppPower();
-    Switcher_Slot_Calculator();
-    Switcher_Slot_ElecParams();
-    Switcher_Slot_EKF_LKF();
+//    Switcher_Slot_AppAdc();
+//    Switcher_Slot_AppPower();
+//    Switcher_Slot_Calculator();
+//    Switcher_Slot_ElecParams();
+//    Switcher_Slot_EKF_LKF();
 }
 
 /* ================================================================
@@ -113,6 +139,6 @@ void Switcher_Run_TK(void)
 {
     Switcher_Slot_Calculator();
     Switcher_Slot_ElecParams();
-//    Switcher_Slot_EKF_LKF();
+    Switcher_Slot_EKF_LKF();
 }
 

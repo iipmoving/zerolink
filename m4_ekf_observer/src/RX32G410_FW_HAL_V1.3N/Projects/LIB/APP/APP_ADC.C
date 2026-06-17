@@ -751,7 +751,7 @@ uint8_t 		AdcValueFun(void)					//统一处理ADC值
 
 						}
 						
-
+						AppAdc_setPowerOutValue();				//将数据放到输出缓存
 						
 
 						xReturn=1;
@@ -2446,7 +2446,7 @@ void 	APP_ADC_GetTxaPeiodPoint(void)			//从DMA缓存到TXA数组转换
 		{
 #ifdef	DEBUG_POWER_OUT_CONST//AS			//输入参数固定		
 			inputArray[ch]=*Power_Calculator_GetInputArrayAddress(testCh);
-#endif		//DEBUG_POWER_OUT
+endif		//DEBUG_POWER_OUT
 		}
 	}
 

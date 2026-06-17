@@ -133,23 +133,23 @@ __attribute__((weak)) void Switcher_Init(void) {}
 __attribute__((weak)) void Switcher_Run_TK(void) {}
 void Task_TimeChip1(void)
 {
-		Time_Base();
-//	API_TIM_TGO_PPG_SINGLE_Start();
-		APP_POWER_CompSetValue();
 
+		APP_POWER_CompSetValue();
 
 }
 void Task_TimeChip2(void)
 {
-//       API_GPIO_WritePin(DebugB_pin,1);
 
- 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
-//////		 API_GPIO_WritePin(DebugB_pin,0);
+//	API_TIM_TGO_PPG_SINGLE_Start();
+	 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
 
 }
 
 void Task_TimeChip3(void)
 {
+	
+
+	
 }
 
 void Task_TimeChip4(void)
@@ -195,10 +195,23 @@ void Task_Tk(void)      //触摸扫描
 #endif
 	
 	
+
+
+	
 	iic_bus_updata();
+
+	
+	if(Time_GetSecFlg())
+	{
+	}
+	else
+	{	
+//				API_GPIO_WritePin(DebugB_pin,0);	
+	}	
 	APP_ADC_TimDmaEnd();
 	APP_ADC_CalculatePower();
 	Switcher_Run_TK();
+
 }
 
 
@@ -211,7 +224,13 @@ void Task_Ms(void)
 //	adc_ic_vc_fun();							//每一MS采集一次电流电压
 
  	API_ADC_DMA_TimStart();
-
+	if(Time_GetSecFlg())
+	{
+	}
+	else
+	{	
+//				API_GPIO_WritePin(DebugB_pin,0);	
+	}	
 //	API_POWER_ScrOutput(SYS_GetTskId());			//过零开通
 
 

@@ -1,0 +1,162 @@
+*** Using Compiler 'V6.12', folder: 'C:\Keil_v5\ARM\ARMCLANG\Bin'
+Build target 'BasicApp_ROM'
+compiling rx32g4xx_hal_dac.c...
+compiling rx32g4xx_hal_cortex.c...
+compiling rx32g4xx_hal_comp.c...
+compiling rx32g4xx_hal_adc_ex.c...
+compiling rx32g4xx_hal.c...
+compiling rx32g4xx_hal_cordic.c...
+compiling system_rx32g4xx.c...
+compiling rx32g4xx_hal_dac_ex.c...
+compiling rx32g4xx_hal_dma.c...
+compiling rx32g4xx_hal_can.c...
+compiling rx32g4xx_hal_adc.c...
+compiling rx32g4xx_hal_crc.c...
+compiling rx32g4xx_hal_clc.c...
+compiling rx32g4xx_hal_exti.c...
+compiling rx32g4xx_hal_dma_ex.c...
+compiling rx32g4xx_hal_flash_ex.c...
+compiling rx32g4xx_hal_flash.c...
+compiling rx32g4xx_hal_fmac.c...
+compiling rx32g4xx_hal_gpio.c...
+compiling rx32g4xx_hal_iwdg.c...
+compiling rx32g4xx_hal_opamp.c...
+compiling rx32g4xx_hal_pwr.c...
+compiling rx32g4xx_hal_opamp_ex.c...
+compiling rx32g4xx_hal_pwr_ex.c...
+compiling rx32g4xx_hal_rcc_ex.c...
+compiling rx32g4xx_hal_rcc.c...
+compiling rx32g4xx_hal_rtc.c...
+compiling rx32g4xx_hal_rtc_ex.c...
+compiling rx32g4xx_hal_i2c.c...
+compiling rx32g4xx_hal_spi.c...
+compiling rx32g4xx_hal_hrtim.c...
+../../LIB/APP/powerGroup/drv/drv_fmac.c(27): error: conflicting types for 'pulse_check_process'
+uint8_t pulse_check_process(int16_t* data, uint16_t len);
+        ^
+../../BaseClass/inc\pluse.h(36): note: previous declaration is here
+uint8_t    pulse_check_process(uint16_t* buff,uint16_t size);//返回检锅数
+           ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(102): warning: implicit declaration of function 'API_POWER_PanCheckPluse' is invalid in C99 [-Wimplicit-function-declaration]
+        API_POWER_PanCheckPluse();
+        ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(112): warning: In file included from...../../BaseClass/inc\printMessage.h(52): error: conflicting types for 'PrintMessagePush'
+uint8_t    PrintMessagePush(MessageDef messageIn);   //将需要打印的数据压到堆里
+           ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(28): note: previous declaration is here
+int PrintMessagePush(void* msg);
+    ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(118): error: use of undeclared identifier 'Pan_ADC_AdcDmaBuff'
+    message.array[0].buff = Pan_ADC_AdcDmaBuff;
+                            ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(120): error: use of undeclared identifier 'Pan_ADC_AdcFmacBuff'
+    message.array[1].buff = Pan_ADC_AdcFmacBuff + 4;
+                            ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(154): error: conflicting types for 'API_POWER_PanCheckPluse'
+void API_POWER_PanCheckPluse(void)
+     ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(102): note: previous implicit declaration is here
+        API_POWER_PanCheckPluse();
+        ^
+../../LIB/APP/powerGroup/drv/drv_fmac.c(165): error: use of undeclared identifier 'Pan_ADC_AdcFmacBuff'
+            Pan_ADC_AdcFmacBuff + FmacLeve / 2,
+            ^
+1 warning and 6 errors generated.
+compiling drv_fmac.c...
+compiling drv_hrtim_consumer.c...
+../../LIB/APP/powerGroup/drv/drv_protect.c(22): error: conflicting types for 'API_DAC_COMP_SetValue'
+void API_DAC_COMP_SetValue(uint8_t ch, uint32_t value);
+     ^
+../../API/inc\API_DAC.h(15): note: previous declaration is here
+void    API_DAC_COMP_SetValue(uint8_t ch, uint8_t value);               //设置单个比较器比较电压
+        ^
+1 error generated.
+compiling drv_protect.c...
+compiling rx32g4xx_hal_uart.c...
+compiling rx32g4xx_hal_wwdg.c...
+compiling rx32g4xx_hal_tim_ex.c...
+../../LIB/APP/app_power_claude.c(114): error: expected identifier or '('
+        if (DNTR(DNTR_T34A)->num) {
+        ^
+../../LIB/APP/app_power_claude.c(118): error: expected identifier or '('
+        DNTR(DNTR_T12A)->num = 0;
+        ^
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(118): error: expected ')'
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(118): note: to match this '('
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                  ^
+../../LIB/APP/app_power_claude.c(119): error: expected identifier or '('
+        DNTR(DNTR_T34A)->num = 0;
+        ^
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(119): error: expected ')'
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                   ^
+../../LIB/APP/app_power_claude.c(119): note: to match this '('
+../../LIB/APP/app_power_claude.c(107): note: expanded from macro 'DNTR'
+#define DNTR(id)  (&Power_Dntr[(id)])
+                  ^
+../../LIB/APP/app_power_claude.c(120): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(123): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(126): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(649): error: unknown type name 'Power_Input_t'
+static Power_Input_t  g_in;
+       ^
+../../LIB/APP/app_power_claude.c(650): error: unknown type name 'Power_Output_t'; did you mean 'PowerBase_Output_t'?
+static Power_Output_t g_out;                                          /* v2.0 Data Switcher 输出槽 */
+       ^~~~~~~~~~~~~~
+       PowerBase_Output_t
+../../../../../include\../include/app_power_io.h(74): note: 'PowerBase_Output_t' declared here
+} PowerBase_Output_t;
+  ^
+../../LIB/APP/app_power_claude.c(651): error: unknown type name 'Power_Input_t'
+static const Power_Input_t *_adc;                                     /* 指向 g_in, Switcher 填入数据后消费 */
+             ^
+../../LIB/APP/app_power_claude.c(1381): warning: implicit declaration of function 'getOvpValueAdj' is invalid in C99 [-Wimplicit-function-declaration]
+        getOvpValueAdj();                                                                               //保存到各个炉头的OVP值
+        ^
+../../LIB/APP/app_power_claude.c(5570): warning: implicit declaration of function 'getTxaDmaCircleValue' is invalid in C99 [-Wimplicit-function-declaration]
+                getTxaDmaCircleValue((uint16_t*)txaBuff,value,num,PotAwdNum*2);         //将循环队列中的数据拷贝到缓存
+                ^
+../../LIB/APP/app_power_claude.c(5577): warning: implicit declaration of function 'APP_ADC_getOverAdcChannel' is invalid in C99 [-Wimplicit-function-declaration]
+                                if(APP_ADC_getOverAdcChannel(&value[i],PowerOvpValueAll,PotAwdNum))             //T1A产生过流
+                                   ^
+../../LIB/APP/app_power_claude.c(5601): error: #endif without #if
+#endif
+ ^
+../../LIB/APP/app_power_claude.c(5603): error: extraneous closing brace ('}')
+}
+^
+../../LIB/APP/app_power_claude.c(5680): error: unknown type name 'Power_Input_t'
+    _adc = (const Power_Input_t *)g_input.para;
+                  ^
+../../LIB/APP/app_power_claude.c(5707): error: no member named 'status' in 'struct PowerBase_Output'
+    g_out.status |= 0x02;            /* v2.0 就绪 */
+    ~~~~~ ^
+../../LIB/APP/app_power_claude.c(5768): error: unterminated conditional directive
+#if 0 /* Moved to powerGroup/drv/drv_fmac.c */
+ ^
+3 warnings and 16 errors generated.
+compiling app_power_claude.c...
+compiling Modbus_Lib_Init_An_Analysis.c...
+compiling API_hrtim_fullbridge.c...
+compiling rx32g4xx_hal_tim.c...
+"Y:\410\RX32G410_ROM.axf" - 23 Error(s), 4 Warning(s).
+Target not created.
+Build Time Elapsed:  00:00:03

@@ -165,12 +165,10 @@ MODULE_EXPORT(ElecParams);
 // perAdc = 384 cnt/step → 每 ADC 采样步长 = 384/768MHz = 0.5 μs
 #define HRTIM_CLK_HZ        768000000.0f
 
-/* ---- I/O 实例 (独立于内部计算) ---- */
-static MODULE_INPUT(ElecParams)*   s_inPara;    // 输入来自 Calculator (InputCallback 注入)
-static MODULE_OUTPUT(ElecParams)  s_outPara;    // 输出参数缓冲区
+
 
 /* ---- LINK params 存储 (每炉头独立) ---- */
-static MODULE_OUTPUT_PARAMS(ElecParams, AppPower)  s_drvParam[4];
+
 
 #define	 PERIO_CNT   20 
 
@@ -236,22 +234,22 @@ static float median_f(float* buf, uint8_t n) {
  *   - 本结构体：float 原始计算值，用于内部传递
  *   - 输出结构体：int32_t ×100 定标值，用于模块间接口
  */
-typedef struct {
-    float   I_peak_A;      /**< 峰值电流 (A) — 中值滤波 + 权重修正后 */
-    float   Vdc_mean;      /**< 母线电压均值 (V) — 20ms周期ADC值中值 */
-    float   phi_deg;       /**< 相位角 (度) — 高电流周期平均 */
-    float   f_sw_Hz;       /**< 开关频率 (Hz) — HRTIM_CLK/lowOff */
-    float   L_uH;          /**< 等效电感 (μH) — 基波等效电路法 + 权重修正 */
-    float   f_res_kHz;     /**< 谐振频率 (kHz) — f_res = 1/(2π√(LC)) */
-    float   Q_factor;       /**< 品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw) */
-    float   R_ohm;         /**< 等效电阻 (Ω) — R = ωL/Q */
-    float   I_rms;         /**< 电流有效值 (A) — I_rms = I_peak × √2/2 */
-    float   P_W;           /**< 有功功率 (W) — P = median(I_active × Vdc) */
-    float   Z_mag_ohm;     /**< 阻抗模 (Ω) — Z = √(R² + X²) */
-    float   X_ohm;         /**< 净电抗 (Ω) — X = X_L - X_C */
-    uint8_t valid;         /**< 计算有效性标志 — 1=有效, 0=无效 */
-    uint8_t res[3];        /**< 保留字节，对齐填充 */
-} ElecParams_CalcResult;
+//typedef struct {
+//    float   I_peak_A;      /**< 峰值电流 (A) — 中值滤波 + 权重修正后 */
+//    float   Vdc_mean;      /**< 母线电压均值 (V) — 20ms周期ADC值中值 */
+//    float   phi_deg;       /**< 相位角 (度) — 高电流周期平均 */
+//    float   f_sw_Hz;       /**< 开关频率 (Hz) — HRTIM_CLK/lowOff */
+//    float   L_uH;          /**< 等效电感 (μH) — 基波等效电路法 + 权重修正 */
+//    float   f_res_kHz;     /**< 谐振频率 (kHz) — f_res = 1/(2π√(LC)) */
+//    float   Q_factor;       /**< 品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw) */
+//    float   R_ohm;         /**< 等效电阻 (Ω) — R = ωL/Q */
+//    float   I_rms;         /**< 电流有效值 (A) — I_rms = I_peak × √2/2 */
+//    float   P_W;           /**< 有功功率 (W) — P = median(I_active × Vdc) */
+//    float   Z_mag_ohm;     /**< 阻抗模 (Ω) — Z = √(R² + X²) */
+//    float   X_ohm;         /**< 净电抗 (Ω) — X = X_L - X_C */
+//    uint8_t valid;         /**< 计算有效性标志 — 1=有效, 0=无效 */
+//    uint8_t res[3];        /**< 保留字节，对齐填充 */
+//} ElecParams_CalcResult;
 
 // ========== 暂态工作区类型 (实例由 shareBuff 外部传入) ==========
 typedef struct {
@@ -303,12 +301,12 @@ typedef struct {
  
 
  
-static uint8_t ElecParams_Calc(ElecParams_CalcResult *result,
+static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result,
                                 const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles,
                                 ElecParams_Ws *ws)
 {
     if (result == NULL || cycles == NULL ) return 0;
-    memset(result, 0, sizeof(ElecParams_CalcResult));
+//    memset(result, 0, sizeof(ElecParams_CalcResult));
 
     // ---- 单循环：逐周期提取 + 累加（i=1..19, 高压段平均替代中值）----
     uint8_t valid_cnt = 0;
@@ -423,7 +421,7 @@ static void Init(void) {
     s_inPara = NULL;
     memset(&s_outPara, 0, sizeof(s_outPara));
 
-		s_outPara.AppPower_params.res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
+//		s_outPara.AppPower_params.res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
 			s_outPara.EKF_LKF_params.res[0]=5;			//CONSET_OUT :ELC_TO_EKF
 
     g_input.para  = &s_inPara;
@@ -464,49 +462,25 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 		}		
 	
 		
-    /* ====== 计算段：纯计算，不引用本模块 I/O 类型 ====== */
-    // 输出定标规则：float_value × 100 + 0.5（四舍五入）
-    #define FLOAT_TO_INT(val) ((int32_t)((val) * 100.0f + 0.5f))
+
 
     // 逐炉头计算：每炉头 20 周期独立计算
     for (uint8_t h = 0; h < ELEC_POTMAX; h++)
     {
-        ElecParams_CalcResult result;
-        memset(&result, 0, sizeof(ElecParams_CalcResult));
+        MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF)* result;
+//        memset(&result, 0, sizeof(ElecParams_CalcResult));
 
+				result=&out->EKF_LKF_params.params[h];
+			
         // 指向当前炉头的 20 周期数据块
-        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h * PERIO_CNT];
-        uint8_t calc_ok = ElecParams_Calc(&result, cycles, ws);
+        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h][PERIO_CNT];
+        uint8_t calc_ok = ElecParams_Calc(result, cycles, ws);
 
-        MODULE_OUTPUT_PARAMS(ElecParams, AppPower) *p = &out->AppPower_params.params[h];
-        if (!calc_ok) {
-            memset(p, 0, sizeof(*p));
-            p->valid = 0;
-            continue;
-        }
 
-        // 映射计算结果到输出参数（全部 ×100 整型定标）
-        p->I_peak_A   = FLOAT_TO_INT(result.I_peak_A);
-        p->Vdc_mean   = FLOAT_TO_INT(result.Vdc_mean);
-        p->phi_deg    = FLOAT_TO_INT(result.phi_deg);
-        p->f_sw_Hz    = FLOAT_TO_INT(result.f_sw_Hz);
-        p->L_uH       = FLOAT_TO_INT(result.L_uH);
-        p->f_res_kHz  = FLOAT_TO_INT(result.f_res_kHz);
-        p->Q_factor   = FLOAT_TO_INT(result.Q_factor);
-        p->R_ohm      = FLOAT_TO_INT(result.R_ohm);
-        p->I_rms      = FLOAT_TO_INT(result.I_rms);
-        p->P_W        = FLOAT_TO_INT(result.P_W);
-        p->Z_mag_ohm  = FLOAT_TO_INT(result.Z_mag_ohm);
-        p->X_ohm      = FLOAT_TO_INT(result.X_ohm);
-//        p->L_stable   = FLOAT_TO_INT(result.L_uH);
-//        p->L_fast     = FLOAT_TO_INT(result.L_uH);
-//        p->event      = 0;
-        p->valid      = result.valid;
-    }
-
+		}
     API_GPIO_WritePin(DebugB_pin, 0);
     // 更新状态 — 写输出 LINK status + 清除输入 LINK status
-    out->AppPower_params.status |= ST_OUT;
-
+//    out->AppPower_params.status |= ST_NEW;
+		out->EKF_LKF_params.status |= ST_NEW;
 }
 

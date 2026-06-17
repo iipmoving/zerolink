@@ -53,7 +53,7 @@ void Time_Base(void)
 {
 
     TimeBase.TimeFlg.byte &=0x0f;			//低四位不清
-
+			API_GPIO_WritePin(DebugB_pin,0);	
     TimeBase.TickCnt++;                         /*1ms时间累加*/
     if((TimeBase.TickCnt % TIME_100MS_CNT) == 0)
     {
@@ -75,7 +75,7 @@ void Time_Base(void)
     //if(TimeBase.TickCnt >= 5)
     if(TimeBase.TickCnt >= TIME_1S_CNT)
     {
-
+			API_GPIO_WritePin(DebugB_pin,1);	
         TimeBase.TimeFlg.bit.Sec = _TRUE;            /*1S时间标志*/
         TimeBase.TickCnt = 0;                   /*10ms时间计数清零，重新计数1s*/
         TimeBase.SecCnt++;

@@ -1,533 +1,203 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.3",
+
   "project": {
-    "name": "four_head",
+    "name": "m4_ekf_observer",
+    "mcu": "RX32G410 (Cortex-M4F)",
     "paths": {
       "io_dir": "include",
       "core_dir": "core",
       "app_dir": "app",
-      "base_class_dir": "base_class",
-      "proto_dir": "proto"
-    },
-    "std_module_path": "core/std_module.h",
-    "pack": 4,
-    "comment_guard": true,
-    "output_root": "../four_head/src"
+      "fw_dir": "src/RX32G410_FW_HAL_V1.3N/Projects",
+      "base_class_dir": "src/RX32G410_FW_HAL_V1.3N/Projects/BaseClass/src",
+      "std_module_path": "core/std_module.h",
+      "pack": 4,
+      "comment_guard": true,
+      "output_root": "."
+    }
   },
+
   "modules": [
     {
-      "id": "drvkey",
-      "name": "DrvKey",
-      "layer": "drv",
-      "source_file": "drv/drv_key.c",
-      "comment": "按键扫描与事件分发 — 输出按键事件到 Hmi/Cooking/SegAlign"
+      "id": "appadc",
+      "name": "AppAdc",
+      "layer": "app",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/LIB/APP/adc_sensor.c",
+      "comment": "ADC 采样 — 输出谐振电流/电压/HRTIM 时序到 Calculator 和功率参数到 AppPower"
     },
     {
-      "id": "appcommmgr",
-      "name": "AppCommMgr",
-      "layer": "app",
-      "source_file": "app/app_comm_mgr.c",
-      "comment": "Modbus 通信轮询调度器 — 分发寄存器数据到 Power/Cooking/Protect"
+      "id": "calculator",
+      "name": "Calculator",
+      "layer": "base_class",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/BaseClass/src/calculator.c",
+      "comment": "功率计算器 — 从 ADC 原始数据计算谐振电流/相位角/电压"
     },
     {
-      "id": "appprotect",
-      "name": "AppProtect",
-      "layer": "app",
-      "source_file": "app/app_protect.c",
-      "comment": "故障保护逻辑 — 从 CommMgr 获取寄存器，输出故障状态到 Power"
-    },
-    {
-      "id": "appcooking",
-      "name": "AppCooking",
-      "layer": "app",
-      "source_file": "app/app_cooking.c",
-      "comment": "烹饪流程控制 — 从 Key/CommMgr 输入，输出烹饪状态到 Power"
+      "id": "elecparams",
+      "name": "ElecParams",
+      "layer": "base_class",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/BaseClass/src/elec_params.c",
+      "comment": "电参数计算 — 20ms 周期计算 I_peak/L/f_res/Q/R/P 等"
     },
     {
       "id": "apppower",
       "name": "AppPower",
       "layer": "app",
-      "source_file": "app/app_power.c",
-      "comment": "功率控制 PID — 聚合 CommMgr/Protect/Cooking 输入，输出功率命令到 CommMgr 和状态到 Hmi"
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/LIB/APP/app_power.c",
+      "comment": "功率控制 PID — 从 AppAdc/Calculator/EKF_LKF 拉取数据"
     },
     {
-      "id": "apphmi",
-      "name": "AppHmi",
-      "layer": "app",
-      "source_file": "app/app_hmi.c",
-      "comment": "人机交互逻辑 — 从 Key/Power 输入，输出显示到 Display 和蜂鸣到 Buzzer"
+      "id": "ekflkf",
+      "name": "EKF_LKF",
+      "layer": "base_class",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/BaseClass/src/ekf_lkf.c",
+      "comment": "扩展卡尔曼滤波观测器 — 从 ElecParams 读取观测值，估计 [R, L, f_res]"
     },
     {
-      "id": "appsegalign",
-      "name": "AppSegAlign",
-      "layer": "app",
-      "source_file": "app/app_seg_align.c",
-      "comment": "段码对齐处理 — 从 Key 输入，无输出"
-    },
-    {
-      "id": "drvdisplay",
-      "name": "DrvDisplay",
-      "layer": "drv",
-      "source_file": "drv/drv_display.c",
-      "comment": "显示驱动 — 从 Hmi 接收显示数据，驱动段码/LED"
-    },
-    {
-      "id": "drvbuzzer",
-      "name": "DrvBuzzer",
-      "layer": "drv",
-      "source_file": "drv/drv_buzzer.c",
-      "comment": "蜂鸣器驱动 — 从 Hmi 接收蜂鸣命令 (@OUTPUT_CALLBACK 即时路由)"
-    },
-    {
-      "id": "drvcommmgr",
-      "name": "DrvCommMgr",
-      "layer": "drv",
-      "source_file": "drv/drv_comm_mgr.c",
-      "comment": "通信驱动管理 — 从 Power 接收功率命令，发送 Modbus"
+      "id": "drvhrtim",
+      "name": "DrvHrtim",
+      "layer": "base_class",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/DRV/SRC/drv_hrtim.c",
+      "comment": "HRTIM 驱动 — 功率命令下发到硬件，反馈硬件状态"
     }
   ],
+
   "pipes": [
     {
-      "id": "pipe_drvkey_apphmi",
-      "from": "DrvKey",
-      "to": "AppHmi",
-      "callback_type": "pull",
-      "comment": "按键事件 → HMI",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "key_code",
-          "type": "uint8_t",
-          "comment": "按键码 KeyCode_t"
-        },
-        {
-          "name": "key_state",
-          "type": "uint8_t",
-          "comment": "按键状态 KEY_STATE_*"
-        },
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "关联炉头索引"
-        }
-      ]
-    },
-    {
-      "id": "pipe_drvkey_appcooking",
-      "from": "DrvKey",
-      "to": "AppCooking",
-      "callback_type": "pull",
-      "comment": "按键事件 → Cooking",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "key_code",
-          "type": "uint8_t",
-          "comment": "按键码 KeyCode_t"
-        },
-        {
-          "name": "key_state",
-          "type": "uint8_t",
-          "comment": "按键状态 KEY_STATE_*"
-        },
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "关联炉头索引"
-        }
-      ]
-    },
-    {
-      "id": "pipe_drvkey_appsegalign",
-      "from": "DrvKey",
-      "to": "AppSegAlign",
-      "callback_type": "pull",
-      "comment": "按键事件 → SegAlign",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "key_code",
-          "type": "uint8_t",
-          "comment": "按键码 KeyCode_t"
-        },
-        {
-          "name": "key_state",
-          "type": "uint8_t",
-          "comment": "按键状态 KEY_STATE_*"
-        },
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "关联炉头索引"
-        }
-      ]
-    },
-    {
-      "id": "pipe_appcommmgr_apppower",
-      "from": "AppCommMgr",
+      "id": "pipe_appadc_apppower",
+      "from": "AppAdc",
       "to": "AppPower",
       "callback_type": "pull",
-      "comment": "Modbus 寄存器数据 → Power",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "ADC → Power: 电压/电流/相位等功率控制参数",
+      "out_link": { "style": "pointer", "array_size": 0 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
-        },
-        {
-          "name": "online",
-          "type": "uint8_t",
-          "comment": "是否在线"
-        },
-        {
-          "name": "regs",
-          "type": "uint16_t[22]",
-          "comment": "寄存器值 0x1000-0x1015"
-        }
+        { "name": "voltage", "type": "uint16_t", "comment": "母线电压 ADC" },
+        { "name": "power", "type": "uint16_t[4]", "comment": "每炉头功率 ADC" },
+        { "name": "txa", "type": "uint16_t[4]", "comment": "每炉头谐振电流 ADC" },
+        { "name": "phase", "type": "uint16_t[4]", "comment": "每炉头相位 ADC" }
       ]
     },
     {
-      "id": "pipe_appcommmgr_appcooking",
-      "from": "AppCommMgr",
-      "to": "AppCooking",
+      "id": "pipe_appadc_calculator",
+      "from": "AppAdc",
+      "to": "Calculator",
       "callback_type": "pull",
-      "comment": "Modbus 寄存器数据 → Cooking",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "ADC → Calculator: 谐振电流/HRTIM 时序原始数据",
+      "out_link": { "style": "pointer", "array_size": 0 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
-        },
-        {
-          "name": "online",
-          "type": "uint8_t",
-          "comment": "是否在线"
-        },
-        {
-          "name": "regs",
-          "type": "uint16_t[22]",
-          "comment": "寄存器值 0x1000-0x1015"
-        }
+        { "name": "resonant_current", "type": "uint16_t**", "comment": "谐振电流 ADC 数组指针数组" },
+        { "name": "hrtim_values", "type": "uint16_t**", "comment": "HRTIM 时间戳数组指针数组" },
+        { "name": "voltage_data", "type": "uint16_t**", "comment": "母线电压数组指针数组" },
+        { "name": "input", "type": "AppAdc_OutputParams_t*", "comment": "每通道 HRTIM 工作周期参数" }
       ]
     },
     {
-      "id": "pipe_appcommmgr_appprotect",
-      "from": "AppCommMgr",
-      "to": "AppProtect",
+      "id": "pipe_calculator_elecparams",
+      "from": "Calculator",
+      "to": "ElecParams",
       "callback_type": "pull",
-      "comment": "Modbus 寄存器数据 → Protect",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "Calculator → ElecParams: 电流积分/电压/过零点等中间结果",
+      "out_link": { "style": "array", "array_size": 80 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
-        },
-        {
-          "name": "online",
-          "type": "uint8_t",
-          "comment": "是否在线"
-        },
-        {
-          "name": "regs",
-          "type": "uint16_t[22]",
-          "comment": "寄存器值 0x1000-0x1015"
-        }
+        { "name": "hrtim_highOff", "type": "uint16_t", "comment": "上管关断 HRTIM 值" },
+        { "name": "hrtim_lowOff", "type": "uint16_t", "comment": "下管关断 HRTIM 值" },
+        { "name": "hrtim_highOn", "type": "uint16_t", "comment": "上管开通 HRTIM 值" },
+        { "name": "hrtim_lowOn", "type": "uint16_t", "comment": "下管开通 HRTIM 值" },
+        { "name": "peak_current", "type": "uint16_t", "comment": "峰值电流 ADC" },
+        { "name": "active_current_sum_high", "type": "uint32_t", "comment": "上管电流积分和" },
+        { "name": "active_current_sum_low", "type": "uint32_t", "comment": "下管电流积分和" },
+        { "name": "voltage_sum", "type": "uint32_t", "comment": "电压原始累加" },
+        { "name": "voltage_count", "type": "uint16_t", "comment": "电压累加计数" },
+        { "name": "zero_cross_high", "type": "uint16_t", "comment": "上管过零点" },
+        { "name": "zero_cross_low", "type": "uint16_t", "comment": "下管过零点" },
+        { "name": "peak_point", "type": "uint16_t", "comment": "峰值点 HRTIM 值" }
       ]
     },
     {
-      "id": "pipe_appprotect_apppower",
-      "from": "AppProtect",
+      "id": "pipe_calculator_apppower",
+      "from": "Calculator",
       "to": "AppPower",
       "callback_type": "pull",
-      "comment": "故障状态 → Power",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "Calculator → AppPower: 20ms 周期累积平均值 (谐振电流/电压/相位角)",
+      "out_link": { "style": "array", "array_size": 4 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
-        },
-        {
-          "name": "fault",
-          "type": "uint16_t",
-          "comment": "故障位集合 ProtectFault_t"
-        }
+        { "name": "resonant_current", "type": "int32_t", "comment": "谐振电流均值 (0.01A)" },
+        { "name": "voltage", "type": "int32_t", "comment": "母线电压均值 (0.01V)" },
+        { "name": "phase_angle", "type": "int32_t", "comment": "相位角 (0.01°)" },
+        { "name": "valid", "type": "uint8_t", "comment": "数据有效性" }
       ]
     },
     {
-      "id": "pipe_appcooking_apppower",
-      "from": "AppCooking",
+      "id": "pipe_elecparams_ekflkf",
+      "from": "ElecParams",
+      "to": "EKF_LKF",
+      "callback_type": "pull",
+      "comment": "ElecParams → EKF: 电参数观测值",
+      "out_link": { "style": "array", "array_size": 4 },
+      "in_link": { "style": "pointer", "array_size": 0 },
+      "fields": [
+        { "name": "valid", "type": "uint8_t", "comment": "数据有效性" },
+        { "name": "I_peak_A", "type": "int32_t", "comment": "峰值电流 (0.01A)" },
+        { "name": "Vdc_mean", "type": "int32_t", "comment": "母线电压均值 (0.01V)" },
+        { "name": "phi_deg", "type": "int32_t", "comment": "相位角 (0.01°)" },
+        { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
+        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
+        { "name": "f_sw_Hz", "type": "int32_t", "comment": "开关频率 (0.01Hz)" },
+        { "name": "P_W", "type": "int32_t", "comment": "有功功率 (0.01W)" },
+        { "name": "Q_factor", "type": "int32_t", "comment": "品质因数 (0.01)" }
+      ]
+    },
+    {
+      "id": "pipe_elecparams_apppower",
+      "from": "ElecParams",
       "to": "AppPower",
       "callback_type": "pull",
-      "comment": "烹饪状态 → Power",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值)",
+      "out_link": { "style": "array", "array_size": 4 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引"
-        },
-        {
-          "name": "cooking_state",
-          "type": "uint8_t",
-          "comment": "烹饪状态 COOKING_STATE_*"
-        },
-        {
-          "name": "power_level",
-          "type": "uint8_t",
-          "comment": "功率档位 0-9"
-        },
-        {
-          "name": "target_power",
-          "type": "uint16_t",
-          "comment": "目标功率 W"
-        },
-        {
-          "name": "actual_power",
-          "type": "uint16_t",
-          "comment": "实际功率 W"
-        },
-        {
-          "name": "cooking_time",
-          "type": "uint32_t",
-          "comment": "烹饪时间 ms"
-        }
+        { "name": "valid", "type": "uint8_t", "comment": "数据有效性" },
+        { "name": "I_peak_A", "type": "int32_t", "comment": "峰值电流 (0.01A)" },
+        { "name": "Vdc_mean", "type": "int32_t", "comment": "母线电压均值 (0.01V)" },
+        { "name": "phi_deg", "type": "int32_t", "comment": "相位角 (0.01°)" },
+        { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
+        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
+        { "name": "f_sw_Hz", "type": "int32_t", "comment": "开关频率 (0.01Hz)" },
+        { "name": "P_W", "type": "int32_t", "comment": "有功功率 (0.01W)" },
+        { "name": "Q_factor", "type": "int32_t", "comment": "品质因数 (0.01)" },
+        { "name": "I_rms", "type": "int32_t", "comment": "电流有效值 (A) — I_rms = I_peak × √2/2" },
+        { "name": "Z_mag_ohm", "type": "int32_t", "comment": "阻抗模 (Ω) — Z = √(R² + X²)" },
+        { "name": "X_ohm", "type": "int32_t", "comment": "净电抗 (Ω) — X = X_L - X_C" }
       ]
     },
     {
-      "id": "pipe_apppower_drvcommmgr",
-      "from": "AppPower",
-      "to": "DrvCommMgr",
+      "id": "pipe_ekflkf_apppower",
+      "from": "EKF_LKF",
+      "to": "AppPower",
       "callback_type": "pull",
-      "comment": "功率命令 → DrvCommMgr",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
+      "comment": "EKF → Power: 卡尔曼滤波后的负载参数 (R/L/f_res)",
+      "out_link": { "style": "array", "array_size": 4 },
+      "in_link": { "style": "pointer", "array_size": 0 },
       "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
-        },
-        {
-          "name": "power_on",
-          "type": "uint8_t",
-          "comment": "功率开关 0/1"
-        },
-        {
-          "name": "target_power",
-          "type": "uint16_t",
-          "comment": "目标功率 W"
-        },
-        {
-          "name": "actual_power",
-          "type": "uint16_t",
-          "comment": "实际功率 W"
-        }
-      ]
-    },
-    {
-      "id": "pipe_apppower_apphmi",
-      "from": "AppPower",
-      "to": "AppHmi",
-      "callback_type": "pull",
-      "comment": "功率状态 → Hmi",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "head_index",
-          "type": "uint8_t",
-          "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "power_on",
-          "type": "uint8_t",
-          "comment": "功率开关 0/1"
-        },
-        {
-          "name": "power_level",
-          "type": "uint8_t",
-          "comment": "功率档位 0-9"
-        },
-        {
-          "name": "actual_power",
-          "type": "uint16_t",
-          "comment": "实际功率 W"
-        }
-      ]
-    },
-    {
-      "id": "pipe_apphmi_drvdisplay",
-      "from": "AppHmi",
-      "to": "DrvDisplay",
-      "callback_type": "pull",
-      "comment": "显示数据 → DrvDisplay (段码/LED)",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "hot_head_idx",
-          "type": "int8_t",
-          "comment": "热点炉头索引 (-1=无)"
-        },
-        {
-          "name": "seg_chars",
-          "type": "uint8_t[8]",
-          "comment": "8位段码字符"
-        },
-        {
-          "name": "seg_blink",
-          "type": "uint8_t[4]",
-          "comment": "炉头闪烁控制"
-        },
-        {
-          "name": "seg_mode",
-          "type": "uint8_t",
-          "comment": "显示模式"
-        },
-        {
-          "name": "leds_power",
-          "type": "uint8_t",
-          "comment": "电源 LED"
-        },
-        {
-          "name": "leds_timer",
-          "type": "uint8_t",
-          "comment": "定时 LED"
-        },
-        {
-          "name": "leds_pause",
-          "type": "uint8_t",
-          "comment": "暂停 LED"
-        },
-        {
-          "name": "leds_child_lock",
-          "type": "uint8_t",
-          "comment": "童锁 LED"
-        },
-        {
-          "name": "leds_head_select",
-          "type": "uint8_t[4]",
-          "comment": "炉头选择 LED"
-        },
-        {
-          "name": "leds_power_level",
-          "type": "uint8_t[10]",
-          "comment": "功率档位 LED"
-        }
-      ]
-    },
-    {
-      "id": "pipe_apphmi_drvbuzzer",
-      "from": "AppHmi",
-      "to": "DrvBuzzer",
-      "callback_type": "pull",
-      "comment": "蜂鸣命令 → DrvBuzzer (@OUTPUT_CALLBACK 即时路由, 不走 Switcher)",
-      "out_link": {
-        "style": "pointer"
-      },
-      "in_link": {
-        "style": "pointer"
-      },
-      "fields": [
-        {
-          "name": "sound_type",
-          "type": "uint8_t",
-          "comment": "蜂鸣类型: 1=短按, 2=长按, 3=成功, 4=失败, 5=报警"
-        }
+        { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
+        { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
+        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "Q_factor", "type": "int32_t", "comment": "品质因数 (0.01)" },
+        { "name": "valid", "type": "uint8_t", "comment": "数据有效性" }
       ]
     }
   ],
+
   "slot_order": [
-    "AppCommMgr",
-    "AppPower",
-    "AppProtect",
-    "AppCooking",
-    "AppHmi",
-    "AppSegAlign",
-    "DrvKey",
-    "DrvCommMgr",
-    "DrvBuzzer",
-    "DrvDisplay"
+    "AppAdc",
+    "Calculator",
+    "ElecParams",
+    "AppPower"
   ]
 }

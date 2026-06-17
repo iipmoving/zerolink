@@ -104,17 +104,8 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
         consumer_pipes[to_name].append(pipe)
 
     for consumer_name, c_pipes in sorted(consumer_pipes.items()):
-        ctype = c_pipes[0].get("callback_type", "pull")
-        producers = [p["from"] for p in c_pipes]
-
-        # 如果有多个 producer，使用第一个作为 INPUT_CALLBACK 名称
-        # (一个 consumer 只有一个 InputCallback 函数)
         lines.append("")
-        if len(producers) == 1:
-            lines.append(f"INPUT_CALLBACK({producers[0]}, {consumer_name})")
-        else:
-            # 多 producer: 使用第一个作为主名
-            lines.append(f"INPUT_CALLBACK({producers[0]}, {consumer_name})")
+        lines.append(f"INPUT_CALLBACK({consumer_name})")
         lines.append("{")
 
         for pipe in c_pipes:

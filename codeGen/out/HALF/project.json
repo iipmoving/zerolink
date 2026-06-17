@@ -1,0 +1,225 @@
+{
+  "schema_version": "2.3",
+  "project": {
+    "name": "HALF",
+    "mcu": "RX32G410",
+    "framework": "v2.3",
+    "paths": {
+      "io_dir": "include_io",
+      "core_dir": "core",
+      "app_dir": "LIB/APP",
+      "base_class_dir": "BaseClass/src",
+      "proto_dir": "modbus"
+    },
+    "std_module_path": "core/std_module.h",
+    "pack": 4,
+    "comment_guard": true,
+    "output_root": "d:\\OBSIDIAN\\MOVING IH\\ZEROLINK\\m4_ekf_observer\\src\\RX32G410_FW_HAL_V1.3N\\Projects"
+  },
+  "modules": [
+    {
+      "id": "app_adc",
+      "name": "AppAdc",
+      "layer": "app",
+      "source_file": "LIB/APP/adc_sensor.c",
+      "comment": "ADC 采样 — 输出谐振电流/电压/HRTIM 时序到 Calculator 和功率参数到 AppPower",
+      "types": [
+        {
+          "name": "AppAdc_OutputParams_t",
+          "comment": "每通道 HRTIM 工作周期参数",
+          "fields": [
+            {"name": "start", "type": "uint16_t", "comment": "HRTIM 开始点"},
+            {"name": "end", "type": "uint16_t", "comment": "HRTIM 结束点"},
+            {"name": "highOn", "type": "uint16_t", "comment": "死区后高端开通 HRTIM 值"},
+            {"name": "highOff", "type": "uint16_t", "comment": "高端关闭 (DUTY PPG 占空比)"},
+            {"name": "lowOn", "type": "uint16_t", "comment": "死区后低端开通"},
+            {"name": "lowOff", "type": "uint16_t", "comment": "低端关闭 (prioed PPG 周期)"},
+            {"name": "zero_cross_high", "type": "uint16_t", "comment": "高端过零点索引"},
+            {"name": "zero_cross_low", "type": "uint16_t", "comment": "低端过零点索引"},
+            {"name": "perAdc", "type": "uint16_t", "comment": "每个 ADC 对应的 HRTIM 值"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "app_power",
+      "name": "AppPower",
+      "layer": "app",
+      "source_file": "LIB/APP/app_power.c",
+      "comment": "功率控制 PID — 从 AppAdc/Calculator/EKF_LKF 拉取数据",
+      "types": []
+    },
+    {
+      "id": "calculator",
+      "name": "Calculator",
+      "layer": "base_class",
+      "source_file": "BaseClass/src/calculator.c",
+      "comment": "功率计算器 — 从 ADC 原始数据计算谐振电流/相位角/电压",
+      "types": [
+        {
+          "name": "Calculator_InputParams_t",
+          "comment": "每通道 HRTIM 工作周期参数",
+          "fields": [
+            {"name": "start", "type": "uint16_t", "comment": "HRTIM 开始点"},
+            {"name": "end", "type": "uint16_t", "comment": "HRTIM 结束点"},
+            {"name": "highOn", "type": "uint16_t", "comment": "死区后高端开通 HRTIM 值"},
+            {"name": "highOff", "type": "uint16_t", "comment": "高端关闭 (DUTY PPG 占空比)"},
+            {"name": "lowOn", "type": "uint16_t", "comment": "死区后低端开通"},
+            {"name": "lowOff", "type": "uint16_t", "comment": "低端关闭 (prioed PPG 周期)"},
+            {"name": "zero_cross_high", "type": "uint16_t", "comment": "高端过零点索引"},
+            {"name": "zero_cross_low", "type": "uint16_t", "comment": "低端过零点索引"},
+            {"name": "perAdc", "type": "uint16_t", "comment": "每个 ADC 对应的 HRTIM 值"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "elec_params",
+      "name": "ElecParams",
+      "layer": "base_class",
+      "source_file": "BaseClass/src/elec_params.c",
+      "comment": "电参数计算 — 20ms 周期计算 I_peak/L/f_res/Q/R/P 等",
+      "types": []
+    },
+    {
+      "id": "ekf_lkf",
+      "name": "EKF_LKF",
+      "layer": "base_class",
+      "source_file": "BaseClass/src/ekf_lkf.c",
+      "comment": "扩展卡尔曼滤波观测器 — 从 ElecParams 读取观测值，估计 [R, L, f_res]",
+      "types": []
+    }
+  ],
+  "pipes": [
+    {
+      "id": "pipe_app_adc_app_power",
+      "from": "AppAdc",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "ADC → Power: 电压/电流/相位等功率控制参数",
+      "out_link": {"style": "array", "array_size": 4},
+      "in_link": {"style": "array", "array_size": 4},
+      "fields": [
+        {"name": "voltage", "type": "uint16_t", "comment": "母线电压 ADC"},
+        {"name": "current", "type": "uint16_t", "comment": "每炉头谐振电流 ADC"},
+        {"name": "igbt", "type": "uint16_t", "comment": "IGBT 温度 ADC"},
+        {"name": "bottom", "type": "uint16_t", "comment": "炉面温度 ADC"},
+        {"name": "phase", "type": "uint16_t", "comment": "每炉头相位 ADC"},
+        {"name": "res", "type": "uint16_t", "comment": "保留"}
+      ]
+    },
+    {
+      "id": "pipe_app_adc_calculator",
+      "from": "AppAdc",
+      "to": "Calculator",
+      "callback_type": "pull",
+      "comment": "ADC → Calculator: 谐振电流/HRTIM 时序原始数据",
+      "out_link": {"style": "pointer", "array_size": 0},
+      "in_link": {"style": "pointer", "array_size": 0},
+      "fields": [
+        {"name": "resonant_current", "type": "uint16_t**", "comment": "谐振电流 ADC 数组指针数组"},
+        {"name": "hrtim_values", "type": "uint16_t**", "comment": "HRTIM 时间戳数组指针数组"},
+        {"name": "voltage_data", "type": "uint16_t**", "comment": "母线电压数组指针数组"},
+        {"name": "input", "type": "AppAdc_OutputParams_t*", "comment": "每通道 HRTIM 工作周期参数"}
+      ]
+    },
+    {
+      "id": "pipe_calculator_elec_params",
+      "from": "Calculator",
+      "to": "ElecParams",
+      "callback_type": "pull",
+      "comment": "Calculator → ElecParams: 电流积分/电压/过零点等中间结果",
+      "out_link": {"style": "array", "array_size": 80},
+      "in_link": {"style": "array", "array_size": 80},
+      "fields": [
+        {"name": "hrtim_highOff", "type": "uint16_t", "comment": "上管关断 HRTIM 值"},
+        {"name": "hrtim_lowOff", "type": "uint16_t", "comment": "下管关断 HRTIM 值"},
+        {"name": "hrtim_highOn", "type": "uint16_t", "comment": "上管开通 HRTIM 值"},
+        {"name": "hrtim_lowOn", "type": "uint16_t", "comment": "下管开通 HRTIM 值"},
+        {"name": "peak_current", "type": "uint16_t", "comment": "峰值电流 ADC"},
+        {"name": "active_current_sum_high", "type": "uint32_t", "comment": "上管电流积分和"},
+        {"name": "active_current_sum_low", "type": "uint32_t", "comment": "下管电流积分和"},
+        {"name": "voltage_sum", "type": "uint32_t", "comment": "电压原始累加"},
+        {"name": "voltage_count", "type": "uint16_t", "comment": "电压累加计数"},
+        {"name": "zero_cross_high", "type": "uint16_t", "comment": "上管过零点"},
+        {"name": "zero_cross_low", "type": "uint16_t", "comment": "下管过零点"},
+        {"name": "peak_point", "type": "uint16_t", "comment": "峰值点 HRTIM 值"}
+      ]
+    },
+    {
+      "id": "pipe_calculator_app_adc",
+      "from": "Calculator",
+      "to": "AppAdc",
+      "callback_type": "pull",
+      "comment": "Calculator → AppAdc: 20ms 周期累积平均值 (谐振电流/电压/相位角)",
+      "out_link": {"style": "array", "array_size": 80},
+      "in_link": {"style": "array", "array_size": 80},
+      "fields": [
+        {"name": "resonant_current", "type": "int32_t", "comment": "谐振电流均值 (0.01A)"},
+        {"name": "voltage", "type": "int32_t", "comment": "母线电压均值 (0.01V)"},
+        {"name": "phase_angle", "type": "int32_t", "comment": "相位角 (0.01°)"}
+      ]
+    },
+    {
+      "id": "pipe_elec_params_ekf_lkf",
+      "from": "ElecParams",
+      "to": "EKF_LKF",
+      "callback_type": "pull",
+      "comment": "ElecParams → EKF: 电参数观测值",
+      "out_link": {"style": "array", "array_size": 4},
+      "in_link": {"style": "array", "array_size": 4},
+      "fields": [
+        {"name": "I_peak_A", "type": "float", "comment": "峰值电流 (A) — 中值滤波 + 权重修正后"},
+        {"name": "Vdc_mean", "type": "float", "comment": "母线电压均值 (V) — 20ms周期ADC值中值"},
+        {"name": "phi_deg", "type": "float", "comment": "相位角 (度) — 高电流周期平均"},
+        {"name": "f_sw_Hz", "type": "float", "comment": "开关频率 (Hz) — HRTIM_CLK/lowOff"},
+        {"name": "L_uH", "type": "float", "comment": "等效电感 (μH) — 基波等效电路法 + 权重修正"},
+        {"name": "f_res_kHz", "type": "float", "comment": "谐振频率 (kHz) — f_res = 1/(2π√(LC))"},
+        {"name": "Q_factor", "type": "float", "comment": "品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw)"},
+        {"name": "R_ohm", "type": "float", "comment": "等效电阻 (Ω) — R = ωL/Q"},
+        {"name": "I_rms", "type": "float", "comment": "电流有效值 (A) — I_rms = I_peak × √2/2"},
+        {"name": "P_W", "type": "float", "comment": "有功功率 (W) — P = median(I_active × Vdc)"},
+        {"name": "Z_mag_ohm", "type": "float", "comment": "阻抗模 (Ω) — Z = √(R² + X²)"},
+        {"name": "X_ohm", "type": "float", "comment": "净电抗 (Ω) — X = X_L - X_C"},
+        {"name": "valid", "type": "uint8_t", "comment": "计算有效性标志 — 1=有效, 0=无效"}
+      ]
+    },
+    {
+      "id": "pipe_ekf_lkf_app_power",
+      "from": "EKF_LKF",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "EKF → Power: 卡尔曼滤波后的负载参数 (R/L/f_res)",
+      "out_link": {"style": "array", "array_size": 4},
+      "in_link": {"style": "array", "array_size": 4},
+      "fields": [
+        {"name": "I_peak_A", "type": "int32_t", "comment": "峰值电流 (A) — 中值滤波 + 权重修正后"},
+        {"name": "Vdc_mean", "type": "int32_t", "comment": "母线电压均值 (V) — 20ms周期ADC值中值"},
+        {"name": "phi_deg", "type": "int32_t", "comment": "相位角 (度) — 高电流周期平均"},
+        {"name": "f_sw_Hz", "type": "int32_t", "comment": "开关频率 (Hz) — HRTIM_CLK/lowOff"},
+        {"name": "L_uH", "type": "int32_t", "comment": "等效电感 (μH) — 基波等效电路法 + 权重修正"},
+        {"name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (kHz) — f_res = 1/(2π√(LC))"},
+        {"name": "Q_factor", "type": "int32_t", "comment": "品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw)"},
+        {"name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (Ω) — R = ωL/Q"},
+        {"name": "I_rms", "type": "int32_t", "comment": "电流有效值 (A) — I_rms = I_peak × √2/2"},
+        {"name": "P_W", "type": "int32_t", "comment": "有功功率 (W) — P = median(I_active × Vdc)"},
+        {"name": "Z_mag_ohm", "type": "int32_t", "comment": "阻抗模 (Ω) — Z = √(R² + X²)"},
+        {"name": "X_ohm", "type": "int32_t", "comment": "净电抗 (Ω) — X = X_L - X_C"},
+        {"name": "valid", "type": "uint8_t", "comment": "计算有效性标志 — 1=有效, 0=无效"}
+      ]
+    }
+  ],
+  "slot_order": ["AppAdc", "AppPower", "Calculator", "ElecParams", "EKF_LKF"],
+  "slot_chains": [
+    {
+      "name": "Slot1",
+      "comment": "1ms 实时控制: AppAdc → AppPower",
+      "modules": ["AppAdc", "AppPower"]
+    },
+    {
+      "name": "TK",
+      "comment": "20ms 周期: Calculator → ElecParams → EKF_LKF",
+      "modules": ["Calculator", "ElecParams", "EKF_LKF"]
+    }
+  ]
+}

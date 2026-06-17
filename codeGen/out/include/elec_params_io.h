@@ -1,0 +1,93 @@
+/**
+ * @file    elec_params_io.h
+ * @brief   ElecParams Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   base_class
+ *
+ * 电参数计算 — 20ms 周期计算 I_peak/L/f_res/Q/R/P 等，输出到 AppPower 和 EKF_LKF
+ *
+ * 输入源:
+ *   Calculator → ElecParams  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
+ *
+ * 输出目标:
+ *   ElecParams → EKF_LKF  (ElecParams → EKF: 电参数观测值 (共享 ElecParams→AppPower 输出 LINK))
+ */
+
+#ifndef ELECPARAMS_IO_H
+#define ELECPARAMS_IO_H
+
+#include <stdint.h>
+#include "../src/RX32G410_FW_HAL_V1.3N/Projects/core/std_module.h"
+
+#pragma pack(4)
+
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * ElecParams → EKF_LKF  输出参数  (ElecParams → EKF: 电参数观测值 (共享 ElecParams→AppPower 输出 LINK))
+ * ------------------------------------------------------------------ */
+typedef struct {
+    int32_t I_peak_A;     /* 峰值电流 (0.01A) */
+    int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
+    int32_t phi_deg;     /* 相位角 (0.01°) */
+    int32_t L_uH;     /* 等效电感 (0.01μH) */
+    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+    uint8_t valid;     /* 数据有效性 */
+} MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) params[4];
+} MODULE_OUTPUT_LINK(ElecParams, EKF_LKF);
+
+/* ElecParams_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
+typedef struct {
+    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)  EKF_LKF_params;  /* → EKF_LKF */
+} MODULE_OUTPUT(ElecParams);
+
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * Calculator → ElecParams  输入参数  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint16_t hrtim_highOff;     /* 上管关断 HRTIM 值 */
+    uint16_t hrtim_lowOff;     /* 下管关断 HRTIM 值 */
+    uint16_t hrtim_highOn;     /* 上管开通 HRTIM 值 */
+    uint16_t hrtim_lowOn;     /* 下管开通 HRTIM 值 */
+    uint16_t peak_current;     /* 峰值电流 ADC */
+    uint32_t active_current_sum_high;     /* 上管电流积分和 */
+    uint32_t active_current_sum_low;     /* 下管电流积分和 */
+    uint32_t voltage_sum;     /* 电压原始累加 */
+    uint16_t voltage_count;     /* 电压累加计数 */
+    uint16_t zero_cross_high;     /* 上管过零点 */
+    uint16_t zero_cross_low;     /* 下管过零点 */
+    uint16_t peak_point;     /* 峰值点 HRTIM 值 */
+} MODULE_INPUT_PARAMS(Calculator, ElecParams);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
+    uint8_t  res[1];
+    MODULE_INPUT_PARAMS(Calculator, ElecParams) *params;
+} MODULE_INPUT_LINK(Calculator, ElecParams);
+
+/* ElecParams_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
+typedef struct {
+    MODULE_INPUT_LINK(Calculator, ElecParams) *Calculator_params;  /* 指向 Calculator 输出的 LINK 列 */
+} MODULE_INPUT(ElecParams);
+
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(ElecParams);
+
+#endif /* ELECPARAMS_IO_H */
