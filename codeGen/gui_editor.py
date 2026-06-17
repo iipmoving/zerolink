@@ -2050,7 +2050,8 @@ class ConfigEditor:
         """
         import subprocess as sp
         import traceback
-        from generate_project_json import find_keil_project, _find_claude_exe
+        from generate_project_json import find_keil_project
+        import shutil
 
         debug_log = os.path.join(os.path.abspath(output_root), "claude_debug.log")
         os.makedirs(os.path.dirname(debug_log), exist_ok=True)
@@ -2091,71 +2092,35 @@ KEIL 项目文件: {keil_path}
 - 完成后报告: 模块数、管道数、嵌套 struct 处理情况
 """
 
-            claude_cmd = _find_claude_exe()
+            claude_cmd = shutil.which("claude")
             if not claude_cmd:
-                _log(f"[ERROR] 未找到 claude 命令\n")
-                return
+                fallback = r'C:\Users\moving\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe'
+                claude_cmd = fallback if os.path.exists(fallback) else "claude"
 
-            _log(f"[INFO] 启动 Claude CLI (PIPE 模式 + dangerously-skip-permissions)...\n")
-            _log(f"[INFO] Claude 首次加载约需 10-15 秒（Node.js 启动）\n")
-            _log(f"[INFO] 输出将实时显示在此终端\n")
+            _log(f"[INFO] 启动 Claude CLI...\n")
+            _log(f"[INFO] Claude 将在新控制台窗口中启动，初始加载约需 10-15 秒（Node.js）\n")
+            _log(f"[INFO] 请在弹出的控制台窗口中观察扫描过程（Claude 会自动扫描完毕）。\n")
+            _log(f"[INFO] 完成后终端将自动检测到 project.json 并加载。\n")
+            _log(f"[INFO] 命令: {claude_cmd} -p ...\n")
             _log(f"[INFO] 项目目录: {abs_proj_dir}\n")
+            _log(f"[INFO] 输出目录: {abs_output_dir}\n")
             _log("=" * 60 + "\n")
 
-            # PIPE 模式 — --dangerously-skip-permissions 自动批准工具调用
+            # CREATE_NEW_CONSOLE — 创建独立窗口，TTY 正常，skill 可正常执行
             proc = sp.Popen(
-                [claude_cmd, "--dangerously-skip-permissions", "-p", prompt],
+                [claude_cmd, "-p", prompt],
                 cwd=abs_proj_dir,
-                stdout=sp.PIPE,
-                stderr=sp.STDOUT,
+                creationflags=sp.CREATE_NEW_CONSOLE,
             )
 
             _log(f"[INFO] Claude 进程已启动 (PID: {proc.pid})\n")
-            _log(f"[INFO] 等待 Claude 输出...\n\n")
-
-            # 后台线程：读取 stdout（Claude 批量模式无中间输出，完成后集中显示）
-            drain_done = threading.Event()
-            all_chunks = []
-
-            def drain():
-                try:
-                    while True:
-                        chunk = proc.stdout.read1(65536)
-                        if not chunk:
-                            break
-                        text = chunk.decode('utf-8', errors='replace')
-                        all_chunks.append(text)
-                        self._terminal_append(text)
-                except (ValueError, OSError):
-                    pass
-                except Exception:
-                    pass
-                finally:
-                    drain_done.set()
-
-            drain_thread = threading.Thread(target=drain, daemon=True)
-            drain_thread.start()
+            _log(f"[INFO] 查询等待 project.json ...\n")
 
             elapsed = 0
             max_wait = 600
-            last_size = [0]
-
             while elapsed < max_wait:
                 time.sleep(2)
                 elapsed += 2
-
-                # 检查文件大小变化
-                if os.path.exists(json_poll_path):
-                    try:
-                        size = os.path.getsize(json_poll_path)
-                        delta = size - last_size[0]
-                        last_size[0] = size
-                        if delta > 0:
-                            _log(f"[INFO] project.json 增大 {delta}B (总计 {size}B)\n")
-                    except:
-                        pass
-
-                # 尝试读取并验证 JSON
                 if os.path.exists(json_poll_path):
                     try:
                         with open(json_poll_path, "r", encoding="utf-8") as f:
@@ -2164,24 +2129,23 @@ KEIL 项目文件: {keil_path}
                         _log(f"[OK] 模块数: {len(data.get('modules', []))}\n")
                         _log(f"[OK] 管道数: {len(data.get('pipes', []))}\n")
                         # 复制到自定义输出目录
-                        custom_path = os.path.join(abs_output_dir, "project.json")
-                        os.makedirs(abs_output_dir, exist_ok=True)
-                        shutil.copy2(json_poll_path, custom_path)
-                        _log(f"[OK] 已复制到: {custom_path}\n")
-                        self.root.after(0, lambda d=data, jp=custom_path: self._load_and_show_success(d, jp))
+                        try:
+                            custom_path = os.path.join(abs_output_dir, "project.json")
+                            os.makedirs(abs_output_dir, exist_ok=True)
+                            shutil.copy2(json_poll_path, custom_path)
+                            _log(f"[OK] 已复制到: {custom_path}\n")
+                        except Exception as copy_err:
+                            _log(f"[WARN] 复制失败: {copy_err}\n")
+                        self.root.after(0, lambda d=data, jp=json_poll_path: self._load_and_show_success(d, jp))
                         return
                     except json.JSONDecodeError as e:
-                        _log(f"[INFO] JSON 尚未完成写入，继续等待...\n")
-
-                if elapsed % 30 == 0:
+                        _log(f"[WARN] JSON 格式错误: {e}\n")
+                        return
+                if elapsed % 20 == 0:
                     _log(f"  ... 已等待 {elapsed}s / {max_wait}s\n")
 
             _log(f"\n[ERROR] 等待超时 ({max_wait}s)\n")
-            try:
-                proc.kill()
-            except:
-                pass
-            drain_done.wait(timeout=5)
+            _log(f"[HINT] 请检查弹出的 Claude 窗口是否正常运行中\n")
 
         except Exception as e:
             _log(f"[ERROR] {e}\n")
