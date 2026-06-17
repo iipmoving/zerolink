@@ -482,5 +482,12 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
     // 更新状态 — 写输出 LINK status + 清除输入 LINK status
 //    out->AppPower_params.status |= ST_NEW;
 		out->EKF_LKF_params.status |= ST_NEW;
+
+    /* ---- 设置 Telemetry 输出管道指针 ---- */
+    for (uint8_t h = 0; h < ELEC_POTMAX; h++) {
+        out->Telemetry_params.params[h].calc_copy = &in->Calculator_params->params[h][PERIO_CNT];
+        out->Telemetry_params.params[h].elec_out  = &out->EKF_LKF_params.params[h];
+    }
+    out->Telemetry_params.status |= ST_NEW;
 }
 

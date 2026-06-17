@@ -19,6 +19,7 @@
 #include "../include_io/elec_params_io.h"
 //#include "../include_io/drv_hrtim_io.h"
 #include "../include_io/ekf_lkf_io.h"
+#include "../include_io/telemetry_io.h"
 
 /* ===== 模块槽位索引 (使用 SLOT 宏) ===== */
 typedef enum {
@@ -27,6 +28,7 @@ typedef enum {
     SLOT(Calculator) = 2,
     SLOT(ElecParams) = 3,
     SLOT(EKF_LKF) = 4,
+    SLOT(Telemetry) = 5,
     SLOT(COUNT)
 } SwitcherSlot_t;
 
@@ -43,6 +45,7 @@ void Switcher_Init(void)
 
     SLOT_GETIO(ElecParams);
     SLOT_GETIO(EKF_LKF);
+    SLOT_GETIO(Telemetry);
 }
 
 /* ================================================================
@@ -101,6 +104,11 @@ INPUT_CALLBACK(ElecParams)
     INPUT_GET_SLOT(Calculator, ElecParams);
 }
 
+INPUT_CALLBACK(Telemetry)
+{
+    INPUT_GET_SLOT(ElecParams, Telemetry);
+}
+
 /* ================================================================
  * Switcher_Slot_{Module} — 单模块独立执行
  * ================================================================ */
@@ -110,6 +118,7 @@ void Switcher_Slot_AppPower(void) { s_slot[SLOT_AppPower].pDoWork(); }
 void Switcher_Slot_Calculator(void) { s_slot[SLOT_Calculator].pDoWork(); }
 void Switcher_Slot_ElecParams(void) { s_slot[SLOT_ElecParams].pDoWork(); }
 void Switcher_Slot_EKF_LKF(void) { s_slot[SLOT_EKF_LKF].pDoWork(); }
+void Switcher_Slot_Telemetry(void) { s_slot[SLOT_Telemetry].pDoWork(); }
 
 /* ================================================================
  * Switcher_Run_All — 一次执行全部模块 (批量模式)
@@ -140,5 +149,6 @@ void Switcher_Run_TK(void)
     Switcher_Slot_Calculator();
     Switcher_Slot_ElecParams();
     Switcher_Slot_EKF_LKF();
+    Switcher_Slot_Telemetry();
 }
 

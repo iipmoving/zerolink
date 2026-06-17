@@ -54,17 +54,6 @@ typedef struct {
 } MODULE_OUTPUT_LINK(ElecParams, EKF_LKF);
 
 
-
-/* ElecParams_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
-typedef struct {
-    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)  EKF_LKF_params;  /* → EKF_LKF */
-    MODULE_OUTPUT_LINK(ElecParams, Telemetry) Telemetry_params;  /* → Telemetry */
-} MODULE_OUTPUT(ElecParams);
-
-/* ================================================================
- * INPUT — 本模块输入的数据管道
- * ================================================================ */
-
 /* ------------------------------------------------------------------
  * Calculator → ElecParams  输入参数  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
  * ------------------------------------------------------------------ */
@@ -82,6 +71,36 @@ typedef struct {
     uint16_t zero_cross_low;     /* 下管过零点 */
     uint16_t peak_point;     /* 峰值点 HRTIM 值 */
 } MODULE_INPUT_PARAMS(Calculator, ElecParams);
+
+
+
+
+
+/* ElecParams → Telemetry 输出 */
+typedef struct {
+    const MODULE_INPUT_PARAMS(Calculator, ElecParams) *calc_copy;   /* → Calculator 输入副本 */
+    MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF)         *elec_out;   /* → 原有 EKF_LKF 输出实例 */
+} MODULE_OUTPUT_PARAMS(ElecParams, Telemetry);
+
+typedef struct {
+    uint8_t  status;
+    uint8_t  max_count;
+    uint8_t  count;
+    uint8_t  res[1];
+    MODULE_OUTPUT_PARAMS(ElecParams, Telemetry) params[4];   /* 4炉头 */
+} MODULE_OUTPUT_LINK(ElecParams, Telemetry);
+
+/* ElecParams_Output — 输出聚合 */
+typedef struct {
+    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)         EKF_LKF_params;
+    MODULE_OUTPUT_LINK(ElecParams, Telemetry)       Telemetry_params;
+} MODULE_OUTPUT(ElecParams);
+
+/* ==========================================================================
+ * INPUT — 本模块输入的数据管道
+ * ========================================================================== */
+
+
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */

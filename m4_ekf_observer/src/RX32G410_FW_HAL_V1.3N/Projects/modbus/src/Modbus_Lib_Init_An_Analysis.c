@@ -9,11 +9,15 @@
 #include "API_UART.h"
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
 
+/* Telemetry 缓冲区 extern — 由 telemetry.c 提供 */
+extern void* Telemetry_GetBuffer(void);
+extern int  Telemetry_GetBufferSize(void);
+
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
 #define DF_Versions             1
 #define DF_MB_Uart_Rx_LONG      256   /* MODBUS RTU 最大帧 256B */
-#define DF_Modbus_AREA_COUNT    5   /* 区域数: 0x1000, 0x2000, 0x3000, 0x1020, 0x5000 */
+#define DF_Modbus_AREA_COUNT    6   /* 区域数: 0x1000, 0x2000, 0x3000, 0x1020, 0x5000, 0x7000 */
 #define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
 
 /* MODBUS 从机地址 */
@@ -387,6 +391,15 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][4].Check_Write_Data = NULL;
         s_areas[i][4].Data_Size       = sizeof(unsigned short);
         s_areas[i][4].Data_Pyte       = 0;
+
+        /* Area 5: 0x7000 Telemetry (只读) */
+        s_areas[i][5].Start_Address   = 0x7000;
+        s_areas[i][5].End_Address     = 0x7000 + 390;
+        s_areas[i][5].Data_ptr        = Telemetry_GetBuffer();
+        s_areas[i][5].Data_ptr_EEPROM = NULL;
+        s_areas[i][5].Check_Write_Data = NULL;
+        s_areas[i][5].Data_Size       = sizeof(unsigned short);
+        s_areas[i][5].Data_Pyte       = 0;
 
         /* PDU 配置 */
         s_pdu_cfg[i].Us_Cof_ARM_Num       = s_areas[i];

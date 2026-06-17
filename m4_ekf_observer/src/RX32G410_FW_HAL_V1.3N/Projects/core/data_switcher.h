@@ -80,5 +80,6 @@ void Switcher_Slot_AppPower(void);
 void Switcher_Slot_Calculator(void);
 void Switcher_Slot_ElecParams(void);
 void Switcher_Slot_EKF_LKF(void);
+void Switcher_Slot_Telemetry(void);
 
 #endif /* DATA_SWITCHER_H */
