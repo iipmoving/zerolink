@@ -380,7 +380,7 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     float f_res = (LC > 1e-20f)
         ? (1.0f / (2.0f * (float)M_PI * sqrtf(LC)))
         : result->f_sw_Hz;  // 异常时使用开关频率作为谐振频率
-    result->f_res_kHz = f_res / 1e3f;  // 转 kHz
+    result->f_res_kHz = f_res;  // 转 kHz
 
     // Q 值和等效电阻计算
     float omega_res = 2.0f * (float)M_PI * f_res;    // 谐振角频率
@@ -484,10 +484,8 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 		out->EKF_LKF_params.status |= ST_NEW;
 
     /* ---- 设置 Telemetry 输出管道指针 ---- */
-//    for (uint8_t h = 0; h < ELEC_POTMAX; h++) {
 
-        out->Telemetry_params  = &out->EKF_LKF_params;
-//    }
-//    out->Telemetry_params->status |= ST_NEW;
+        out->Telemetry_params= &out->EKF_LKF_params;
+
 }
 
