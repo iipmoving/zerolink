@@ -230,13 +230,8 @@ static void Init(void)
 MODULE_EXPORT({Module});
 
 /* ---- Consumer 回调: data_switcher.c 中覆盖强符号 (INPUT_CALLBACK 宏) ---- */
-INPUT_CALLBACK(ProducerA, {Module})
-{
-    /* 指针直穿: 将生产者 OUTPUT_LINK 地址赋给消费者 INPUT_LINK 指针
-     * 两类型布局一致但 C 类型不同, 用 (void*) 跨类型转换, 零拷贝
-     * 展开后: in->ProducerA_params = (void*)&out->{Module}_params */
-    INPUT_GET_SLOT(ProducerA, {Module});
-}
+/* ⚠️ 注意: INPUT_CALLBACK 只在 data_switcher.c 中写, 不在模块 .c 中写 */
+/* 模块 .c 中只需写 MODULE_SKELETON + ProcessInput + MODULE_EXPORT */
 ```
 
 ### 关键规则
@@ -247,7 +242,7 @@ INPUT_CALLBACK(ProducerA, {Module})
 | `Init()` | 初始化 `s_in`/`s_out`，绑定 `g_input.para`/`g_output.para` |
 | `ProcessInput()` | 三段式：检查 ST_NEW → 消费输入 → 计算 → 写输出 |
 | `MODULE_EXPORT({Module})` | 文件底部调用，生成 `GetIO` (不生成 __weak OnOutput) |
-| `INPUT_CALLBACK(Producer, {Module})` + `INPUT_GET_SLOT(Producer, {Module})` | 每个数据源一个 consumer 回调，INPUT_CALLBACK 生成函数名，INPUT_GET_SLOT 指针直穿（将生产者 OUTPUT_LINK 地址赋给消费者 INPUT_LINK 指针，零拷贝）|
+| `INPUT_CALLBACK({Module})` + `INPUT_GET_SLOT(ProducerA, {Module})` | **仅在 data_switcher.c 中写**。一个 consumer 一个回调，内部放多个 INPUT_GET_SLOT。INPUT_GET_SLOT 指针直穿（将生产者 OUTPUT_LINK 地址赋给消费者 INPUT_LINK 指针，零拷贝）|
 
 ### 状态位 (`core/std_module.h`)
 
