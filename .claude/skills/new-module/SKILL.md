@@ -1,6 +1,6 @@
 ---
 name: new-module
-description: "Interactive wizard to create a new module using std_module.h — data structs + MODULE_SKELETON + ProcessInput + Init + MODULE_EXPORT. Triggers on: new module, add module, create module, new-module, 新增模块, 新建模块, 添加模块."
+description: "Interactive wizard to create a new module using std_module.h — data structs + MODULE_SKELETON + ProcessInput + Init + MODULE_EXPORT. Also handles AI interface maintenance workflow (scan → JSON → GUI → generate). Triggers on: new module, add module, create module, new-module, 新增模块, 新建模块, 添加模块, update-json, 更新JSON, 接口维护."
 user-invocable: true
 ---
 
@@ -328,3 +328,81 @@ python ../.claude/tools/check_output_callback.py .
 5. `check_output_callback.py` 验证通过
 
 **无标记的输出回调 → check_output_callback.py 阻断提交。**
+
+---
+
+## Step 5: AI 接口维护工作流 (JSON 驱动)
+
+**核心原则**: `JSON/project.json` 是接口权威数据源。AI 修改接口 → 改 JSON → GUI 确认 → 再生成代码。
+
+### 5.1 扫描确认
+
+当用户说"新增/修改接口"或"程序已改 JSON 没更新"时：
+
+```bash
+# 扫描源码 → 生成 JSON 到 {项目}/JSON/project.json
+python codeGen/scan_project.py <项目路径> [--name <项目名>] [--json-dir <自定义JSON目录>]
+```
+
+输出:
+```
+[OK] project.json 已生成: m4_ekf_observer/src/.../Projects/JSON/project.json
+     模块数: 6
+     管道数: 9
+```
+
+### 5.2 GUI 确认
+
+打开 GUI 让用户确认扫描结果：
+```bash
+python codeGen/gui_editor.py
+```
+
+GUI 中：
+- 左侧模块列表 → 查看各模块管道
+- 中间字段详情 → 核对 fields/in_fields/link dims
+- 右侧 diff → 对比生成 io.h 与实际 io.h
+
+### 5.3 AI 修改 JSON
+
+用户在 GUI 中确认后，AI 直接编辑 `JSON/project.json`：
+- 添加/删除管道
+- 修改 fields 顺序/类型
+- 调整 link style/dims
+
+**不需要生成代码**，只维护 JSON。
+
+### 5.4 重新生成
+
+JSON 修改完成后：
+```bash
+# 从 JSON 生成所有代码
+python codeGen/code_gen.py gen --config <JSON/project.json> --output <output_root>
+```
+
+### 5.5 临时提交 vs 正式提交
+
+| 类型 | 命令 | 说明 |
+|------|------|------|
+| 临时保存 | `git commit --no-verify -m "TEMP: 扫描确认 JSON 结构"` | 跳过检查，仅保存进度 |
+| 正式提交 | `git commit -m "feat: xxx"` | 运行 pre-commit 检查 |
+
+**标记规范**: 提交信息开头标注版本类型
+- `TEMP:` — 临时保存，未完成的工作
+- `WIP:` — 工作进行中
+- 无前缀 — 正式提交，通过检查
+
+---
+
+## /update-json — 更新 JSON 工作流
+
+触发条件: 用户说"更新 JSON"、"JSON 没同步"、"程序改了 JSON 没改"。
+
+```
+1. python codeGen/scan_project.py <项目路径> [--name <项目名>]
+2. 打开 GUI: python codeGen/gui_editor.py
+3. 用户确认差异 → AI 编辑 JSON/project.json
+4. python codeGen/code_gen.py gen --config <JSON/project.json> --output <output_root>
+5. 验证: 对比生成文件与实际文件
+6. 正式提交
+```
