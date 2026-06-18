@@ -10,7 +10,8 @@
  *
  * 输出目标:
  *   Calculator → ElecParams  (Calculator → ElecParams: 电流积分/电压/过零点等中间结果)
- *   Calculator → AppPower  (Calculator → AppPower: 20ms 周期累积平均值 (谐振电流/电压/相位角))
+ *   Calculator → AppAdc  (Calculator → AppAdc: 20ms 周期累积平均值 (谐振电流/电压/相位角))
+ *   Calculator → Telemetry  (Calculator → Telemetry: 转发 Calculator 输入副本)
  */
 
 #ifndef CALCULATOR_IO_H
@@ -68,13 +69,22 @@ typedef struct {
 } MODULE_OUTPUT_LINK(Calculator, ElecParams);
 
 /* ------------------------------------------------------------------
- * Calculator → AppPower  输出参数  (Calculator → AppPower: 20ms 周期累积平均值 (谐振电流/电压/相位角))
+ * Calculator → Telemetry  输出参数  (转发 Calculator 输入副本)
+ * ------------------------------------------------------------------ */
+/* 直接重命名 OUTPUT_PARAMS，不复述成员 */
+typedef MODULE_OUTPUT_PARAMS(Calculator, ElecParams) MODULE_OUTPUT_PARAMS(Calculator, Telemetry);
+
+/* 直接重命名 OUTPUT_LINK，不复述成员 */
+typedef MODULE_OUTPUT_LINK(Calculator, ElecParams) MODULE_OUTPUT_LINK(Calculator, Telemetry);
+
+/* ------------------------------------------------------------------
+ * Calculator → AppAdc  输出参数  (Calculator → AppAdc: 20ms 周期累积平均值 (谐振电流/电压/相位角))
  * ------------------------------------------------------------------ */
 typedef struct {
     int32_t resonant_current;     /* 谐振电流均值 (0.01A) */
     int32_t voltage;     /* 母线电压均值 (0.01V) */
     int32_t phase_angle;     /* 相位角 (0.01°) */
-		
+
 } MODULE_OUTPUT_PARAMS(Calculator, AppAdc);
 
 typedef struct {
@@ -88,7 +98,8 @@ typedef struct {
 /* Calculator_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
     MODULE_OUTPUT_LINK(Calculator, ElecParams)  ElecParams_params;  /* → ElecParams */
-    MODULE_OUTPUT_LINK(Calculator, AppAdc)  AppAdc_params;  /* → AppAdc */
+    MODULE_OUTPUT_LINK(Calculator, AppAdc)      AppAdc_params;      /* → AppAdc */
+    MODULE_OUTPUT_LINK(Calculator, Telemetry)  *Telemetry_params;   /* → Telemetry (指针转发) */
 } MODULE_OUTPUT(Calculator);
 
 /* ================================================================
@@ -124,4 +135,3 @@ typedef struct {
 MODULE_IO_H(Calculator);
 
 #endif /* CALCULATOR_IO_H */
-

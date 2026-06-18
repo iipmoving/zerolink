@@ -484,10 +484,10 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 		out->EKF_LKF_params.status |= ST_NEW;
 
     /* ---- 设置 Telemetry 输出管道指针 ---- */
-    for (uint8_t h = 0; h < ELEC_POTMAX; h++) {
-        out->Telemetry_params.params[h].calc_copy = &in->Calculator_params->params[h][PERIO_CNT];
-        out->Telemetry_params.params[h].elec_out  = &out->EKF_LKF_params.params[h];
-    }
-    out->Telemetry_params.status |= ST_NEW;
+//    for (uint8_t h = 0; h < ELEC_POTMAX; h++) {
+
+        out->Telemetry_params  = &out->EKF_LKF_params;
+//    }
+//    out->Telemetry_params->status |= ST_NEW;
 }
 

@@ -106,6 +106,7 @@ INPUT_CALLBACK(ElecParams)
 
 INPUT_CALLBACK(Telemetry)
 {
+    INPUT_GET_SLOT(Calculator, Telemetry);
     INPUT_GET_SLOT(ElecParams, Telemetry);
 }
 

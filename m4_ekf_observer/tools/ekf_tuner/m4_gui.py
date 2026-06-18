@@ -13,6 +13,7 @@ M4 半桥电磁炉 — MODBUS 调试界面
 
 import sys
 import os
+import csv
 import json
 import time
 import tkinter as tk
@@ -25,7 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from m4_modbus_tool import (
     M4ModbusClient, DataLogger, READ_REGS, EKF_REGS,
-    READ_START_ADDR, READ_COUNT, EKF_START_ADDR, EKF_COUNT
+    READ_START_ADDR, READ_COUNT, EKF_START_ADDR, EKF_COUNT,
+    TELEM_START_ADDR, TELEM_TOTAL_WORDS
 )
 
 try:
@@ -317,6 +319,9 @@ class M4DebugApp:
         self._csv_fields = ["timestamp", "freq_hz", "phase_deg",
                            "delta_ppg_signed", "power_actual", "power_target"]
 
+        # 遥测数据流验证
+        self._telem_data = None
+
         # 遥测行组件引用
         self.reg_rows = {}      # name → RegisterRow (标准)
         self.ekf_rows = {}      # name → RegisterRow (EKF)
@@ -369,6 +374,9 @@ class M4DebugApp:
 
         # 底部控制栏
         self._build_control_bar(main)
+
+        # 数据流验证 tab
+        self._build_telem_tab(main)
 
         # 状态栏
         self._build_statusbar()
@@ -472,6 +480,13 @@ class M4DebugApp:
                                   activebackground=BORDER, relief=tk.FLAT,
                                   cursor="hand2", state=tk.DISABLED, width=7)
         self.cap_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.telem_btn = tk.Button(bar, text="📡 Telem",
+                                   command=self._read_telemetry,
+                                   bg=BORDER, fg=FG, font=("Consolas", 9),
+                                   activebackground=BORDER, relief=tk.FLAT,
+                                   cursor="hand2", state=tk.DISABLED, width=8)
+        self.telem_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
     def _build_savepath_row(self):
         """文件保存路径设置行"""
@@ -585,6 +600,149 @@ class M4DebugApp:
                 self._ekf_computed[key] = val_lbl
 
         return panel
+
+    def _build_telem_tab(self, parent):
+        """数据流验证面板 — Calculator 20周期 + ElecParams float + CSV保存"""
+        tab = tk.Frame(parent, bg=BG2)
+        tab.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        tab.pack_propagate(False)
+        tab.configure(height=340)
+
+        inner = tk.Frame(tab, bg=BG2)
+        inner.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
+
+        # ---- 顶部工具栏 ----
+        toolbar = tk.Frame(inner, bg=BG2)
+        toolbar.pack(fill=tk.X, pady=(0, 4))
+
+        tk.Label(toolbar, text="数据流验证 0x7000", bg=BG2, fg=ACCENT,
+                font=("Consolas", 9, "bold")).pack(side=tk.LEFT)
+
+        self.telem_read_btn = tk.Button(toolbar, text="📡 读取遥测",
+                                        command=self._read_telemetry,
+                                        bg=BORDER, fg=FG, font=("Consolas", 8, "bold"),
+                                        activebackground=BORDER, relief=tk.FLAT,
+                                        cursor="hand2", state=tk.DISABLED, width=12)
+        self.telem_read_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.telem_save_btn = tk.Button(toolbar, text="💾 保存CSV",
+                                        command=self._save_telem_csv,
+                                        bg=BORDER, fg=FG, font=("Consolas", 8, "bold"),
+                                        activebackground=BORDER, relief=tk.FLAT,
+                                        cursor="hand2", state=tk.DISABLED, width=10)
+        self.telem_save_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.telem_status_lbl = tk.Label(toolbar, text="就绪", bg=BG2, fg=DIM,
+                                         font=("Consolas", 8))
+        self.telem_status_lbl.pack(side=tk.RIGHT, padx=(8, 0))
+
+        # ---- 分隔 ----
+        sep = tk.Frame(inner, height=1, bg=BORDER)
+        sep.pack(fill=tk.X, pady=(2, 4))
+
+        # ---- 左侧: Calculator 20周期表格 ----
+        left = tk.Frame(inner, bg=BG2)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
+
+        tk.Label(left, text="Calculator 输入 (20周期)", bg=BG2, fg=YELLOW,
+                font=("Consolas", 8, "bold")).pack(fill=tk.X, pady=(0, 2))
+
+        calc_canvas = tk.Canvas(left, bg=BG2, highlightthickness=0,
+                                yscrollcommand=lambda s, e: self.telem_calc_scroll.config(command=s))
+        calc_scroll = ttk.Scrollbar(left, orient=tk.VERTICAL, command=calc_canvas.yview)
+        self.telem_calc_frame = tk.Frame(calc_canvas, bg=BG2)
+
+        self.telem_calc_frame.bind("<Configure>",
+            lambda e: calc_canvas.configure(scrollregion=calc_canvas.bbox("all")))
+        calc_canvas.create_window((0, 0), window=self.telem_calc_frame, anchor="nw")
+        calc_canvas.configure(yscrollcommand=lambda s, e: calc_scroll.config(command=s))
+
+        calc_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        calc_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def _on_mousewheel(event):
+            calc_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        calc_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # 表头
+        calc_hdr = tk.Frame(self.telem_calc_frame, bg=BG2)
+        calc_hdr.pack(fill=tk.X, padx=2, pady=(2, 0))
+        for text, w in [("Idx", 3), ("hOff", 5), ("lOff", 5), ("hOn", 5), ("lOn", 5),
+                         ("Ipk", 5), ("vc", 4), ("zcH", 5), ("zcL", 5), ("pp", 4),
+                         ("actH", 5), ("actL", 5), ("vSum", 5)]:
+            tk.Label(calc_hdr, text=text, width=w, bg=BG2, fg=DIM,
+                    font=("Consolas", 7)).pack(side=tk.LEFT, padx=(0, 1))
+
+        # 20行占位
+        self.telem_calc_rows = []
+        for i in range(20):
+            row = tk.Frame(calc_hdr, bg=BG2)
+            row.pack(fill=tk.X, pady=0)
+            vals = []
+            for _j in range(13):
+                v = tk.Label(row, text="--", width=5, bg=BG2, fg=FG,
+                            font=("Consolas", 7))
+                v.pack(side=tk.LEFT, padx=(0, 1))
+                vals.append(v)
+            self.telem_calc_rows.append(vals)
+
+        # ---- 右侧: ElecParams 浮点值 ----
+        right = tk.Frame(inner, bg=BG2)
+        right.pack(side=tk.RIGHT, fill=tk.Y, padx=(4, 0))
+
+        tk.Label(right, text="ElecParams 输出 (float)", bg=BG2, fg=YELLOW,
+                font=("Consolas", 8, "bold")).pack(fill=tk.X, pady=(0, 2))
+
+        ep_canvas = tk.Canvas(right, bg=BG2, highlightthickness=0, height=240, width=200)
+        ep_scroll = ttk.Scrollbar(right, orient=tk.VERTICAL, command=ep_canvas.yview)
+        ep_frame = tk.Frame(ep_canvas, bg=BG2)
+
+        ep_frame.bind("<Configure>",
+            lambda e: ep_canvas.configure(scrollregion=ep_canvas.bbox("all")))
+        ep_canvas.create_window((0, 0), window=ep_frame, anchor="nw")
+        ep_canvas.configure(yscrollcommand=ep_scroll.set)
+
+        ep_canvas.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+        ep_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        float_names = [
+            ("I_peak_A", "A"), ("Vdc_mean", "V"), ("phi_deg", "°"),
+            ("f_sw_Hz", "Hz"), ("L_uH", "μH"), ("f_res_kHz", "kHz"),
+            ("Q_factor", ""), ("R_ohm", "Ω"), ("I_rms", "A"),
+            ("P_W", "W"), ("Z_mag_ohm", "Ω"), ("X_ohm", "Ω"),
+        ]
+        self.telem_ep_labels = []
+        for name, unit in float_names:
+            fr = tk.Frame(ep_frame, bg=BG2)
+            fr.pack(fill=tk.X, pady=1)
+            tk.Label(fr, text=name, width=11, bg=BG2, fg=ACCENT,
+                    font=("Consolas", 7), anchor="w").pack(side=tk.LEFT)
+            vl = tk.Label(fr, text="--", width=9, bg=BG2, fg=GREEN,
+                         font=("Consolas", 7, "bold"), anchor="e")
+            vl.pack(side=tk.LEFT)
+            tk.Label(fr, text=unit, width=4, bg=BG2, fg=DIM,
+                    font=("Consolas", 7), anchor="w").pack(side=tk.LEFT)
+            self.telem_ep_labels.append(vl)
+
+        # valid 行
+        fr = tk.Frame(ep_frame, bg=BG2)
+        fr.pack(fill=tk.X, pady=1)
+        tk.Label(fr, text="valid", width=11, bg=BG2, fg=ACCENT,
+                font=("Consolas", 7), anchor="w").pack(side=tk.LEFT)
+        vl = tk.Label(fr, text="--", width=9, bg=BG2, fg=YELLOW,
+                     font=("Consolas", 7, "bold"), anchor="e")
+        vl.pack(side=tk.LEFT)
+        self.telem_ep_labels.append(vl)
+
+        # status 行
+        fr = tk.Frame(ep_frame, bg=BG2)
+        fr.pack(fill=tk.X, pady=1)
+        tk.Label(fr, text="status", width=11, bg=BG2, fg=ACCENT,
+                font=("Consolas", 7), anchor="w").pack(side=tk.LEFT)
+        vl = tk.Label(fr, text="--", width=9, bg=BG2, fg=YELLOW,
+                     font=("Consolas", 7, "bold"), anchor="e")
+        vl.pack(side=tk.LEFT)
+        self.telem_ep_labels.append(vl)
 
     def _build_control_bar(self, parent):
         """功率控制栏"""
@@ -1051,6 +1209,7 @@ class M4DebugApp:
         self.off_btn.configure(state=state)
         self.power_slider.configure(state=state)
         self.cap_btn.configure(state=state)
+        self.telem_btn.configure(state=state)
         for btn in getattr(self, '_quick_btns', []):
             btn.configure(state=state)
 
@@ -1081,8 +1240,6 @@ class M4DebugApp:
 
     def _read_capture(self):
         """按 Capture 按钮: 读取 0x5000 区 + 保存 CSV"""
-        import csv
-        import os
         if not self.client:
             self._set_status("未连接")
             return
@@ -1235,6 +1392,15 @@ class M4DebugApp:
         # 清除 init 条目
         for info in self._init_entries.values():
             info["var"].set("--")
+        # 清除 Telemetry 显示
+        self._telem_data = None
+        self.telem_save_btn.configure(state=tk.DISABLED)
+        self.telem_status_lbl.configure(text="就绪", fg=DIM)
+        for row in self.telem_calc_rows:
+            for lbl in row:
+                lbl.configure(text="--")
+        for lbl in self.telem_ep_labels:
+            lbl.configure(text="--")
 
     # ---- 监视模式 ----------------------------------------------
 
@@ -1400,6 +1566,115 @@ class M4DebugApp:
             self._set_status(f"已保存 {len(self._records)} 条 → {os.path.basename(filepath)}")
         else:
             self._set_status("记录已停止 (无数据)")
+
+    # ---- Telemetry 数据流验证 -------------------------------------------
+
+    def _read_telemetry(self):
+        """读取 0x7000 Telemetry 数据并刷新显示"""
+        if not self.client:
+            return
+        self._set_status("读取 Telemetry 0x7000...")
+        self.root.update()
+
+        telem = self.client.read_telemetry_pipe()
+        if telem is None:
+            self._set_status("读取 Telemetry 失败")
+            return
+
+        self._telem_data = telem
+
+        # 更新 Calculator 20周期表格
+        for p, cp in enumerate(telem["calc_periods"]):
+            row = self.telem_calc_rows[p]
+            row[0].configure(text=str(p))
+            row[1].configure(text=str(cp.get("hrtim_highOff", 0)))
+            row[2].configure(text=str(cp.get("hrtim_lowOff", 0)))
+            row[3].configure(text=str(cp.get("hrtim_highOn", 0)))
+            row[4].configure(text=str(cp.get("hrtim_lowOn", 0)))
+            row[5].configure(text=str(cp.get("peak_current", 0)))
+            row[6].configure(text=str(cp.get("voltage_count", 0)))
+            row[7].configure(text=str(cp.get("zero_cross_high", 0)))
+            row[8].configure(text=str(cp.get("zero_cross_low", 0)))
+            row[9].configure(text=str(cp.get("peak_point", 0)))
+            row[10].configure(text=str(cp.get("act_curr_high", 0)))
+            row[11].configure(text=str(cp.get("act_curr_low", 0)))
+            row[12].configure(text=str(cp.get("volt_sum", 0)))
+
+        # 更新 ElecParams 浮点值
+        elec = telem.get("elec", {})
+        ep_keys = ["I_peak_A", "Vdc_mean", "phi_deg", "f_sw_Hz",
+                    "L_uH", "f_res_kHz", "Q_factor", "R_ohm",
+                    "I_rms", "P_W", "Z_mag_ohm", "X_ohm"]
+        for i, key in enumerate(ep_keys):
+            val = elec.get(key, 0)
+            if isinstance(val, float):
+                if abs(val) < 10:
+                    self.telem_ep_labels[i].configure(text=f"{val:.4f}")
+                elif abs(val) < 1000:
+                    self.telem_ep_labels[i].configure(text=f"{val:.2f}")
+                else:
+                    self.telem_ep_labels[i].configure(text=f"{val:.1f}")
+            else:
+                self.telem_ep_labels[i].configure(text=str(val))
+
+        # valid
+        self.telem_ep_labels[12].configure(text=str(elec.get("valid", 0)))
+        # status
+        st = telem.get("status", 0)
+        flags = []
+        if st & 0x01: flags.append("RUN")
+        if st & 0x02: flags.append("CALC")
+        if st & 0x04: flags.append("ELEC")
+        self.telem_ep_labels[13].configure(text=f"0x{st:02X} {' '.join(flags)}")
+
+        self.telem_save_btn.configure(state=tk.NORMAL)
+        self.telem_status_lbl.configure(text="OK", fg=GREEN)
+        self._set_status(
+            f"Telemetry 读取完成 @ {telem.get('timestamp', '?')}")
+
+    def _save_telem_csv(self):
+        """保存 Telemetry 数据到 CSV"""
+        if not self._telem_data:
+            messagebox.showwarning("提示", "暂无数据，请先读取遥测")
+            return
+
+        filename = f"telem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filepath = self._get_save_path(filename)
+
+        calc_periods = self._telem_data.get("calc_periods", [])
+        elec = self._telem_data.get("elec", {})
+
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+
+            # 头部信息
+            writer.writerow(["Telemetry 数据流验证"])
+            writer.writerow(["时间戳", self._telem_data.get("timestamp", "")])
+            writer.writerow(["控制", f"start={self._telem_data.get('ctrl_start', 0)} "
+                                     f"status=0x{self._telem_data.get('status', 0):02X}"])
+            writer.writerow([])
+
+            # Calculator 20周期表头
+            calc_headers = ["period", "hrtim_highOff", "hrtim_lowOff",
+                           "hrtim_highOn", "hrtim_lowOn", "peak_current",
+                           "act_curr_high", "act_curr_low", "volt_sum",
+                           "voltage_count", "zero_cross_high", "zero_cross_low",
+                           "peak_point"]
+            writer.writerow(["=== Calculator 输入副本 (20周期) ==="])
+            writer.writerow(calc_headers)
+            for cp in calc_periods:
+                writer.writerow([cp.get(k, 0) for k in calc_headers])
+
+            writer.writerow([])
+
+            # ElecParams 输出
+            writer.writerow(["=== ElecParams 输出 (float) ==="])
+            ep_items = list(elec.items())
+            writer.writerow([name for name, _ in ep_items])
+            writer.writerow([val for _, val in ep_items])
+
+        self._set_status(f"已保存 → {os.path.basename(filepath)}")
+        messagebox.showinfo("保存成功", f"数据已保存到:\n{filepath}")
 
     # ---- 工具方法 ----------------------------------------------
 
