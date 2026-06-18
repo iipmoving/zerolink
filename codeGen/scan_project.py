@@ -586,21 +586,45 @@ def scan_project(proj_dir, keil_path=None, proj_name=None,
 def main():
     import sys
     if len(sys.argv) < 2:
-        print("用法: python scan_project.py <项目路径> [--name <项目名称>] [--keil <uvprojx路径>]")
+        print("用法: python scan_project.py <项目路径> [--name <项目名称>] [--keil <uvprojx路径>] [--json-dir <JSON目录>]")
+        print("  --json-dir  指定 project.json 输出目录 (默认: 与 include_io 同层的 JSON/)")
         sys.exit(1)
 
     proj_dir = sys.argv[1]
     proj_name = None
     keil_path = None
+    json_dir = None
     if '--name' in sys.argv:
         idx = sys.argv.index('--name')
         proj_name = sys.argv[idx + 1]
     if '--keil' in sys.argv:
         idx = sys.argv.index('--keil')
         keil_path = sys.argv[idx + 1]
+    if '--json-dir' in sys.argv:
+        idx = sys.argv.index('--json-dir')
+        json_dir = sys.argv[idx + 1]
 
     data = scan_project(proj_dir, keil_path, proj_name)
-    out_path = os.path.join(proj_dir, 'codeGen', 'out', data['project']['name'], 'project.json')
+
+    # 确定 project.json 输出路径
+    if json_dir:
+        # 用户指定目录
+        out_path = os.path.join(json_dir, 'project.json')
+    else:
+        # 默认: 在 proj_dir 下找 include_io 目录，与其同层创建 JSON/
+        include_io_dir = None
+        for sub in ['include_io', 'include']:
+            p = os.path.join(proj_dir, sub)
+            if os.path.isdir(p):
+                include_io_dir = p
+                break
+        if include_io_dir:
+            # 与 include_io 同层的 JSON/
+            out_path = os.path.join(os.path.dirname(include_io_dir), 'JSON', 'project.json')
+        else:
+            # 退化: 放 proj_dir/JSON/
+            out_path = os.path.join(proj_dir, 'JSON', 'project.json')
+
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
