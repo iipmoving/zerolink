@@ -208,21 +208,23 @@ Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 =
 
 ### 4.2 InputCallback 宏
 
-`data_switcher.h` 提供三个宏，覆盖所有 InputCallback 模式：
+`data_switcher.h` 提供以下宏，覆盖所有 InputCallback 模式：
 
 ```c
-/* 函数壳: INPUT_CALLBACK(Calculator, ElecParams) { ... }
- * 展开: void ElecParams_InputCallback(void) { ... } */
-#define INPUT_CALLBACK(producer, consumer) \
+/* 函数壳: INPUT_CALLBACK(Telemetry) { ... }
+ * 展开: void Telemetry_InputCallback(void) { ... }
+ * 参数: 仅 consumer 名 — 一个 consumer 一个回调函数 */
+#define INPUT_CALLBACK(consumer) \
     void consumer##_InputCallback(void)
 
-/* 取 slot 指针 + 直穿: 检查放 ProcessInput */
+/* 取 slot 指针 + 直穿: 检查放 ProcessInput
+ * 参数: producer, consumer */
 #define INPUT_GET_SLOT(producer, consumer) \
-    MODULE_OUTPUT(producer) *out = \
+    MODULE_OUTPUT(producer) *__out = \
         (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
-    MODULE_INPUT(consumer)   *in  = \
+    MODULE_INPUT(consumer)   *__in  = \
         (MODULE_INPUT(consumer)   *)s_slot[SLOT(consumer)].pIn->para; \
-    in->producer##_params = (void*)&out->consumer##_params
+    __in->producer##_params = (void*)&__out->consumer##_params
 
 /* 单管道直穿+回调内检查 (ST_NEW 触发) */
 #define INPUT_LINK_PULL(producer, consumer, link_member) \
@@ -252,16 +254,19 @@ Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 =
     } while (0)
 ```
 
-### 4.3 三种 InputCallback 写法
+### 4.3 InputCallback 写法
 
 **写法 A — 单管道直穿 (推荐, 检查放 ProcessInput):**
+
 ```c
-INPUT_CALLBACK(Calculator, ElecParams)
+INPUT_CALLBACK(ElecParams)
 {
     INPUT_GET_SLOT(Calculator, ElecParams);
 }
 ```
+
 展开:
+
 ```c
 void ElecParams_InputCallback(void) {
     Calculator_Output *out = (Calculator_Output *)...;
@@ -270,28 +275,23 @@ void ElecParams_InputCallback(void) {
 }
 ```
 
-**写法 B — 多管道组合 (一个回调连接多个数据源):**
-```c
-INPUT_CALLBACK(Calculator, PowerBase)
-{
-    /* 自定义逻辑 */
-    memcpy(...);
+**写法 B — 多管道组合 (一个回调接收多个数据源):**
 
+```c
+INPUT_CALLBACK(Telemetry)
+{
     /* 从 Calculator 直穿拉数据 */
-    INPUT_GET_SLOT(Calculator, PowerBase);
+    INPUT_GET_SLOT(Calculator, Telemetry);
 
     /* 从 ElecParams 直穿拉数据 */
-    ElecParams_Output *ep_out = (ElecParams_Output *)s_slot[SLOT_ElecParams].pOut->para;
-    PowerBase_Input *pwr_in = (PowerBase_Input *)s_slot[SLOT_APP_Power].pIn->para;
-    pwr_in->Calculator_params = (void*)&ep_out->{Consumer}_params;
-
-    s_slot[SLOT_APP_Power].pIn->info.status |= ST_NEW;
+    INPUT_GET_SLOT(ElecParams, Telemetry);
 }
 ```
 
 **写法 C — 管道直穿+回调内检查 (INPUT_LINK_PULL):**
+
 ```c
-INPUT_CALLBACK(Calculator, ElecParams)
+INPUT_CALLBACK(ElecParams)
 {
     INPUT_LINK_PULL(Calculator, ElecParams, ElecParams_params);
 }
@@ -303,7 +303,7 @@ INPUT_CALLBACK(Calculator, ElecParams)
 模块名 = "ElecParams" 的实例:
 
 Module.DoWork:
-  ① ElecParams_InputCallback()    ← INPUT_CALLBACK(Calculator, ElecParams) 宏展开
+  ① ElecParams_InputCallback()    ← INPUT_CALLBACK(ElecParams) 宏展开
       └─ INPUT_GET_SLOT(Calculator, ElecParams)
          └─ in->Calculator_params = (void*)&out->ElecParams_params
             └─ 指针直穿, 零拷贝, 别名 = Calculator 的 ElecParams_params LINK
@@ -314,9 +314,10 @@ Module.DoWork:
      └─ 输出段: 写 out->PowerBase_params / {Consumer}_params.status |= ST_OUT
 ```
 
-**关键**:
+**关键:**
 - **单向调用原则**: 模块不定义 `__weak` 输出给其他 APP 模块, 只写 `g_output.para`
 - **InputCallback 是数据入口单点**: INPUT_GET_SLOT 直穿赋值, 零拷贝
+- **INPUT_CALLBACK(consumer)**: 一个 consumer 一个回调函数, 内部放多个 INPUT_GET_SLOT
 - **OutputCallback 是例外**: 仅即时场景（蜂鸣器反馈等）使用, 一般不用
 
 ---

@@ -404,7 +404,7 @@ static void ProcessInput(void)
 文件:       include/module_a_io.h   module_a.h   module_a.c
 类型:       ModuleA_InData_t        ModuleA_OutData_t
 函数:       ModuleA_GetIO()         ModuleA_DoWork()
-InputCallback 宏:  INPUT_CALLBACK(Producer, Consumer)   → 展开 Consumer_InputCallback
+InputCallback 宏:  INPUT_CALLBACK(Consumer)   → 展开 Consumer_InputCallback
 InputCallback 槽:  INPUT_GET_SLOT(Producer, Consumer)   → in->Producer_params = &out->Consumer_params
 变量:       g_input                 g_output
 槽位枚举:   SLOT(ModuleName)         — 宏定义槽位，与模块名对齐
@@ -426,7 +426,7 @@ Consumer 输入 LINK 成员名:  {Producer}_params     (in->Calculator_params)
 
 | 宏 | 参数 | 检查点 | 展开内容 |
 |----|------|--------|---------|
-| `INPUT_CALLBACK(producer, consumer)` | 2 | — | `void consumer_InputCallback(void)` |
+| `INPUT_CALLBACK(consumer)` | 1 | — | `void consumer_InputCallback(void)` |
 | `INPUT_GET_SLOT(producer, consumer)` | 2 | ProcessInput | 取 slot 指针 + 直穿赋值 |
 | `INPUT_LINK_PULL(producer, consumer, member)` | 3 | 回调内 | 直穿 + null/ST_NEW 检查 |
 | `INPUT_EDGE_PULL(producer, consumer, member)` | 3 | 回调内 | 直穿 + ST_OUT 边沿 + 自动清除 |
