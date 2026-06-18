@@ -168,8 +168,8 @@ def main():
 
     # --gen 模式
     p_gen = sub.add_parser("gen", help="完整 JSON → 生成代码")
-    p_gen.add_argument("--config", "-c", required=True, help="项目 JSON 配置")
-    p_gen.add_argument("--output", "-o", default="./out", help="输出根目录")
+    p_gen.add_argument("--config", "-c", required=True, help="项目 JSON 配置 (JSON/project.json)")
+    p_gen.add_argument("--output", "-o", default=".", help="输出根目录 (项目 src/ 根, io.h 写入 include_io/)")
     p_gen.add_argument("--only-io", action="store_true", help="仅生成 io.h")
     p_gen.add_argument("--only-switcher", action="store_true", help="仅生成 data_switcher.c")
     p_gen.add_argument("--only-modules", action="store_true", help="仅生成模块 .c/.h")

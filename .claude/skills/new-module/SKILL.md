@@ -333,20 +333,26 @@ python ../.claude/tools/check_output_callback.py .
 
 ## Step 5: AI 接口维护工作流 (JSON 驱动)
 
-**核心原则**: `JSON/project.json` 是接口权威数据源。AI 修改接口 → 改 JSON → GUI 确认 → 再生成代码。
+**双向维护数据源**:
+```
+src/JSON/project.json    ← 接口权威数据源 (AI 修改这里)
+src/include_io/*_io.h    ← 模块接口定义 (自动生成)
+```
+
+**核心原则**: `JSON/project.json` 是唯一数据源。AI 修改接口 → 改 JSON → GUI 确认 → 生成代码覆盖 include_io/。
 
 ### 5.1 扫描确认
 
 当用户说"新增/修改接口"或"程序已改 JSON 没更新"时：
 
 ```bash
-# 扫描源码 → 生成 JSON 到 {项目}/JSON/project.json
-python codeGen/scan_project.py <项目路径> [--name <项目名>] [--json-dir <自定义JSON目录>]
+# 扫描 include_io/ → 写入 JSON/project.json
+python codeGen/scan_project.py <项目路径> [--name <项目名>]
 ```
 
 输出:
 ```
-[OK] project.json 已生成: m4_ekf_observer/src/.../Projects/JSON/project.json
+[OK] project.json 已生成: <项目>/JSON/project.json
      模块数: 6
      管道数: 9
 ```
@@ -376,8 +382,8 @@ GUI 中：
 
 JSON 修改完成后：
 ```bash
-# 从 JSON 生成所有代码
-python codeGen/code_gen.py gen --config <JSON/project.json> --output <output_root>
+# 从 JSON 生成所有代码 (覆盖 include_io/ 和 src/)
+python codeGen/code_gen.py gen --config <项目>/JSON/project.json --output <项目>/src
 ```
 
 ### 5.5 临时提交 vs 正式提交
@@ -399,10 +405,10 @@ python codeGen/code_gen.py gen --config <JSON/project.json> --output <output_roo
 触发条件: 用户说"更新 JSON"、"JSON 没同步"、"程序改了 JSON 没改"。
 
 ```
-1. python codeGen/scan_project.py <项目路径> [--name <项目名>]
-2. 打开 GUI: python codeGen/gui_editor.py
-3. 用户确认差异 → AI 编辑 JSON/project.json
-4. python codeGen/code_gen.py gen --config <JSON/project.json> --output <output_root>
+1. python codeGen/scan_project.py <项目路径>
+2. python codeGen/gui_editor.py (用户确认)
+3. AI 编辑 JSON/project.json
+4. python codeGen/code_gen.py gen --config <项目>/JSON/project.json --output <项目>/src
 5. 验证: 对比生成文件与实际文件
 6. 正式提交
 ```
