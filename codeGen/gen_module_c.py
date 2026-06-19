@@ -85,6 +85,31 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append(f"static MODULE_OUTPUT({mod_name})  s_outPara;   // 输出参数缓冲区")
     lines.append("")
 
+    # ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ----
+    if out_pipes:
+        lines.append("/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */")
+        for pipe in out_pipes:
+            c_name = pipe["to"]
+            lines.append(f"static MODULE_OUTPUT_LINK({mod_name}, {c_name})  s_{mod_name}To{c_name}Link;")
+        lines.append("")
+
+    # Init — 绑定指钺
+    lines.append("/* ---- 初始化 ---- */")
+    lines.append("static void Init(void)")
+    lines.append("{")
+    lines.append(f"    memset(&s_outPara, 0, sizeof(s_outPara));")
+    if out_pipes:
+        lines.append("")
+        lines.append("    /* 绑定 OUTPUT_LINK 指钺 */")
+        for pipe in out_pipes:
+            c_name = pipe["to"]
+            lines.append(f"    s_outPara.{c_name}_params = &s_{mod_name}To{c_name}Link;")
+    lines.append("")
+    lines.append(f"    g_input.para  = &s_inPara;")
+    lines.append(f"    g_output.para = &s_outPara;")
+    lines.append("}")
+    lines.append("")
+
     # user_Process 前向声明 — 统一签名, NULL 由用户内部处理
     lines.append(f"static void user_Process(MODULE_INPUT({mod_name}) *in, MODULE_OUTPUT({mod_name}) *out, {mod_name}_PipeFlags_t flags);")
     lines.append("")

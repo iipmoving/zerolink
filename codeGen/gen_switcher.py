@@ -66,11 +66,11 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
     lines.append("")
 
     # 生成 SLOT 枚举
-    lines.append("/* ===== 模块槽位索引 (使用 SLOT 宏) ===== */")
+    lines.append("/* ===== 模块槽位索引 ===== */")
     lines.append("typedef enum {")
     for i, s in enumerate(slot_order):
-        lines.append(f"    SLOT({s}) = {i},")
-    lines.append("    SLOT(COUNT)")
+        lines.append(f"    SLOT_{s} = {i},")
+    lines.append("    SLOT_COUNT")
     lines.append("} SwitcherSlot_t;")
     lines.append("")
 
@@ -132,8 +132,8 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
                 if fields:
                     for fi, f in enumerate(fields):
                         fname = f["name"]
-                        lines.append(f"        in->{from_name}_params.params[0].{fname} = out->{consumer_name}_params.params[0].{fname};")
-                    lines.append(f"        in->{from_name}_params.status |= ST_NEW;")
+                        lines.append(f"        in->{from_name}_params->params[0].{fname} = out->{consumer_name}_params->params[0].{fname};")
+                    lines.append(f"        in->{from_name}_params->status |= ST_NEW;")
                 else:
                     lines.append("        /* TODO: 填写逐字段搬运 */")
                 lines.append("    }")

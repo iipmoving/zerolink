@@ -383,8 +383,7 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
         lines.append(f"typedef struct {{")
         for pipe in out_pipes:
             c_name = pipe["to"]
-            suffix = "*" if pipe.get("alias_of") else ""
-            lines.append(f"    MODULE_OUTPUT_LINK({mod_name}, {c_name}) {suffix}{c_name}_params;  /* → {c_name} */")
+            lines.append(f"    MODULE_OUTPUT_LINK({mod_name}, {c_name}) *{c_name}_params;  /* → {c_name} */")
         lines.append(f"}} MODULE_OUTPUT({mod_name});")
     else:
         lines.append("")
