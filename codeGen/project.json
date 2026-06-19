@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.3",
+  "schema_version": "2.4",
 
   "project": {
     "name": "m4_ekf_observer",
@@ -54,11 +54,25 @@
       "comment": "扩展卡尔曼滤波观测器 — 从 ElecParams 读取观测值，估计 [R, L, f_res]"
     },
     {
+      "id": "telemetry",
+      "name": "Telemetry",
+      "layer": "base_class",
+      "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/BaseClass/src/telemetry.c",
+      "comment": "数据流遥测 — 从 ElecParams 捕获 Calculator 输入副本 + 电参数输出，映射到 MODBUS Area 5"
+    },
+    {
       "id": "drvhrtim",
       "name": "DrvHrtim",
       "layer": "base_class",
       "source_file": "src/RX32G410_FW_HAL_V1.3N/Projects/DRV/SRC/drv_hrtim.c",
       "comment": "HRTIM 驱动 — 功率命令下发到硬件，反馈硬件状态"
+    },
+    {
+      "id": "appcommmgr",
+      "name": "AppCommMgr",
+      "layer": "app",
+      "source_file": "",
+      "comment": "通信管理 — 预留"
     }
   ],
 
@@ -145,7 +159,7 @@
         { "name": "Vdc_mean", "type": "int32_t", "comment": "母线电压均值 (0.01V)" },
         { "name": "phi_deg", "type": "int32_t", "comment": "相位角 (0.01°)" },
         { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
-        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "f_res_Hz", "type": "int32_t", "comment": "谐振频率 (0.01Hz)" },
         { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
         { "name": "f_sw_Hz", "type": "int32_t", "comment": "开关频率 (0.01Hz)" },
         { "name": "P_W", "type": "int32_t", "comment": "有功功率 (0.01W)" },
@@ -166,7 +180,7 @@
         { "name": "Vdc_mean", "type": "int32_t", "comment": "母线电压均值 (0.01V)" },
         { "name": "phi_deg", "type": "int32_t", "comment": "相位角 (0.01°)" },
         { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
-        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "f_res_Hz", "type": "int32_t", "comment": "谐振频率 (0.01Hz)" },
         { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
         { "name": "f_sw_Hz", "type": "int32_t", "comment": "开关频率 (0.01Hz)" },
         { "name": "P_W", "type": "int32_t", "comment": "有功功率 (0.01W)" },
@@ -187,7 +201,7 @@
       "fields": [
         { "name": "R_ohm", "type": "int32_t", "comment": "等效电阻 (0.01Ω)" },
         { "name": "L_uH", "type": "int32_t", "comment": "等效电感 (0.01μH)" },
-        { "name": "f_res_kHz", "type": "int32_t", "comment": "谐振频率 (0.01kHz)" },
+        { "name": "f_res_Hz", "type": "int32_t", "comment": "谐振频率 (0.01Hz)" },
         { "name": "Q_factor", "type": "int32_t", "comment": "品质因数 (0.01)" },
         { "name": "valid", "type": "uint8_t", "comment": "数据有效性" }
       ]
