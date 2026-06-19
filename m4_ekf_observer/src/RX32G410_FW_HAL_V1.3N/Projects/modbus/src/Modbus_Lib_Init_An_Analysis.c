@@ -9,9 +9,8 @@
 #include "API_UART.h"
 #include "../../../../../app/ekf/modbus_ekf_regs.h"
 
-/* Telemetry 缓冲区 extern — 由 telemetry.c 提供 */
+/* Telemetry 缓冲区 extern — 由 BaseClass/telemetry.c 提供 */
 extern void* Telemetry_GetBuffer(void);
-extern int  Telemetry_GetBufferSize(void);
 
 /* ========== 常量 ===================================================== */
 #define DF_Stove_Quantity       4
@@ -19,6 +18,7 @@ extern int  Telemetry_GetBufferSize(void);
 #define DF_MB_Uart_Rx_LONG      256   /* MODBUS RTU 最大帧 256B */
 #define DF_Modbus_AREA_COUNT    6   /* 区域数: 0x1000, 0x2000, 0x3000, 0x1020, 0x5000, 0x7000 */
 #define WAVE_FRAME_WORDS    (6 + 4000)   /* header(6w) + data(4000w) */
+#define TELEM_TOTAL_WORDS   330   /* 4 ctrl + 20×15 calc + 26 elec */
 
 /* MODBUS 从机地址 */
 static const unsigned char s_slave_addrs[DF_Stove_Quantity] = {0x05, 10, 15, 20};
@@ -387,6 +387,7 @@ static void Modbus_Cofg_Init_SET(void)
         s_areas[i][4].Start_Address   = 0x5000;
         s_areas[i][4].End_Address     = 0x5000 + WAVE_FRAME_WORDS;
         s_areas[i][4].Data_ptr        = wave_FramePtr;
+
         s_areas[i][4].Data_ptr_EEPROM = NULL;
         s_areas[i][4].Check_Write_Data = NULL;
         s_areas[i][4].Data_Size       = sizeof(unsigned short);
@@ -394,8 +395,14 @@ static void Modbus_Cofg_Init_SET(void)
 
         /* Area 5: 0x7000 Telemetry (只读) */
         s_areas[i][5].Start_Address   = 0x7000;
-        s_areas[i][5].End_Address     = 0x7000 + 390;
+        s_areas[i][5].End_Address     = 0x7000 + TELEM_TOTAL_WORDS;
         s_areas[i][5].Data_ptr        = Telemetry_GetBuffer();
+				
+				uint16_t * p=Telemetry_GetBuffer();
+				p[0] = 0x1234;
+        p[1] = 0x5678;
+        p[2] = 0x9124;
+				
         s_areas[i][5].Data_ptr_EEPROM = NULL;
         s_areas[i][5].Check_Write_Data = NULL;
         s_areas[i][5].Data_Size       = sizeof(unsigned short);

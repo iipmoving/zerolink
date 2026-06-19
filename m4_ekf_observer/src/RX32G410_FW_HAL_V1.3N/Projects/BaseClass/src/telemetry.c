@@ -16,7 +16,7 @@
  * ========================================================================== */
 #define TELE_CALC_PERIODS 20
 #define TELE_POTCH         0    /* 选择监听的炉头 (0-3) */
-#define TELE_CALC_WORDS    16   /* 每周期 32 字节 = 16 uint16 (pack(4)) */
+#define TELE_CALC_WORDS    15   /* 每周期 30 字节 = 15 uint16 (pack(4)) */
 #define TELE_ELEC_WORDS    26   /* 12 float(24 uint16) + valid(2 uint16) */
 #define TELE_TOTAL_WORDS   (4 + TELE_CALC_PERIODS * TELE_CALC_WORDS + TELE_ELEC_WORDS)
 
@@ -32,8 +32,7 @@ typedef struct {
 typedef struct {
     TelemCtrl_t                          ctrl;
     MODULE_INPUT_PARAMS(Calculator, Telemetry) calc[TELE_CALC_PERIODS];
-    float                              elec[12];  /* 12 float = 24 uint16 */
-    uint16_t                           elec_valid;
+    MODULE_INPUT_PARAMS(ElecParams, Telemetry) elec;  /* 26 words: 12 float + valid + res[3] */
 } TelemetryData_t;
 
 /* ==========================================================================
@@ -66,7 +65,6 @@ static void ProcessInput(void)
 
     /* ---- 复制 Calculator 输入副本 (20周期, 仅炉头 TELE_POTCH) ---- */
     if (in->Calculator_params && (in->Calculator_params->status & ST_NEW)) {
-        in->Calculator_params->status &= ~ST_NEW;
         for (uint8_t c = 0; c < TELE_CALC_PERIODS; c++) {
             td->calc[c] = in->Calculator_params->params[TELE_POTCH][c];
         }
@@ -76,8 +74,7 @@ static void ProcessInput(void)
     /* ---- 复制 ElecParams 输出 (仅炉头 TELE_POTCH) ---- */
     if (in->ElecParams_params && (in->ElecParams_params->status & ST_NEW)) {
         in->ElecParams_params->status &= ~ST_NEW;
-        memcpy(td->elec, &in->ElecParams_params->params[TELE_POTCH], 12 * sizeof(float));
-        td->elec_valid = in->ElecParams_params->params[TELE_POTCH].valid;
+        memcpy(&td->elec, &in->ElecParams_params->params[TELE_POTCH], sizeof(td->elec));
         td->ctrl.status |= 0x04;  /* elec_ready */
     }
 
