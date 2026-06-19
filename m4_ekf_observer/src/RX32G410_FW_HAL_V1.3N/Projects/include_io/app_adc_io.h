@@ -83,7 +83,7 @@ typedef struct {
 /* AppAdc_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
     MODULE_OUTPUT_LINK(AppAdc, AppPower)  *AppPower_params;  /* → AppPower */
-    MODULE_OUTPUT_LINK(AppAdc, Calculator)  Calculator_params;  /* → Calculator */
+    MODULE_OUTPUT_LINK(AppAdc, Calculator) *Calculator_params;  /* → Calculator */
 } MODULE_OUTPUT(AppAdc);
 
 /* ========== INPUT (无) — 本模块没有输入 ========== */

@@ -15,6 +15,10 @@ typedef union {
 static MODULE_INPUT(AppAdc)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(AppAdc)   s_outPara;   // 输出参数缓冲区
 
+/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+static MODULE_OUTPUT_LINK(AppAdc, AppPower)     s_appPowerLink;
+static MODULE_OUTPUT_LINK(AppAdc, Calculator)   s_calcLink;
+
 static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -283,14 +287,18 @@ static void Init(void)
 {
     memset(&AdcFunRam,         0, sizeof(AdcFunRam));
     memset(&AdcFromApiDma20ms, 0, sizeof(AdcFromApiDma20ms));
-	
-//		s_outPara.AppPower_params.params=(MODULE_OUTPUT_PARAMS(AppAdc, AppPower)*)&AdcFunRam.inputValue;//输出缓存地址
-		s_outPara.Calculator_params.params=(MODULE_OUTPUT_PARAMS(AppAdc, Calculator)*)&AdcFunRam.inputValue;//输出缓存地址
-		s_outPara.Calculator_params.max_count=20;
-	
-			s_outPara.AppPower_params.res[0]=6;						//CONST_OUT ADC_TO_APPPOWER
-			s_outPara.Calculator_params.res[0]=7;					//CONST_OUT ADC_TO_CACL
-	
+
+	/* 绑定 OUTPUT_LINK 指钺 */
+	s_outPara.AppPower_params   = &s_appPowerLink;
+	s_outPara.Calculator_params = &s_calcLink;
+
+//		s_outPara.AppPower_params->params=(MODULE_OUTPUT_PARAMS(AppAdc, AppPower)*)&AdcFunRam.inputValue;//输出缓存地址
+		s_outPara.Calculator_params->params=(MODULE_OUTPUT_PARAMS(AppAdc, Calculator)*)&AdcFunRam.inputValue;//输出缓存地址
+		s_outPara.Calculator_params->max_count=20;
+
+			s_outPara.AppPower_params->res[0]=6;						//CONST_OUT ADC_TO_APPPOWER
+			s_outPara.Calculator_params->res[0]=7;					//CONST_OUT ADC_TO_CACL
+
 //    s_out.pBlock    = (ADC_INPUT_DEF*)&AdcFunRam.inputValue;
     g_input.para    = &s_inPara;
     g_output.para   = &s_outPara;				//直接用指针传递， 在中间层转移
@@ -333,8 +341,8 @@ void		AppAdc_getCaculatorValue(MODULE_INPUT(AppAdc) *in)
 static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t flags)
 {
 
-    out->AppPower_params.status &= ~ST_NEW;        //每次 都需要清除输出标志位
-    out->Calculator_params.status &= ~ST_NEW;        //每次 都需要清除输出标志位
+    out->AppPower_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
+    out->Calculator_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
 	
 			if(in->Calculator_params->status&ST_NEW)
 		{
@@ -348,7 +356,7 @@ static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, A
     uint8_t new_data = AdcValueFun();
     if (!new_data)
         return;
-		out->AppPower_params.status |= ST_NEW;				//输出数据有效
+		out->AppPower_params->status |= ST_NEW;				//输出数据有效
 }
 
 /* ================================================================
@@ -633,11 +641,11 @@ void		AppAdc_setPowerOutValue(void)
 
 	for(uint8_t ch=0;ch<ADC_POTMAX;ch++)
 	{
-		s_outPara.AppPower_params.params[ch].igbt= AdcInputValue[AdcGroupIgbt1+ch];
-		s_outPara.AppPower_params.params[ch].bottom= AdcInputValue[AdcGroupBottom1+ch];	
-		s_outPara.AppPower_params.params[ch].current= AdcInputValue[AdcGroupT1A+ch];	
-		s_outPara.AppPower_params.params[ch].voltage= AdcInputValue[AdcGroupVoltage];	
-		s_outPara.AppPower_params.params[ch].phase= AdcInputValue[AdcGroupPhase1+ch];	
+		s_outPara.AppPower_params->params[ch].igbt= AdcInputValue[AdcGroupIgbt1+ch];
+		s_outPara.AppPower_params->params[ch].bottom= AdcInputValue[AdcGroupBottom1+ch];	
+		s_outPara.AppPower_params->params[ch].current= AdcInputValue[AdcGroupT1A+ch];	
+		s_outPara.AppPower_params->params[ch].voltage= AdcInputValue[AdcGroupVoltage];	
+		s_outPara.AppPower_params->params[ch].phase= AdcInputValue[AdcGroupPhase1+ch];	
 
 		
 	}
@@ -1609,14 +1617,14 @@ void APP_ADC_CalculatePower(void)
         TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
         uint8_t count = AdcFromApiDma20ms.count - 1;
 
-				s_outPara.Calculator_params.count=count;
+				s_outPara.Calculator_params->count=count;
 				
-				s_outPara.Calculator_params.status=ST_NEW;
+				s_outPara.Calculator_params->status=ST_NEW;
 				
-				s_outPara.Calculator_params.params->hrtim_values=TxaHrtimBuff;
-				s_outPara.Calculator_params.params->resonant_current=TxaFmacBuff;
-				s_outPara.Calculator_params.params->voltage_data=TxaVcBuff;
-				s_outPara.Calculator_params.params->input=inputArray;
+				s_outPara.Calculator_params->params->hrtim_values=TxaHrtimBuff;
+				s_outPara.Calculator_params->params->resonant_current=TxaFmacBuff;
+				s_outPara.Calculator_params->params->voltage_data=TxaVcBuff;
+				s_outPara.Calculator_params->params->input=inputArray;
 
 
 			
