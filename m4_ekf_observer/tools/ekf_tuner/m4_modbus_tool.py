@@ -69,18 +69,19 @@ READ_START_ADDR = 0x1000
 READ_COUNT = len(READ_REGS)  # 21 registers
 READ_POLL_COUNT = 9  # 常用轮询区: 0x1000-0x1008 共9个寄存器
 
-# --- EKF 遥测寄存器: 0x1020-0x1029 (独立节点, 新增) ---
+# --- EKF 遥测寄存器: 0x1020-0x1029 (10 regs) ---
+# 频率: uint16 存 Hz 整数; 其他: uint16 存 0.1 单位
 EKF_REGS = OrderedDict([
-    (0x1020, ("phase_01deg",  "0.1°",  1,    "相位角 (0.1°单位, int16)")),
-    (0x1021, ("freq_hz_hi",   "raw",   1,    "频率高字 (uint32 Hz)")),
-    (0x1022, ("freq_hz_lo",   "raw",   1,    "频率低字")),
-    (0x1023, ("res_cur_adc",  "raw",   1,    "谐振电流 ADC")),
-    (0x1024, ("ppg_period",   "raw",   1,    "HRTIM 周期 prioed")),
-    (0x1025, ("ppg_duty",     "raw",   1,    "HRTIM 占空比")),
-    (0x1026, ("delta_ppg",    "raw",   1,    "PID 增量 (int16)")),
-    (0x1027, ("ekf_res1",     "raw",   1,    "保留")),
-    (0x1028, ("ekf_res2",     "raw",   1,    "保留")),
-    (0x1029, ("ekf_res3",     "raw",   1,    "保留")),
+    (0x1020, ("phi_deg_x10",    "°",     0.1,  "相位角 (0.1°)")),
+    (0x1021, ("f_sw_hz",        "Hz",    1.0,  "开关频率 (Hz)")),
+    (0x1022, ("i_peak_ax10",    "A",     0.1,  "峰值电流 (0.1A)")),
+    (0x1023, ("l_uh_x10",       "μH",    0.1,  "等效电感 (0.1μH)")),
+    (0x1024, ("r_ohm_x10",      "Ω",     0.1,  "等效电阻 (0.1Ω)")),
+    (0x1025, ("f_res_hz",       "Hz",    1.0,  "谐振频率 (Hz)")),
+    (0x1026, ("vdc_mean_v_x10", "V",     0.1,  "母线电压 (0.1V)")),
+    (0x1027, ("p_w_x10",        "W",     0.1,  "有功功率 (0.1W)")),
+    (0x1028, ("i_rms_ax10",     "A",     0.1,  "电流有效值 (0.1A)")),
+    (0x1029, ("z_ohm_x10",      "Ω",     0.1,  "阻抗模 (0.1Ω)")),
 ])
 EKF_START_ADDR = 0x1020
 EKF_COUNT = len(EKF_REGS)
@@ -93,11 +94,11 @@ CAPTURE_FRAME_WORDS = CAPTURE_HEADER_WORDS + CAPTURE_MAX_DATA_WORDS
 
 # --- Telemetry 0x7000 区: Calculator→ElecParams 数据流 ---
 TELEM_START_ADDR = 0x7000
-TELEM_TOTAL_WORDS = 390  # 4 ctrl + 20×18 calc + 26 elec
+TELEM_TOTAL_WORDS = 330  # 4 ctrl + 20×15 calc + 26 elec (pack(4): 15 uint16/period)
 TELEM_CTRL_WORDS = 4
 TELEM_CALC_PERIODS = 20
-TELEM_CALC_WORDS = 18
-TELEM_ELEC_WORDS = 26  # 12 float (24 words) + valid (2 words)
+TELEM_CALC_WORDS = 15   # 30 bytes/period under pack(4): 11×uint16 + 3×uint32
+TELEM_ELEC_WORDS = 26   # 12 float (24 words) + valid(1) + res(1) = 26
 
 # --- 可读写控制寄存器: 0x2000-0x2014 ---
 WRITE_REGS = {
@@ -356,23 +357,9 @@ class M4ModbusClient:
         result = {"timestamp": datetime.now().isoformat(timespec='milliseconds')}
         for i, (addr, (name, unit, scale, _desc)) in enumerate(EKF_REGS.items()):
             raw_val = raw[i]
+            result[name] = raw_val
+            result[f"{name}_raw"] = raw_val
             result[name] = raw_val * scale
-        # 解析频率: uint32 = hi<<16 | lo
-        freq_hi = result.get("freq_hz_hi", 0)
-        freq_lo = result.get("freq_hz_lo", 0)
-        result["freq_hz"] = (freq_hi << 16) | freq_lo
-        # 解析相位 (int16)
-        phase_raw = result.get("phase_01deg", 0)
-        if phase_raw > 32767:
-            result["phase_deg"] = (phase_raw - 65536) / 10.0
-        else:
-            result["phase_deg"] = phase_raw / 10.0
-        # 解析 PID 增量 (int16)
-        delta_raw = result.get("delta_ppg", 0)
-        if delta_raw > 32767:
-            result["delta_ppg_signed"] = delta_raw - 65536
-        else:
-            result["delta_ppg_signed"] = delta_raw
         return result
 
     def read_telemetry_pipe(self) -> dict | None:
@@ -409,7 +396,7 @@ class M4ModbusClient:
             calc_periods.append(period)
         result["calc_periods"] = calc_periods
 
-        # ElecParams: 12 float → 从 raw[4 + 360] 开始, 每float=2words
+        # ElecParams: 12 float → 从 raw[4 + 300] 开始, 每float=2words
         ep_base = TELEM_CTRL_WORDS + TELEM_CALC_PERIODS * TELEM_CALC_WORDS
         float_names = [
             "I_peak_A", "Vdc_mean", "phi_deg", "f_sw_Hz",
@@ -423,7 +410,7 @@ class M4ModbusClient:
             uint32_val = w1 << 16 | w0
             bytes_val = struct.pack('<I', uint32_val)
             elec[name] = struct.unpack('<f', bytes_val)[0]
-        elec["valid"] = raw[ep_base + 24]
+        elec["valid"] = raw[ep_base + 24] & 0xFF  # only low byte is 'valid'
         result["elec"] = elec
 
         return result
@@ -751,12 +738,9 @@ def interactive_mode(client: M4ModbusClient):
             if ekf:
                 print(f"\n  === EKF 遥测 @ {ekf['timestamp']} ===")
                 for addr, (name, unit, _scale, desc) in EKF_REGS.items():
-                    val = ekf.get(name, 0)
-                    print(f"  0x{addr:04X} {name:16s} = {val:5d} ({unit:4s}) | {desc}")
-                print(f"  --- 解析值 ---")
-                print(f"  freq_hz          = {ekf.get('freq_hz', 0)} Hz")
-                print(f"  phase_deg        = {ekf.get('phase_deg', 0):.1f} °")
-                print(f"  delta_ppg_signed = {ekf.get('delta_ppg_signed', 0)}")
+                    raw_val = ekf.get(f"{name}_raw", 0)
+                    disp_val = ekf.get(name, 0)
+                    print(f"  0x{addr:04X} {name:16s} = {raw_val:5d} ({disp_val:8.2f} {unit:4s}) | {desc}")
 
         elif parts[0] == 'telem':
             telem = client.read_telemetry_pipe()
@@ -860,19 +844,19 @@ def interactive_mode(client: M4ModbusClient):
                         vol = data.get("vol_ad", 0)
                         cur = data.get("cur_ad", 0)
                         fault = data.get("fault_code", 0)
-                        freq_hz = ekf.get("freq_hz", 0) if ekf else 0
-                        phase_deg = ekf.get("phase_deg", 0) if ekf else 0
-                        delta = ekf.get("delta_ppg_signed", 0) if ekf else 0
+                        freq_khz = ekf.get("freq_khz_x100", 0) * 0.01 if ekf else 0
+                        phase_deg = ekf.get("phi_deg_x100", 0) * 0.01 if ekf else 0
+                        delta = ekf.get("q_factor_x100", 0) * 0.01 if ekf else 0
 
                         sys.stdout.write(
                             f"\r  P={power:5.0f}W | V_ad={vol:3d} I_ad={cur:3d} | "
-                            f"f={freq_hz:5.0f}Hz ph={phase_deg:5.1f}° "
-                            f"dPPG={delta:+4d} | fault={fault:#04X}  "
+                            f"f={freq_khz:5.2f}kHz ph={phase_deg:5.2f}° "
+                            f"Q={delta:5.2f} | fault={fault:#04X}  "
                         )
                         sys.stdout.flush()
 
                         if plotter:
-                            plotter.feed(power_w=power, freq_hz=freq_hz,
+                            plotter.feed(power_w=power, freq_hz=freq_khz*1000,
                                         phase_deg=phase_deg, delta_ppg=delta)
                             plotter.update_plot()
 
@@ -1016,12 +1000,9 @@ def main():
                 if ekf:
                     print(f"\n=== EKF 遥测 @ {ekf['timestamp']} ===")
                     for addr, (name, unit, _scale, desc) in EKF_REGS.items():
-                        val = ekf.get(name, 0)
-                        print(f"  0x{addr:04X} {name:16s} = {val:5d} ({unit:4s}) | {desc}")
-                    print(f"  --- 解析值 ---")
-                    print(f"  freq_hz         = {ekf.get('freq_hz', 0)} Hz")
-                    print(f"  phase_deg       = {ekf.get('phase_deg', 0):.1f} °")
-                    print(f"  delta_ppg_signed= {ekf.get('delta_ppg_signed', 0)}")
+                        raw_val = ekf.get(f"{name}_raw", 0)
+                        disp_val = ekf.get(name, 0)
+                        print(f"  0x{addr:04X} {name:16s} = {raw_val:5d} ({disp_val:8.2f} {unit:4s}) | {desc}")
             elif args.read_telem:
                 telem = client.read_telemetry_pipe()
                 if telem:
@@ -1085,19 +1066,19 @@ def main():
                         phase = data.get("phase", 0)
                         hz = data.get("hz_cnt", 0)
                         fault = data.get("fault_code", 0)
-                        freq_hz = ekf.get("freq_hz", 0) if ekf else 0
-                        phase_deg = ekf.get("phase_deg", 0) if ekf else 0
-                        delta = ekf.get("delta_ppg_signed", 0) if ekf else 0
+                        freq_khz = ekf.get("freq_khz_x100", 0) * 0.01 if ekf else 0
+                        phase_deg = ekf.get("phi_deg_x100", 0) * 0.01 if ekf else 0
+                        delta = ekf.get("q_factor_x100", 0) * 0.01 if ekf else 0
 
                         sys.stdout.write(
                             f"\r  P={power:5.0f}W | V_ad={vol:3d} I_ad={cur:3d} | "
-                            f"f={freq_hz:5.0f}Hz ph={phase_deg:5.1f}° "
-                            f"dPPG={delta:+4d} | fault={fault:#04X}  "
+                            f"f={freq_khz:5.2f}kHz ph={phase_deg:5.2f}° "
+                            f"Q={delta:5.2f} | fault={fault:#04X}  "
                         )
                         sys.stdout.flush()
 
                         if plotter:
-                            plotter.feed(power_w=power, freq_hz=freq_hz,
+                            plotter.feed(power_w=power, freq_hz=freq_khz*1000,
                                         phase_deg=phase_deg, delta_ppg=delta)
                             plotter.update_plot()
 

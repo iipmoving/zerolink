@@ -581,10 +581,10 @@ class M4DebugApp:
             sep2.pack(fill=tk.X, padx=6, pady=(6, 4))
 
             computed = [
-                ("power_actual", "实际功率",     "W"),
-                ("freq_hz",     "频率 (Hz)",     "Hz"),
-                ("phase_deg",   "相位角 (deg)",  "°"),
-                ("delta_ppg_signed", "PID增量",  ""),
+                ("power_actual", "实际功率",      "W"),
+                ("freq_khz",     "频率",          "Hz"),
+                ("phase_deg",    "相位角",        "°"),
+                ("vdc_mean",     "母线电压",      "V"),
             ]
             self._ekf_computed = {}
             for key, label, unit in computed:
@@ -1370,7 +1370,18 @@ class M4DebugApp:
 
     def _update_ekf_computed(self, ekf):
         for key, lbl in self._ekf_computed.items():
-            val = ekf.get(key, 0)
+            if key == "freq_khz":
+                val = ekf.get("f_sw_hz", 0) * 1.0
+            elif key == "phase_deg":
+                val = ekf.get("phi_deg_x10", 0) * 0.1
+            elif key == "vdc_mean":
+                val = ekf.get("vdc_mean_v_x10", 0) * 0.1
+            elif key == "q_factor":
+                val = ekf.get("q_factor_x100", 0) * 0.01
+            elif key == "power_actual":
+                val = ekf.get("power_actual", 0)
+            else:
+                val = ekf.get(key, 0)
             if isinstance(val, float):
                 if abs(val) < 10:
                     lbl.configure(text=f"{val:.3f}")
@@ -1460,9 +1471,9 @@ class M4DebugApp:
         if self._recording and ekf:
             self._records.append({
                 "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-                "freq_hz": ekf.get("freq_hz", 0),
-                "phase_deg": ekf.get("phase_deg", 0),
-                "delta_ppg_signed": ekf.get("delta_ppg_signed", 0),
+                "freq_hz": ekf.get("f_sw_hz", 0) * 1.0,
+                "phase_deg": ekf.get("phi_deg_x10", 0) * 0.1,
+                "vdc_mean": ekf.get("vdc_mean_v_x10", 0) * 0.1,
                 "power_actual": ekf.get("power_actual", 0),
                 "power_target": self.client._heartbeat_power_w * 25,
             })

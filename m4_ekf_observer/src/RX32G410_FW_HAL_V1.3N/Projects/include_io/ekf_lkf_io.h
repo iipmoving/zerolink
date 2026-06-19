@@ -33,7 +33,7 @@ typedef struct {
     int32_t   phi_deg;       /**< 相位角 (度) — 高电流周期平均 */
     int32_t   f_sw_Hz;       /**< 开关频率 (Hz) — HRTIM_CLK/lowOff */
     int32_t   L_uH;          /**< 等效电感 (μH) — 基波等效电路法 + 权重修正 */
-    int32_t   f_res_kHz;     /**< 谐振频率 (kHz) — f_res = 1/(2π√(LC)) */
+    int32_t   f_res_Hz;      /**< 谐振频率 (Hz) — f_res = 1/(2π√(LC)) */
     int32_t   Q_factor;       /**< 品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw) */
     int32_t   R_ohm;         /**< 等效电阻 (Ω) — R = ωL/Q */
     int32_t   I_rms;         /**< 电流有效值 (A) — I_rms = I_peak × √2/2 */
@@ -54,7 +54,7 @@ typedef struct {
 
 /* EKF_LKF_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
-    MODULE_OUTPUT_LINK(EKF_LKF, AppPower)  AppPower_params;  /* → AppPower */
+    MODULE_OUTPUT_LINK(EKF_LKF, AppPower)  *AppPower_params;  /* → AppPower */
 } MODULE_OUTPUT(EKF_LKF);
 
 /* ================================================================
@@ -70,7 +70,7 @@ typedef struct {
     float   phi_deg;       /**< 相位角 (度) — 高电流周期平均 */
     float   f_sw_Hz;       /**< 开关频率 (Hz) — HRTIM_CLK/lowOff */
     float   L_uH;          /**< 等效电感 (μH) — 基波等效电路法 + 权重修正 */
-    float   f_res_kHz;     /**< 谐振频率 (kHz) — f_res = 1/(2π√(LC)) */
+    float   f_res_Hz;      /**< 谐振频率 (Hz) — f_res = 1/(2π√(LC)) */
     float   Q_factor;       /**< 品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw) */
     float   R_ohm;         /**< 等效电阻 (Ω) — R = ωL/Q */
     float   I_rms;         /**< 电流有效值 (A) — I_rms = I_peak × √2/2 */
@@ -98,6 +98,13 @@ typedef struct {
 
 /* ---- v2.3 统一接口 ---- */
 MODULE_IO_H(EKF_LKF);
+
+/**
+ * @brief 获取 EKF 输出参数指针 (供 MODBUS/Telemetry 等外部模块访问)
+ * @param chn 炉头索引 0-3
+ * @return 输出参数指针或 NULL (调用方需知布局: MODULE_OUTPUT_PARAMS(EKF_LKF, AppPower))
+ */
+void* EKF_LKF_GetOutput(uint8_t chn);
 
 #endif /* EKF_LKF_IO_H */
 

@@ -380,7 +380,7 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     float f_res = (LC > 1e-20f)
         ? (1.0f / (2.0f * (float)M_PI * sqrtf(LC)))
         : result->f_sw_Hz;  // 异常时使用开关频率作为谐振频率
-    result->f_res_kHz = f_res;  // 转 kHz
+    result->f_res_Hz = f_res;  // 单位 Hz
 
     // Q 值和等效电阻计算
     float omega_res = 2.0f * (float)M_PI * f_res;    // 谐振角频率
@@ -406,7 +406,7 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     result->Z_mag_ohm = sqrtf(result->R_ohm * result->R_ohm + result->X_ohm * result->X_ohm);  // 阻抗模
 
     // 有效性判定：电感和谐振频率必须大于最小值
-    result->valid = (result->L_uH > IH_L_MIN_uH) && (result->f_res_kHz > IH_FRES_MIN_kHz);
+    result->valid = (result->L_uH > IH_L_MIN_uH) && (result->f_res_Hz > IH_FRES_MIN_kHz * 1000.0f);
     return result->valid;
 }
 

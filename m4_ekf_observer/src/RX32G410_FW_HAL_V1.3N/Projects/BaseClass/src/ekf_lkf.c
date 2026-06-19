@@ -15,6 +15,9 @@ typedef union {
 static MODULE_INPUT(EKF_LKF)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(EKF_LKF)  s_outPara;   // 输出参数缓冲区
 
+MODULE_OUTPUT_LINK(EKF_LKF, AppPower)   ekfToPower_outPut; 		//输出管道实例
+
+
 static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out, EKF_LKF_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -161,8 +164,8 @@ static void ekf_init(EKF_InternalState *s, const MODULE_INPUT_PARAMS(ElecParams,
     /* L = L_uH × 1e-6 → H */
     s->L = (float)p->L_uH * 0.01f * 1e-6f;
 
-    /* f_res = f_res_kHz (0.01kHz) * 10 → Hz */
-    s->f_res = (float)p->f_res_kHz * 10.0f;
+    /* f_res = f_res_Hz (0.01Hz) / 100 → Hz */
+    s->f_res = (float)p->f_res_Hz * 0.01f;
 
     /* 协方差初始化: 对角线 = 状态不确定度 */
     float P_init[] = {
@@ -249,7 +252,7 @@ static void ekf_update(EKF_InternalState *s, const float *z,
     float L_uH = (float)p->L_uH * 0.01f;
     s->L = L_uH * 1e-6f;  /* μH → H */
     s->R = (float)p->R_ohm * 0.01f;
-    s->f_res = (float)p->f_res_kHz * 10.0f;
+    s->f_res = (float)p->f_res_Hz * 0.01f;
 
     /* 保存观测 */
     memcpy(s->z, z, N_MEAS * sizeof(float));
@@ -269,12 +272,28 @@ static void Init(void)
     memset(s_ekf, 0, sizeof(s_ekf));
     memset(&s_outPara, 0, sizeof(s_outPara));
 
-		s_outPara.AppPower_params.res[0]=8;				//CONSET_OUT :EKL_TO_APPPOWER
+	
+		s_outPara.AppPower_params=&ekfToPower_outPut;
+	
+		s_outPara.AppPower_params->res[0]=8;				//CONSET_OUT :EKL_TO_APPPOWER
 
+			
+	
 	
     s_inPara      = NULL;      /* InputCallback 直穿赋值 */
     g_input.para  = &s_inPara;  /* 绑定输入指针变量地址 */
     g_output.para = &s_outPara; /* 绑定输出缓冲区 */
+}
+
+/**
+ * @brief 获取 EKF 输出参数指针 (供 MODBUS 等外部模块访问)
+ * @param chn 炉头索引 0-3
+ * @return 输出参数指针或 NULL
+ */
+void* EKF_LKF_GetOutput(uint8_t chn)
+{
+    if (chn >= EKF_POTMAX) return NULL;
+    return (void*)&s_outPara.AppPower_params.params[chn];
 }
 
 void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
@@ -294,7 +313,7 @@ void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
 				
         out->AppPower_params.params[ch].R_ohm     = (int32_t)(s_ekf[ch].R * 100.0f + 0.5f);
         out->AppPower_params.params[ch].L_uH      = (int32_t)(s_ekf[ch].L / 1e-6f * 100.0f + 0.5f);
-        out->AppPower_params.params[ch].f_res_kHz = (int32_t)(s_ekf[ch].f_res / 10.0f + 0.5f);
+        out->AppPower_params.params[ch].f_res_Hz = (int32_t)(s_ekf[ch].f_res * 100.0f + 0.5f);
 //        out->AppPower_params.params[ch].Q_factor  = (int32_t)result->Q_factor;  /* STUB: 直通 */
 //        out->AppPower_params.params[ch].valid     = 1;
 
@@ -304,7 +323,7 @@ void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
          out->AppPower_params.params[ch].I_peak_A   = FLOAT_TO_INT(result->I_peak_A);
          out->AppPower_params.params[ch].Vdc_mean   = FLOAT_TO_INT(result->Vdc_mean);
          out->AppPower_params.params[ch].phi_deg    = FLOAT_TO_INT(result->phi_deg);
-         out->AppPower_params.params[ch].f_sw_Hz    = FLOAT_TO_INT(result->f_sw_Hz);
+         out->AppPower_params.params[ch].f_sw_Hz    = result->f_sw_Hz;
 //        p->L_uH       = FLOAT_TO_INT(result.L_uH);
 //        p->f_res_kHz  = FLOAT_TO_INT(result.f_res_kHz);
 				 out->AppPower_params.params[ch].Q_factor   = FLOAT_TO_INT(result->Q_factor);
@@ -333,7 +352,7 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out,
     /* v2.3: 检查数据层 LINK status (ElecParams 输出 LINK 置 ST_OUT 表示新数据就绪) */
     if (!(in->ElecParams_params->status & ST_NEW)) return;
 	
-		in->ElecParams_params->status &=~ ST_NEW;
+//		in->ElecParams_params->status &=~ ST_NEW;
 	
     /* 注: 不清除 ST_OUT — 此为 ElecParams 共享输出 LINK, 对各消费者只读 */
 
