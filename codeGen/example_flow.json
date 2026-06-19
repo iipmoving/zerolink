@@ -130,7 +130,7 @@
         { "name": "phi_deg",    "type": "int32_t", "comment": "相位角 (°×100)" },
         { "name": "f_sw_Hz",    "type": "int32_t", "comment": "开关频率 (Hz)" },
         { "name": "L_uH",       "type": "int32_t", "comment": "等效电感 (μH×100)" },
-        { "name": "f_res_kHz",  "type": "int32_t", "comment": "谐振频率 (kHz×100)" },
+        { "name": "f_res_Hz",  "type": "int32_t", "comment": "谐振频率 (Hz)" },
         { "name": "Q_factor",   "type": "int32_t", "comment": "品质因数 (×100)" },
         { "name": "R_ohm",      "type": "int32_t", "comment": "等效电阻 (Ω×100)" },
         { "name": "I_rms",      "type": "int32_t", "comment": "电流有效值 (A×100)" },

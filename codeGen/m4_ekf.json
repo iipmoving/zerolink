@@ -279,7 +279,7 @@
           "comment": "等效电感 (0.01μH)"
         },
         {
-          "name": "f_res_kHz",
+          "name": "f_res_Hz",
           "type": "int32_t",
           "comment": "谐振频率 (0.01kHz)"
         },
@@ -335,7 +335,7 @@
           "comment": "等效电感 (0.01μH)"
         },
         {
-          "name": "f_res_kHz",
+          "name": "f_res_Hz",
           "type": "int32_t",
           "comment": "谐振频率 (0.01kHz)"
         },
