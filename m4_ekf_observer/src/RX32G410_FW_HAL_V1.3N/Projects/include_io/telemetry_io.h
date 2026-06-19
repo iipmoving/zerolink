@@ -63,7 +63,7 @@ typedef struct {
     float   phi_deg;       /**< 相位角 (度) — 高电流周期平均 */
     float   f_sw_Hz;       /**< 开关频率 (Hz) — HRTIM_CLK/lowOff */
     float   L_uH;          /**< 等效电感 (μH) — 基波等效电路法 + 权重修正 */
-    float   f_res_kHz;     /**< 谐振频率 (kHz) — f_res = 1/(2π√(LC)) */
+    float   f_res_Hz;     /**< 谐振频率 (Hz) — f_res = 1/(2π√(LC)) */
     float   Q_factor;       /**< 品质因数 — Q = tan(φ)/(f_sw/f_res - f_res/f_sw) */
     float   R_ohm;         /**< 等效电阻 (Ω) — R = ωL/Q */
     float   I_rms;         /**< 电流有效值 (A) — I_rms = I_peak × √2/2 */

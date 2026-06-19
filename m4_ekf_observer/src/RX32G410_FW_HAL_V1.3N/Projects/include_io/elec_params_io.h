@@ -92,9 +92,9 @@ typedef struct {
 
 /* ElecParams_Output — 输出聚合 */
 typedef struct {
-    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)         EKF_LKF_params;
+    MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)         *EKF_LKF_params;
     MODULE_OUTPUT_LINK(ElecParams, Telemetry)      *Telemetry_params;
-    MODULE_OUTPUT_LINK(ElecParams, AppPower)        AppPower_params;
+    MODULE_OUTPUT_LINK(ElecParams, AppPower)        *AppPower_params;
 } MODULE_OUTPUT(ElecParams);
 
 /* ==========================================================================

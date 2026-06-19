@@ -15,6 +15,10 @@ typedef union {
 static MODULE_INPUT(ElecParams)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(ElecParams)  	s_outPara;   // 输出参数缓冲区实体
 
+/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+static MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)   s_elecToEkfLink;
+static MODULE_OUTPUT_LINK(ElecParams, AppPower)   s_elecToAppPowerLink;
+
 static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -421,8 +425,12 @@ static void Init(void) {
     s_inPara = NULL;
     memset(&s_outPara, 0, sizeof(s_outPara));
 
-//		s_outPara.AppPower_params.res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
-			s_outPara.EKF_LKF_params.res[0]=5;			//CONSET_OUT :ELC_TO_EKF
+	/* 绑定 OUTPUT_LINK 指钺 */
+	s_outPara.EKF_LKF_params   = &s_elecToEkfLink;
+	s_outPara.AppPower_params  = &s_elecToAppPowerLink;
+
+//		s_outPara.AppPower_params->res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
+			s_outPara.EKF_LKF_params->res[0]=5;			//CONSET_OUT :ELC_TO_EKF
 
     g_input.para  = &s_inPara;
     g_output.para = &s_outPara;
@@ -470,7 +478,7 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
         MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF)* result;
 //        memset(&result, 0, sizeof(ElecParams_CalcResult));
 
-				result=&out->EKF_LKF_params.params[h];
+				result=&out->EKF_LKF_params->params[h];
 			
         // 指向当前炉头的 20 周期数据块
         const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h][PERIO_CNT];
@@ -480,12 +488,12 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 		}
     API_GPIO_WritePin(DebugB_pin, 0);
     // 更新状态 — 写输出 LINK status + 清除输入 LINK status
-//    out->AppPower_params.status |= ST_NEW;
-		out->EKF_LKF_params.status |= ST_NEW;
+//    out->AppPower_params->status |= ST_NEW;
+		out->EKF_LKF_params->status |= ST_NEW;
 
     /* ---- 设置 Telemetry 输出管道指针 ---- */
 
-        out->Telemetry_params= &out->EKF_LKF_params;
+        out->Telemetry_params=out->EKF_LKF_params;
 
 }
 

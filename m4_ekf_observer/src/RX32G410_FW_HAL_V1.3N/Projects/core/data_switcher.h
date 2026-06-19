@@ -28,14 +28,14 @@
     void consumer##_InputCallback(void)
 
 /* 取 slot 指针 + 直穿: 成员名 = {Producer}_params / {Consumer}_params
- * 检查放 ProcessInput */
+ * OUTPUT_LINK 已指针化, 直接用 __out->xxx_params (不再取 &) */
 #define INPUT_GET_SLOT(producer, consumer) \
     do { \
         MODULE_OUTPUT(producer) *__out = \
             (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
         MODULE_INPUT(consumer)   *__in  = \
             (MODULE_INPUT(consumer)   *)s_slot[SLOT(consumer)].pIn->para; \
-        __in->producer##_params = (void*)&__out->consumer##_params; \
+        __in->producer##_params = (void*)__out->consumer##_params; \
     } while (0)
 
 /* 单管道直穿+回调内检查 (ST_NEW 触发)

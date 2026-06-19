@@ -293,12 +293,12 @@ static void Init(void)
 void* EKF_LKF_GetOutput(uint8_t chn)
 {
     if (chn >= EKF_POTMAX) return NULL;
-    return (void*)&s_outPara.AppPower_params.params[chn];
+    return (void*)&s_outPara.AppPower_params->params[chn];
 }
 
 void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
 {	
-//        MODULE_OUTPUT_PARAMS(ElecParams, AppPower) *p = &out->AppPower_params.params[h];
+//        MODULE_OUTPUT_PARAMS(ElecParams, AppPower) *p = &out->AppPower_params->params[h];
 //        if (!calc_ok) {
 //            memset(p, 0, sizeof(*p));
 //            p->valid = 0;
@@ -311,27 +311,27 @@ void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
 		{
 				MODULE_INPUT_PARAMS(ElecParams, EKF_LKF) *result=&in->ElecParams_params->params[ch];
 				
-        out->AppPower_params.params[ch].R_ohm     = (int32_t)(s_ekf[ch].R * 100.0f + 0.5f);
-        out->AppPower_params.params[ch].L_uH      = (int32_t)(s_ekf[ch].L / 1e-6f * 100.0f + 0.5f);
-        out->AppPower_params.params[ch].f_res_Hz = (int32_t)(s_ekf[ch].f_res * 100.0f + 0.5f);
-//        out->AppPower_params.params[ch].Q_factor  = (int32_t)result->Q_factor;  /* STUB: 直通 */
-//        out->AppPower_params.params[ch].valid     = 1;
+        out->AppPower_params->params[ch].R_ohm     = (int32_t)(s_ekf[ch].R * 100.0f + 0.5f);
+        out->AppPower_params->params[ch].L_uH      = (int32_t)(s_ekf[ch].L / 1e-6f * 100.0f + 0.5f);
+        out->AppPower_params->params[ch].f_res_Hz = (int32_t)(s_ekf[ch].f_res * 100.0f + 0.5f);
+//        out->AppPower_params->params[ch].Q_factor  = (int32_t)result->Q_factor;  /* STUB: 直通 */
+//        out->AppPower_params->params[ch].valid     = 1;
 
 	
 	
 //        // 映射计算结果到输出参数（全部 ×100 整型定标）
-         out->AppPower_params.params[ch].I_peak_A   = FLOAT_TO_INT(result->I_peak_A);
-         out->AppPower_params.params[ch].Vdc_mean   = FLOAT_TO_INT(result->Vdc_mean);
-         out->AppPower_params.params[ch].phi_deg    = FLOAT_TO_INT(result->phi_deg);
-         out->AppPower_params.params[ch].f_sw_Hz    = result->f_sw_Hz;
+         out->AppPower_params->params[ch].I_peak_A   = FLOAT_TO_INT(result->I_peak_A);
+         out->AppPower_params->params[ch].Vdc_mean   = FLOAT_TO_INT(result->Vdc_mean);
+         out->AppPower_params->params[ch].phi_deg    = FLOAT_TO_INT(result->phi_deg);
+         out->AppPower_params->params[ch].f_sw_Hz    = result->f_sw_Hz;
 //        p->L_uH       = FLOAT_TO_INT(result.L_uH);
 //        p->f_res_kHz  = FLOAT_TO_INT(result.f_res_kHz);
-				 out->AppPower_params.params[ch].Q_factor   = FLOAT_TO_INT(result->Q_factor);
+				 out->AppPower_params->params[ch].Q_factor   = FLOAT_TO_INT(result->Q_factor);
 //        p->R_ohm      = FLOAT_TO_INT(result.R_ohm);
-					out->AppPower_params.params[ch].I_rms      = FLOAT_TO_INT(result->I_rms);
-					out->AppPower_params.params[ch].P_W        = FLOAT_TO_INT(result->P_W);
-					out->AppPower_params.params[ch].Z_mag_ohm  = FLOAT_TO_INT(result->Z_mag_ohm);
-					out->AppPower_params.params[ch].X_ohm      = FLOAT_TO_INT(result->X_ohm);
+					out->AppPower_params->params[ch].I_rms      = FLOAT_TO_INT(result->I_rms);
+					out->AppPower_params->params[ch].P_W        = FLOAT_TO_INT(result->P_W);
+					out->AppPower_params->params[ch].Z_mag_ohm  = FLOAT_TO_INT(result->Z_mag_ohm);
+					out->AppPower_params->params[ch].X_ohm      = FLOAT_TO_INT(result->X_ohm);
 ////        p->L_stable   = FLOAT_TO_INT(result.L_uH);
 ////        p->L_fast     = FLOAT_TO_INT(result.L_uH);
 ////        p->event      = 0;
@@ -363,7 +363,7 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out,
         const MODULE_INPUT_PARAMS(ElecParams, EKF_LKF) *p = &in->ElecParams_params->params[h];
 
         if (!p->valid) {
-            memset(&out->AppPower_params.params[h], 0, sizeof(out->AppPower_params.params[h]));
+            memset(&out->AppPower_params->params[h], 0, sizeof(out->AppPower_params->params[h]));
             continue;
         }
 
@@ -381,6 +381,6 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out,
 
     }
 		ekf_outPut(in,out);				//数据输出
-    out->AppPower_params.status |= ST_NEW;
+    out->AppPower_params->status |= ST_NEW;
 }
 

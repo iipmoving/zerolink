@@ -15,6 +15,10 @@ typedef union {
 static MODULE_INPUT(Calculator)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
 
+/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+static MODULE_OUTPUT_LINK(Calculator, ElecParams)  s_calcToElecLink;
+static MODULE_OUTPUT_LINK(Calculator, AppAdc)      s_calcToAppAdcLink;
+
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -116,7 +120,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 						
 
 						out->ElecParams_params.status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
-						out->Telemetry_params=&out->ElecParams_params;	//数据指向向ELEC输出的缓存
+						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
 						out->AppAdc_params.status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
 					}
@@ -153,7 +157,7 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
 
 			Calculator_InputParams_t* params_point =(head_in->AppAdc_params->params->input); //这里存的是缓存的地址（4个）
 			params_point+=i;
-		 MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.ElecParams_params.params[i][cycle_idx];
+		 MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *elec_params = &s_outPara.ElecParams_params->params[i][cycle_idx];
 
 		CalculatePower(current_point,hrtim_point,voltage_point,params_point,elec_params);
 
@@ -171,9 +175,9 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
 			
 				
 			
-				head_out->AppAdc_params.params[i][cycle_idx].voltage=elec_params->voltage_sum/elec_params->voltage_count;
+				head_out->AppAdc_params->params[i][cycle_idx].voltage=elec_params->voltage_sum/elec_params->voltage_count;
 				
-        head_out->AppAdc_params.params[i][cycle_idx].resonant_current=sumCurrent;
+        head_out->AppAdc_params->params[i][cycle_idx].resonant_current=sumCurrent;
 
 				
 
@@ -183,7 +187,7 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
 					
                angle*=PHASE_DEG_BASE;		//相位角（180度为单位）
                angle/=elec_params->hrtim_highOff-elec_params->hrtim_highOn;
-             head_out->AppAdc_params.params[i][cycle_idx].phase_angle=angle;
+             head_out->AppAdc_params->params[i][cycle_idx].phase_angle=angle;
 
 
 				}	
@@ -451,12 +455,16 @@ static CalculatorResultDef CalculateAuctalCurrent(uint16_t* resonant_current,
 /* ---- 初始化 ---- */
 static void Init(void)
 {
-//    memset(&s_inPara,  0, sizeof(s_inPara)); 
+//    memset(&s_inPara,  0, sizeof(s_inPara));
 		s_inPara=NULL;
     memset(&s_outPara, 0, sizeof(s_outPara));
-	
-		s_outPara.AppAdc_params.res[0]=2;						//CONSET_OUT :CALC_TO_APPPOWER
-		s_outPara.ElecParams_params.res[0]=3;				//CONSET_OUT: CALC_TO_ELEC
+
+	/* 绑定 OUTPUT_LINK 指钺 */
+	s_outPara.ElecParams_params = &s_calcToElecLink;
+	s_outPara.AppAdc_params     = &s_calcToAppAdcLink;
+
+		s_outPara.ElecParams_params->res[0]=3;				//CONSET_OUT: CALC_TO_ELEC
+		s_outPara.AppAdc_params->res[0]=2;							//CONSET_OUT :CALC_TO_APPPOWER
 	
 		
     g_input.para   = &s_inPara;		//在输入回调里初始化

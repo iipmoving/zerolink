@@ -97,8 +97,8 @@ typedef struct {
 
 /* Calculator_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
-    MODULE_OUTPUT_LINK(Calculator, ElecParams)  ElecParams_params;  /* → ElecParams */
-    MODULE_OUTPUT_LINK(Calculator, AppAdc)      AppAdc_params;      /* → AppAdc */
+    MODULE_OUTPUT_LINK(Calculator, ElecParams)  *ElecParams_params;  /* → ElecParams */
+    MODULE_OUTPUT_LINK(Calculator, AppAdc)      *AppAdc_params;      /* → AppAdc */
     MODULE_OUTPUT_LINK(Calculator, Telemetry)  *Telemetry_params;   /* → Telemetry (指针转发) */
 } MODULE_OUTPUT(Calculator);
 

@@ -65,7 +65,7 @@ typedef struct {
     int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
     int32_t phi_deg;     /* 相位角 (0.01°) */
     int32_t L_uH;     /* 等效电感 (0.01μH) */
-    int32_t f_res_kHz;     /* 谐振频率 (0.01kHz) */
+    int32_t f_res_Hz;     /* 谐振频率 (0.01Hz) */
     int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
     int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
     int32_t P_W;     /* 有功功率 (0.01W) */
