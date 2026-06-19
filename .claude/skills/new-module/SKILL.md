@@ -85,7 +85,7 @@ MODULE_OUTPUT_LINK(Producer, Consumer)              MODULE_INPUT_LINK(Producer, 
                                                     (自包含, 布局与 OUTPUT_LINK 一致)
 
 MODULE_OUTPUT(Producer)                             MODULE_INPUT(Consumer)
-  └── MODULE_OUTPUT_LINK {Consumer}_params (实例)    └── MODULE_INPUT_LINK* {Producer}_params (指针)
+  └── MODULE_OUTPUT_LINK *{Consumer}_params (指针)    └── MODULE_INPUT_LINK* {Producer}_params (指针)
                                                           ↑ InputCallback 直穿赋值
 ```
 
@@ -97,7 +97,7 @@ MODULE_OUTPUT(Producer)                             MODULE_INPUT(Consumer)
 | 布局一致 | INPUT_PARAMS 的字段顺序/类型/大小与 OUTPUT_PARAMS 完全相同 |
 | 宏不展开 | 类型定义必须用 `MODULE_INPUT_PARAMS(...)` / `MODULE_OUTPUT_LINK(...)` 宏，不得写展开后的名字 |
 | void* 直穿 | InputCallback 用 `(void*)` 将 producer OUTPUT_LINK 地址赋给 consumer INPUT_LINK 指针 |
-| 实例 vs 指针 | OUTPUT_LINK 在 producer 端是实例 ({Consumer}_params)，INPUT_LINK 在 consumer 端是指针 (*{Producer}_params) |
+| 实例 vs 指针 | OUTPUT_LINK 在 producer 端是指针 (*{Consumer}_params)，INPUT_LINK 在 consumer 端是指针 (*{Producer}_params)。Producer 模块 .c 中声明内部 MODULE_OUTPUT_LINK 实例，Init() 中绑定指针 |
 
 ---
 
@@ -166,7 +166,7 @@ typedef struct {
 
 /* 输出聚合 */
 typedef struct {
-    MODULE_OUTPUT_LINK({Module}, ConsumerB)  {ConsumerB}_params;  /* ← 以消费者命名 */
+    MODULE_OUTPUT_LINK({Module}, ConsumerB) *{ConsumerB}_params;  /* ← 以消费者命名 (指针) */
 } MODULE_OUTPUT({Module});
 
 /* ---- v2.3 统一接口 ---- */
@@ -193,6 +193,9 @@ MODULE_IO_H({Module});
 static {Module}_Input  s_in;    // MODULE_INPUT({Module})  展开
 static {Module}_Output s_out;   // MODULE_OUTPUT({Module}) 展开
 
+/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+static MODULE_OUTPUT_LINK({Module}, ConsumerB)  s_{Module}To{ConsumerB}Link;
+
 /* ---- 骨架 ---- */
 MODULE_SKELETON({Module});
 
@@ -211,10 +214,10 @@ static void ProcessInput(void)
     /* 消费 in->{ProducerA}_params->params[h].field1 */
 
     /* ====== 计算段 ====== */
-    out->{ConsumerB}_params.params[0].result = calc();
+    out->{ConsumerB}_params->params[0].result = calc();
 
     /* ====== 输出段: 置输出 LINK status ====== */
-    out->{ConsumerB}_params.status |= ST_OUT;
+    out->{ConsumerB}_params->status |= ST_OUT;
 }
 
 /* ---- 初始化 ---- */
@@ -222,6 +225,10 @@ static void Init(void)
 {
     memset(&s_in,  0, sizeof(s_in));
     memset(&s_out, 0, sizeof(s_out));
+
+    /* 绑定 OUTPUT_LINK 指钺 */
+    s_out.{ConsumerB}_params = &s_{Module}To{ConsumerB}Link;
+
     g_input.para  = &s_in;
     g_output.para = &s_out;
 }
