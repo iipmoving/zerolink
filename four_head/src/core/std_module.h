@@ -142,36 +142,36 @@ typedef struct {
         memset(&g_input,      0, sizeof(g_input));                       \
         memset(&g_output,     0, sizeof(g_output));                      \
         memset(&g_isr_input,  0, sizeof(g_isr_input));                   \
-        memset(&g_isr_output, 0, sizeof(g_isr_output));                   \
-        g_init_done = 0;                                                 \
-        g_isr_busy = 0;                                                  \
-        Init();                                                          \
-        g_output.info.status      |= ST_INIT;                             \
+        memset(&g_isr_output, 0, sizeof(g_isr_output));                  \
+        g_init_done = 0;                                                \
+        g_isr_busy = 0;                                                 \
+        Init();                                                         \
+        g_output.info.status      |= ST_INIT;                            \
         g_isr_output.info.status  |= ST_INIT;                            \
     }                                                                    \
                                                                          \
     static void DoWork(void) {                                           \
-        if (!g_init_done) { Constructor(); g_init_done = 1; }              \
-        name##_InputCallback();                 /* ① 输入拉取 */         \
+        if (!g_init_done) { Constructor(); g_init_done = 1; return;}           \
+        name##_InputCallback();                 /* ① 输入拉取 */        \
         ProcessInput();                         /* ② 消费→计算→产出 */ \
-        if ((g_output.info.status & ST_OUT)) {                           \
-            name##_OutputCallback(&g_output);   /* ③ 紧急输出 */         \
-            g_output.info.status &= ~ST_OUT;                              \
+        if ((g_output.info.status & ST_OUT)) {                          \
+            name##_OutputCallback(&g_output);   /* ③ 紧急输出 */        \
+            g_output.info.status &= ~ST_OUT;                            \
         }                                                                \
     }                                                                    \
                                                                          \
     static void ISR_DoWork(void) {                                       \
-        /* 主循环未初始化时跳过，不负责初始化 */                            \
-        if (!g_init_done) return;                                        \
+        /* 主循环未初始化时跳过，不负责初始化 */                         \
+        if (!g_init_done) return;                                       \
         if (g_isr_busy) return;                                         \
-        g_isr_busy = 1;                                                  \
-        name##_ISR_InputCallback();                                      \
-        ISR_ProcessInput();                                              \
+        g_isr_busy = 1;                                                 \
+        name##_ISR_InputCallback();                                     \
+        ISR_ProcessInput();                                             \
         if ((g_isr_output.info.status & ST_OUT)) {                      \
-            name##_ISR_OutputCallback(&g_isr_output);                    \
-            g_isr_output.info.status &= ~ST_OUT;                          \
+            name##_ISR_OutputCallback(&g_isr_output);                   \
+            g_isr_output.info.status &= ~ST_OUT;                        \
         }                                                                \
-        g_isr_busy = 0;                                                  \
+        g_isr_busy = 0;                                                 \
     }
 
 #else
@@ -179,7 +179,7 @@ typedef struct {
 /* ===== ISR 未启用版 (原 v2.2, 零开销) ===== */
 #define MODULE_SKELETON(name)                                            \
     static Para_Grp_t g_input;                                          \
-    static Para_Grp_t g_output;                                          \
+    static Para_Grp_t g_output;                                         \
     static uint8_t    g_init_done = 0;                                  \
                                                                          \
     static void Init(void);                                              \
@@ -188,24 +188,24 @@ typedef struct {
     __attribute__((weak)) void name##_InputCallback(void)                \
     { }                                                                  \
                                                                          \
-    __attribute__((weak)) void name##_OutputCallback(Para_Grp_t *pOut)  \
+    __attribute__((weak)) void name##_OutputCallback(Para_Grp_t *pOut)   \
     { (void)pOut; }                                                      \
                                                                          \
-    static void Constructor(void) {                                       \
-        memset(&g_input,  0, sizeof(g_input));                          \
-        memset(&g_output, 0, sizeof(g_output));                          \
-        g_init_done = 0;                                                 \
-        Init();                                                          \
-        g_output.info.status |= ST_INIT;                                  \
+    static void Constructor(void) {                                      \
+        memset(&g_input,  0, sizeof(g_input));                           \
+        memset(&g_output, 0, sizeof(g_output));                         \
+        g_init_done = 0;                                                \
+        Init();                                                         \
+        g_output.info.status |= ST_INIT;                                 \
     }                                                                    \
                                                                          \
     static void DoWork(void) {                                           \
-        if (!g_init_done) { Constructor(); g_init_done = 1; }             \
-        name##_InputCallback();                 /* ① 输入拉取 */         \
-        ProcessInput();                         /* ② 消费→计算→产出 */  \
-        if ((g_output.info.status & ST_OUT)) {                           \
-            name##_OutputCallback(&g_output);   /* ③ 紧急输出 */         \
-            g_output.info.status &= ~ST_OUT;                             \
+        if (!g_init_done) { Constructor(); g_init_done = 1;return; }           \
+        name##_InputCallback();                 /* ① 输入拉取 */        \
+        ProcessInput();                         /* ② 消费→计算→产出 */ \
+        if ((g_output.info.status & ST_OUT)) {                          \
+            name##_OutputCallback(&g_output);   /* ③ 紧急输出 */        \
+            g_output.info.status &= ~ST_OUT;                            \
         }                                                                \
     }
 
@@ -226,7 +226,7 @@ typedef struct {
  *
  *     // 模块输出 (引用 LINK 实例)
  *     typedef struct {
- *         MODULE_OUTPUT_LINK(APP_Adc, Power) *power_params;
+ *         MODULE_OUTPUT_LINK(APP_Adc, Power) *AppPower_params;
  *         MODULE_OUTPUT_LINK(APP_Adc, Calc)  *calc_params;
  *     } MODULE_OUTPUT(PowerCalc);          // → PowerCalc_Output
  *
@@ -241,12 +241,12 @@ typedef struct {
 #define MODULE_OUTPUT(name)       name##_Output
 #define MODULE_INPUT_LINK(owner, consumer)  owner##_to_##consumer##_Input_Link
 #define MODULE_OUTPUT_LINK(owner, consumer)  owner##_to_##consumer##_Output_Link
-#define MODULE_INPUT_LINK(owner, consumer)   owner##_to_##consumer##_Input_Link
+
 #define MODULE_OUTPUT_PARAMS(owner, consumer)  owner##_to_##consumer##_Output_Params
 #define MODULE_INPUT_PARAMS(owner, consumer)   owner##_to_##consumer##_Input_Params
 #define MODULE_LINK(name)         name##_Link   /* 兼容旧名 */
 
-/* ================================================================
+/* ======================u==========================================
  * 6. 导出宏 — 生成 GetIO / GetISR_IO 注册入口
  *
  *   用法: MODULE_EXPORT(Power) → 生成 Power_GetIO(...)
@@ -260,29 +260,33 @@ typedef struct {
 
 #define MODULE_EXPORT(module_name)                                       \
     void module_name##_GetIO(Para_Grp_t **ppIn,                          \
-                             Para_Grp_t **ppOut,                          \
-                             void      (**ppDoWork)(void)) {              \
-        *ppIn     = &g_input;                                             \
-        *ppOut    = &g_output;                                            \
-        *ppDoWork = DoWork;                                               \
-    }                                                                     \
+                             Para_Grp_t **ppOut,                         \
+                             void      (**ppDoWork)(void)) {             \
+        *ppIn     = &g_input;                                            \
+        *ppOut    = &g_output;                                           \
+        *ppDoWork = DoWork;                                              \
+        g_init_done = 0;                                                 \
+        DoWork();                                                        \
+    }                                                                    \
     void module_name##_GetISR_IO(Para_Grp_t **ppIn,                      \
-                                 Para_Grp_t **ppOut,                      \
-                                 void      (**ppDoWork)(void)) {          \
-        *ppIn     = &g_isr_input;                                         \
-        *ppOut    = &g_isr_output;                                        \
-        *ppDoWork = ISR_DoWork;                                           \
+                                 Para_Grp_t **ppOut,                     \
+                                 void      (**ppDoWork)(void)) {         \
+        *ppIn     = &g_isr_input;                                        \
+        *ppOut    = &g_isr_output;                                       \
+        *ppDoWork = ISR_DoWork;                                          \
     }
 
 #else
 
 #define MODULE_EXPORT(module_name)                                       \
     void module_name##_GetIO(Para_Grp_t **ppIn,                          \
-                             Para_Grp_t **ppOut,                          \
-                             void      (**ppDoWork)(void)) {              \
-        *ppIn     = &g_input;                                             \
-        *ppOut    = &g_output;                                            \
-        *ppDoWork = DoWork;                                               \
+                             Para_Grp_t **ppOut,                         \
+                             void      (**ppDoWork)(void)) {             \
+        *ppIn     = &g_input;                                            \
+        *ppOut    = &g_output;                                           \
+        *ppDoWork = DoWork;                                              \
+        g_init_done = 0;                                                 \
+        DoWork();                                                        \
     }
 
 #endif /* STD_MODULE_ENABLE_ISR */
@@ -298,13 +302,13 @@ typedef struct {
  * ================================================================ */
 #define MODULE_IO_H(module_name)                                         \
     void module_name##_GetIO(Para_Grp_t **ppIn,                          \
-                             Para_Grp_t **ppOut,                          \
+                             Para_Grp_t **ppOut,                         \
                              void      (**ppDoWork)(void))
 
 #if STD_MODULE_ENABLE_ISR
 #define MODULE_ISR_IO_H(module_name)                                     \
     void module_name##_GetISR_IO(Para_Grp_t **ppIn,                      \
-                                 Para_Grp_t **ppOut,                      \
+                                 Para_Grp_t **ppOut,                     \
                                  void      (**ppDoWork)(void))
 #else
 #define MODULE_ISR_IO_H(module_name)

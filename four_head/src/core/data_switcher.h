@@ -6,7 +6,7 @@
  * v2.3 新增宏:
  *   - SLOT(mod): 槽位枚举宏
  *   - SLOT_GETIO(mod): 模块注册宏
- *   - INPUT_CALLBACK(producer, consumer): InputCallback 函数声明宏
+ *   - INPUT_CALLBACK(consumer): InputCallback 函数声明宏（仅 consumer 名，一个 consumer 一个回调）
  *   - INPUT_GET_SLOT(producer, consumer): 指针直穿宏（零拷贝）
  *   - INPUT_LINK_PULL(producer, consumer, link): 带 ST_NEW 检查的指针直穿
  */
@@ -23,8 +23,9 @@
 
 /* ===== InputCallback 宏 ===== */
 
-/* 函数壳 — 展开为: void consumer##_InputCallback(void) */
-#define INPUT_CALLBACK(producer, consumer) \
+/* 函数壳 — 仅 consumer 名，一个 consumer 一个回调函数
+ * 展开为: void consumer##_InputCallback(void) */
+#define INPUT_CALLBACK(consumer) \
     void consumer##_InputCallback(void)
 
 /* 指针直穿（推荐：检查放 ProcessInput） */
@@ -67,5 +68,6 @@
 
 void Switcher_Init(void);
 void Switcher_Run(void);
+void Switcher_Run_All(void);
 
 #endif /* DATA_SWITCHER_H */

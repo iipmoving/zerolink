@@ -105,6 +105,7 @@ def cmd_gen(args):
     io_dir    = paths.get("io_dir", "include")
     core_dir  = paths.get("core_dir", "core")
     app_dir   = paths.get("app_dir", "app")
+    drv_dir   = paths.get("drv_dir", "drv")
     base_dir  = paths.get("base_class_dir", "base_class")
     proto_dir = paths.get("proto_dir", "proto")
 
@@ -113,6 +114,8 @@ def cmd_gen(args):
         layer = module.get("layer", "app")
         if layer == "app":
             return os.path.join(output_root, app_dir)
+        elif layer == "drv":
+            return os.path.join(output_root, drv_dir)
         elif layer == "base_class":
             return os.path.join(output_root, base_dir)
         elif layer == "proto":

@@ -117,7 +117,7 @@ typedef struct {
 
 /* 输出聚合 */
 typedef struct {
-    MODULE_OUTPUT_LINK({Module}, Consumer)  {Consumer}_params;   // ← 以消费者命名
+    MODULE_OUTPUT_LINK({Module}, Consumer) *{Consumer}_params;   // ← 以消费者命名 (指针)
 } MODULE_OUTPUT({Module});
 ```
 
@@ -175,7 +175,7 @@ static void ProcessInput(void)
 
     /* ====== 输出段 ====== */
     /* v2.3: 置输出 LINK 的 status, 由 Switcher 或下游模块读取 */
-    out->{Consumer}_params.status |= ST_NEW;
+    out->{Consumer}_params->status |= ST_NEW;
 }
 
 /* ---- 导出: GetIO ---- */
@@ -195,7 +195,7 @@ Consumer 输入 LINK 成员名:  {Producer}_params     (in->Calculator_params)
 
 ```
 typedef struct {
-    MODULE_OUTPUT_LINK(Calculator, ElecParams) ElecParams_params;   // ← 以消费者命名
+    MODULE_OUTPUT_LINK(Calculator, ElecParams) *ElecParams_params;   // ← 以消费者命名 (指针)
     MODULE_OUTPUT_LINK(Calculator, PowerBase)  power_direct;        // ← 次管道保留具名
 } MODULE_OUTPUT(Calculator);
 
@@ -204,7 +204,7 @@ typedef struct {
 } MODULE_INPUT(ElecParams);
 ```
 
-Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 = Consumer 名。双向对称，直穿赋值就是 `in->Calculator_params = (void*)&out->ElecParams_params`。
+Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 = Consumer 名。双向对称，直穿赋值就是 `in->Calculator_params = (void*)out->ElecParams_params`。
 
 ### 4.2 InputCallback 宏
 
@@ -224,7 +224,7 @@ Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 =
         (MODULE_OUTPUT(producer) *)s_slot[SLOT(producer)].pOut->para; \
     MODULE_INPUT(consumer)   *__in  = \
         (MODULE_INPUT(consumer)   *)s_slot[SLOT(consumer)].pIn->para; \
-    __in->producer##_params = (void*)&__out->consumer##_params
+    __in->producer##_params = (void*)__out->consumer##_params
 
 /* 单管道直穿+回调内检查 (ST_NEW 触发) */
 #define INPUT_LINK_PULL(producer, consumer, link_member) \
@@ -233,7 +233,7 @@ Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 =
         if (__p_out && (__p_out->link_member.status & ST_NEW)) { \
             MODULE_INPUT(consumer) *__p_in = (MODULE_INPUT(consumer) *)s_slot[SLOT(consumer)].pIn->para; \
             if (__p_in) { \
-                __p_in->producer##_params = (void*)&__p_out->link_member; \
+                __p_in->producer##_params = (void*)__p_out->link_member; \
                 s_slot[SLOT(consumer)].pIn->info.status |= ST_NEW; \
             } \
         } \
@@ -247,7 +247,7 @@ Consumer 的输入指针命名 = Producer 名，Producer 的输出 LINK 命名 =
             __p_out->link_member.status &= ~ST_OUT; \
             MODULE_INPUT(consumer) *__p_in = (MODULE_INPUT(consumer) *)s_slot[SLOT(consumer)].pIn->para; \
             if (__p_in) { \
-                __p_in->producer##_params = (void*)&__p_out->link_member; \
+                __p_in->producer##_params = (void*)__p_out->link_member; \
                 s_slot[SLOT(consumer)].pIn->info.status |= ST_NEW; \
             } \
         } \
@@ -305,7 +305,7 @@ INPUT_CALLBACK(ElecParams)
 Module.DoWork:
   ① ElecParams_InputCallback()    ← INPUT_CALLBACK(ElecParams) 宏展开
       └─ INPUT_GET_SLOT(Calculator, ElecParams)
-         └─ in->Calculator_params = (void*)&out->ElecParams_params
+         └─ in->Calculator_params = (void*)out->ElecParams_params
             └─ 指针直穿, 零拷贝, 别名 = Calculator 的 ElecParams_params LINK
 
   ② ProcessInput()           ← 消费 g_input → 计算 → 写 g_output

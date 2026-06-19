@@ -9,20 +9,41 @@
  * 键码映射: 提取自参考程序 Key_Driver.c
  */
 #include "core/std_module.h"
+#include "../include_io/drv_key_io.h"
 #include "drv_key.h"
 #include "../hal/hal_key.h"
 #include <stddef.h>
 
-/* ---- 数据结构 ---- */
-typedef struct { uint8_t dummy; } InData_t;
-typedef struct {
-    uint8_t  has_key;
-    uint8_t  key_code;
-    uint8_t  key_state;
-} OutData_t;
-static InData_t  s_in;
-static OutData_t s_out;
 MODULE_SKELETON(DrvKey);
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(DrvKey)*   s_inPara;
+static MODULE_OUTPUT(DrvKey)   s_outPara;
+
+/* 每条管道的 PARAMS 实体（LINK.params 指针指向这些） */
+static MODULE_OUTPUT_PARAMS(DrvKey, AppHmi)       s_hmi_params;
+static MODULE_OUTPUT_PARAMS(DrvKey, AppCooking)    s_cooking_params;
+static MODULE_OUTPUT_PARAMS(DrvKey, AppSegAlign)   s_segalign_params;
+
+/* 管道就绪标志 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t _unused;
+    } bits;
+} DrvKey_PipeFlags_t;
+
+static void user_Process(MODULE_INPUT(DrvKey) *in, MODULE_OUTPUT(DrvKey) *out, DrvKey_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(DrvKey) *in  = (MODULE_INPUT(DrvKey)*)g_input.para;
+    MODULE_OUTPUT(DrvKey) *out = (MODULE_OUTPUT(DrvKey)*)g_output.para;
+
+    DrvKey_PipeFlags_t flags = {0};
+
+    user_Process(in, out, flags);
+}
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
 #define TK_CH(n)        (1UL << (n))  /* 通道n的位掩码                         */
@@ -114,8 +135,6 @@ static uint8_t Key_Lookup(uint32_t phy_mask)
     return (uint8_t)KEY_NONE;
 }
 
-static void ProcessInput(void) {}
-
 /* ========== 初始化 ========== */
 static void Init(void)
 {
@@ -126,19 +145,35 @@ static void Init(void)
     s_hold_cnt      = 0u;
     s_long_sent     = 0u;
     s_release_cnt   = 0u;
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    memset(&s_hmi_params, 0, sizeof(s_hmi_params));
+    memset(&s_cooking_params, 0, sizeof(s_cooking_params));
+    memset(&s_segalign_params, 0, sizeof(s_segalign_params));
+    s_outPara.AppHmi_params.params      = &s_hmi_params;
+    s_outPara.AppCooking_params.params   = &s_cooking_params;
+    s_outPara.AppSegAlign_params.params  = &s_segalign_params;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
 }
-void Drv_Key_Init(void) { Constructor(); }
 MODULE_EXPORT(DrvKey);
 
 /* ========== 按键事件发送 ========== */
 static void Key_PostEvent(uint8_t key_code, uint8_t key_state)
 {
-    /* v2.0: 写 g_output */
-    s_out.has_key   = 1;
-    s_out.key_code  = key_code;
-    s_out.key_state = key_state;
+    MODULE_OUTPUT(DrvKey) *out = &s_outPara;
+    out->AppHmi_params.params->key_code  = key_code;
+    out->AppHmi_params.params->key_state = key_state;
+    out->AppHmi_params.status |= ST_NEW;
+
+    out->AppCooking_params.params->key_code  = key_code;
+    out->AppCooking_params.params->key_state = key_state;
+    out->AppCooking_params.status |= ST_NEW;
+
+    out->AppSegAlign_params.params->key_code  = key_code;
+    out->AppSegAlign_params.params->key_state = key_state;
+    out->AppSegAlign_params.status |= ST_NEW;
+
+    g_output.info.status |= ST_OUT;
 }
 
 /* ========== 处理按键释放（切键时先释放旧键） ========== */

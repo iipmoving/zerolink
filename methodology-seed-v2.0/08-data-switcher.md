@@ -418,7 +418,7 @@ Producer 输出 LINK 成员名:  {Consumer}_params     (out->ElecParams_params)
 Consumer 输入 LINK 成员名:  {Producer}_params     (in->Calculator_params)
 ```
 
-**双向对称**: 直穿赋值就是 `in->Calculator_params = (void*)&out->ElecParams_params`。
+**双向对称**: 直穿赋值就是 `in->Calculator_params = (void*)out->ElecParams_params`。
 
 当 Producer 有多个 Consumer 时，次管道保留具名（如 `power_direct`），仍遵守 `{Consumer}_params` 优先原则。
 

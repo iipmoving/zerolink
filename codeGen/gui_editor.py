@@ -51,10 +51,10 @@ class ConfigEditor:
         self._selected_pipe = None  # 当前选中的 pipe dict (引用)
         self._field_item_map = {}   # {Treeview iid: field_dict} 用于嵌套字段编辑
 
-        # ---- 硬编码项目路径 ----
-        self._hardcoded_keil_file = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src\RX32G410_FW_HAL_V1.3N\Projects\Projects\Keil\ReTek.uvprojx"
-        self._hardcoded_output_root = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF"
-        self._hardcoded_project_src = r"D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src"
+        # ---- 项目路径 (由 project.json 加载或用户手动设置) ----
+        self._hardcoded_keil_file = ""
+        self._hardcoded_output_root = ""
+        self._hardcoded_project_src = ""
 
         # ---- 构建 UI ----
         self._build_menu()
@@ -141,12 +141,14 @@ class ConfigEditor:
         ttk.Label(pf, text="输出根目录:").grid(row=row, column=0, sticky=tk.W)
         self.entry_output_root = ttk.Entry(pf)
         self.entry_output_root.grid(row=row, column=1, sticky=tk.EW, padx=4)
-        self.entry_output_root.bind("<KeyRelease>", lambda e: self._on_output_root_change())
+        ttk.Button(pf, text="浏览", command=self._cmd_browse_output_root, width=4).grid(row=row, column=2, padx=2)
+        ttk.Button(pf, text="确认", command=self._cmd_apply_paths, width=4).grid(row=row, column=3, padx=2)
         pf.columnconfigure(1, weight=1)
         row += 1
 
         for label, key in [("io_dir:", "io_dir"), ("core_dir:", "core_dir"),
-                           ("app_dir:", "app_dir"), ("base_dir:", "base_class_dir"),
+                           ("app_dir:", "app_dir"), ("drv_dir:", "drv_dir"),
+                           ("base_dir:", "base_class_dir"),
                            ("proto_dir:", "proto_dir")]:
             ttk.Label(pf, text=label).grid(row=row, column=0, sticky=tk.W)
             ent = ttk.Entry(pf)
@@ -782,16 +784,42 @@ class ConfigEditor:
             self._ref_log_append(f"[ERROR] {e}")
             messagebox.showerror("导入失败", str(e))
 
-    # ----- Step 4 -----
-        except Exception as e:
-            self._ref_log_append(f"[ERROR] {e}")
-            messagebox.showerror("解析失败", str(e))
-
     def _on_output_root_change(self):
         """输出根目录变化时，记住目录"""
         val = self.entry_output_root.get().strip()
         if val and os.path.isdir(val):
             self._ref_last_output_dir = val
+
+    def _cmd_browse_output_root(self):
+        path = filedialog.askdirectory(title="选择输出根目录")
+        if path:
+            self.entry_output_root.delete(0, tk.END)
+            self.entry_output_root.insert(0, path)
+            self._ref_last_output_dir = path
+            self.status(f"输出根目录: {path}")
+
+    def _cmd_apply_paths(self):
+        """确认应用当前路径设置 → 同步到重构面板 + 保存到 config"""
+        output_root = self.entry_output_root.get().strip()
+        if not output_root:
+            messagebox.showerror("错误", "请填写输出根目录")
+            return
+        if not os.path.isabs(output_root):
+            output_root = os.path.abspath(output_root)
+            self.entry_output_root.delete(0, tk.END)
+            self.entry_output_root.insert(0, output_root)
+
+        self._ref_last_output_dir = output_root
+
+        if hasattr(self, '_ref_output_dir'):
+            self._ref_output_dir.delete(0, tk.END)
+            self._ref_output_dir.insert(0, output_root)
+
+        io_dir = self.entry_io_dir.get().strip() or "include"
+        core_dir = self.entry_core_dir.get().strip() or "core"
+        drv_dir = self.entry_drv_dir.get().strip() if hasattr(self, 'entry_drv_dir') else "drv"
+
+        self.status(f"路径已确认: root={output_root}, io={io_dir}, core={core_dir}, drv={drv_dir}")
 
     def _ref_cmd_browse_output(self):
         path = filedialog.askdirectory(title="选择输出目录")
@@ -803,9 +831,11 @@ class ConfigEditor:
     def _ref_cmd_generate(self):
         config = self._ref_imported_config
         if not config:
-            messagebox.showinfo("提示", "请先导入 project.json (Step 3)")
+            config = self.config
+        if not config:
+            messagebox.showinfo("提示", "请先导入 project.json (Step 3) 或打开配置文件")
             return
-        output_root = self._ref_output_dir.get().strip()
+        output_root = self.entry_output_root.get().strip() or self._ref_output_dir.get().strip()
         if not output_root:
             messagebox.showerror("错误", "请填写输出目录")
             return
@@ -826,8 +856,10 @@ class ConfigEditor:
         pipes = config.get("pipes", [])
         slot_order = config.get("slot_order", [m["name"] for m in modules])
         slot_chains = config.get("slot_chains", [])
-        io_dir = paths.get("io_dir", "include")
-        core_dir = paths.get("core_dir", "core")
+        io_dir = self.entry_io_dir.get().strip() or paths.get("io_dir", "include")
+        core_dir = self.entry_core_dir.get().strip() or paths.get("core_dir", "core")
+        drv_dir = self.entry_drv_dir.get().strip() if hasattr(self, 'entry_drv_dir') else paths.get("drv_dir", "drv")
+        app_dir = self.entry_app_dir.get().strip() or paths.get("app_dir", "app")
 
         self._ref_log_append("")
         self._ref_log_append("=" * 50)
@@ -880,7 +912,13 @@ class ConfigEditor:
                         self._ref_log_append(f"    ⚠ {mod_name}: 原文件未找到, 跳过")
                         continue
                     c = generate_module_c_refactored(mod, pipes, project, orig_path)
-                    mod_out = os.path.join(output_root, mod["layer"])
+                    layer = mod.get("layer", "app")
+                    if layer == "drv":
+                        mod_out = os.path.join(output_root, drv_dir)
+                    elif layer == "app":
+                        mod_out = os.path.join(output_root, app_dir)
+                    else:
+                        mod_out = os.path.join(output_root, layer)
                     os.makedirs(mod_out, exist_ok=True)
                     fp = os.path.join(mod_out, f"{_pascal_to_snake(mod_name)}.refactored.c")
                     with open(fp, "w", encoding="utf-8") as f:
@@ -897,7 +935,13 @@ class ConfigEditor:
                                  for sf in self._ref_filtered_files)
                     if not is_new:
                         continue
-                    mod_out = os.path.join(output_root, mod["layer"])
+                    layer = mod.get("layer", "app")
+                    if layer == "drv":
+                        mod_out = os.path.join(output_root, drv_dir)
+                    elif layer == "app":
+                        mod_out = os.path.join(output_root, app_dir)
+                    else:
+                        mod_out = os.path.join(output_root, layer)
                     os.makedirs(mod_out, exist_ok=True)
                     cc = generate_module_c(mod, pipes, project)
                     with open(os.path.join(mod_out, f"{ml}.c"), "w", encoding="utf-8") as f:
@@ -972,7 +1016,7 @@ class ConfigEditor:
             raw_root = os.path.abspath(os.path.join(os.path.dirname(path), raw_root))
         self.entry_output_root.delete(0, tk.END)
         self.entry_output_root.insert(0, raw_root)
-        for key in ("io_dir", "core_dir", "app_dir", "base_class_dir", "proto_dir"):
+        for key in ("io_dir", "core_dir", "app_dir", "drv_dir", "base_class_dir", "proto_dir"):
             ent = getattr(self, f"entry_{key.replace('.', '_')}", None)
             if ent:
                 ent.delete(0, tk.END)
@@ -992,6 +1036,7 @@ class ConfigEditor:
             "io_dir": self.entry_io_dir.get(),
             "core_dir": self.entry_core_dir.get(),
             "app_dir": self.entry_app_dir.get(),
+            "drv_dir": self.entry_drv_dir.get() if hasattr(self, 'entry_drv_dir') else "",
             "base_class_dir": self.entry_base_class_dir.get(),
             "proto_dir": self.entry_proto_dir.get(),
         }
@@ -2014,10 +2059,10 @@ class ConfigEditor:
     # ================================================================
     def cmd_generate_project_via_claude(self):
         """通过 Claude CLI 生成 project.json（CREATE_NEW_CONSOLE + 文件轮询）"""
-        output_root = self._hardcoded_output_root
+        output_root = self.entry_output_root.get().strip() or self._hardcoded_output_root
         proj_dir = self._hardcoded_project_src
-        keil_dir = os.path.dirname(self._hardcoded_keil_file)
-        proj_name = "m4_ekf_observer"
+        keil_dir = os.path.dirname(self._hardcoded_keil_file) if self._hardcoded_keil_file else ""
+        proj_name = "IH_Project"
 
         self.status("正在通过 Claude CLI 生成 project.json ...")
         self.root.update()
@@ -2157,9 +2202,9 @@ KEIL 项目文件: {keil_path}
     # ── Python 快速扫描（已范式化项目用） ──
     def cmd_scan_python(self):
         """通过 Python 扫描器直接生成 project.json（无需 Claude CLI）"""
-        output_root = self._hardcoded_output_root
+        output_root = self.entry_output_root.get().strip() or self._hardcoded_output_root
         proj_dir = self._hardcoded_project_src
-        proj_name = "m4_ekf_observer"
+        proj_name = "IH_Project"
 
         self.status("正在扫描源码生成 project.json ...")
         self.root.update()
@@ -2554,6 +2599,7 @@ KEIL 项目文件: {keil_path}
         io_dir    = paths.get("io_dir", "include")
         core_dir  = paths.get("core_dir", "core")
         app_dir   = paths.get("app_dir", "app")
+        drv_dir   = paths.get("drv_dir", "drv")
         base_dir  = paths.get("base_class_dir", "base_class")
         proto_dir = paths.get("proto_dir", "proto")
         output_root = self.entry_output_root.get().strip()
@@ -2562,6 +2608,8 @@ KEIL 项目文件: {keil_path}
             layer = module.get("layer", "app")
             if layer == "app":
                 return os.path.join(output_root, app_dir)
+            elif layer == "drv":
+                return os.path.join(output_root, drv_dir)
             elif layer == "base_class":
                 return os.path.join(output_root, base_dir)
             elif layer == "proto":
@@ -2888,7 +2936,7 @@ class ModuleDialog:
         entry_name.focus_set()
 
         ttk.Label(dlg, text="层:").pack(pady=(6, 2), anchor=tk.W, padx=12)
-        cb_layer = ttk.Combobox(dlg, values=["app", "base_class", "proto", "core"], state="readonly")
+        cb_layer = ttk.Combobox(dlg, values=["app", "drv", "base_class", "proto", "core"], state="readonly")
         cb_layer.pack(padx=12, fill=tk.X)
         cb_layer.set("app")
 
