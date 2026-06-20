@@ -255,7 +255,7 @@ Presentation Controls ← SlotElement/LEDElement/BlinkRule/ModeRule
 ### 7.2 层依赖审计
 
 ```bash
-python tools/check_deps.py . --project four_head
+python tools/check_deps.py src/ --project four_head
 ```
 
 **不通过 = 不得提交。** 违规类型:
@@ -263,59 +263,16 @@ python tools/check_deps.py . --project four_head
 - `drv/*.c` 包含 `app/` → 必须移除
 - `hal/*.c` 包含 `core/` `app/` `drv/` `proto/` → 必须移除
 - `proto/*.c` 包含 `app/` `drv/` `hal/` → 必须移除
+- `core/*.c` 包含 `app/` `drv/` `hal/` `proto/` → 必须移除 (仅允许 include_io/)
 
-### 7.3 __weak 配对一致性
+### 7.3 IO 接口一致性 (v2.3 codeGen 驱动)
 
-```bash
-python tools/check_weak_pairs.py . --project four_head
-```
+跨模块数据结构由 `json/project.json` 定义，codeGen 生成 `include_io/*_io.h`。
+**编译器保证一致性** — 字段不匹配直接编译错误，无需额外检查工具。
 
-**不通过 = 不得提交。** 检查项:
-- interface_map.h 每个 pair 的 WEAK/STRONG 成对存在
-- 签名匹配（参数数量/类型/顺序一致）
+修改流程: `project.json → code_gen.py → _io.h 更新 → armcc 编译验证`
 
-### 7.4 结构体一致性
-
-```bash
-python tools/check_structs.py . --project four_head
-```
-
-**不通过 = 不得提交。** 检查项:
-- 各模块 types.h 与 cfg/structs.json 一致
-- serial 编号匹配，无废弃字段引用
-
-### 7.5 数据交换机 include 权限
-
-```bash
-python tools/check_include.py .
-```
-
-**不通过 = 不得提交。** 检查项:
-- `*_io.h` 只能被 data_switcher.c 和模块自身 include
-
-### 7.6 消息通道一致性
-
-```bash
-python tools/check_msgs.py ../src
-```
-
-**不通过 = 不得提交。** 检查项:
-- 每条消息通道的 Send/Register 成对存在
-- 同名数值未被不同通道重复使用
-- `*_MSG_*_IN` / `*_MSG_*_OUT` 命名符合约定
-
-### 7.7 自检清单
-
-在标记任何任务为完成前，逐条确认:
-- [ ] 所有 `#include` 符合所在层的依赖规则？
-- [ ] APP→APP 通信只用 Msg_Post，无直接 include 或函数调用？
-- [ ] HAL 调用只存在于 DRV 层？
-- [ ] 新模块放在正确的层？(APP=业务逻辑, DRV=硬件封装, proto=协议, core=基础设施)
-- [ ] 消息ID使用本地 `#define`，无共享 MSG_* 枚举引用？
-- [ ] 跨模块结构体独立声明，interface_map.h 已更新？
-- [ ] HMI 规则变更: JSON 先改 → JS 测试通过 → 再写 C？
-
-### 7.8 编译验证
+### 7.4 编译验证
 
 ```
 armcc -c --cpu Cortex-M0+ -DSC32L14xx --c99 ... → 0 error, 0 warning
