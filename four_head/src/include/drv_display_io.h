@@ -1,49 +1,65 @@
 /**
- * drv_display_io.h —— DrvDisplay 输入接口定义 (v2.3)
+ * @file    drv_display_io.h
+ * @brief   DrvDisplay Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   drv
  *
- * 数据流:
- *   INPUT: AppHmi → DrvDisplay (显示数据)
+ * 显示驱动 — 从 Hmi 接收显示数据，驱动段码/LED
  *
- * DrvDisplay 只有 INPUT，没有 OUTPUT
- *
- * Include 权限:
- *   - 仅 drv_display.c 和 data_switcher.c 可 include
- *   - 使用全路径: #include "include/drv_display_io.h"
- *
- * 本文件包含 std_module.h，调用者无需再包含
+ * 输入源:
+ *   AppHmi → DrvDisplay  (显示数据 → DrvDisplay (段码/LED))
  */
-#ifndef DRV_DISPLAY_IO_H
-#define DRV_DISPLAY_IO_H
 
-#include "../core/std_module.h"
+#ifndef DRVDISPLAY_IO_H
+#define DRVDISPLAY_IO_H
+
 #include <stdint.h>
+#include "std_module.h"
 
-/* ========== OUTPUT (无) ========== */
-/* DrvDisplay 是底层驱动，没有输出 */
+#pragma pack(4)
 
-/* ========== INPUT (DrvDisplay 从别的模块得到的数据) ========== */
+/* ========== OUTPUT (无) — 本模块没有输出 ========== */
 
-/* Hmi_to_Display_Params — 输入数据参数 (布局与 AppHmi OUTPUT 一致) */
+/* DrvDisplay_Output — 无输出 */
 typedef struct {
-    uint8_t  head_index;      /* 炉头索引 0-3 */
-    char     seg_chars[8];    /* 段码显示字符 */
-    uint8_t  seg_mode;        /* SEG_MODE_*: 显示模式 */
-    uint8_t  led_bits;        /* LED 位图 */
+    uint8_t  res[4];
+} MODULE_OUTPUT(DrvDisplay);
+
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppHmi → DrvDisplay  输入参数  (显示数据 → DrvDisplay (段码/LED))
+ * ------------------------------------------------------------------ */
+typedef struct {
+    int8_t hot_head_idx;     /* 热点炉头索引 (-1=无) */
+    uint8_t seg_chars[8];     /* 8位段码字符 */
+    uint8_t seg_blink[4];     /* 炉头闪烁控制 */
+    uint8_t seg_mode;     /* 显示模式 */
+    uint8_t leds_power;     /* 电源 LED */
+    uint8_t leds_timer;     /* 定时 LED */
+    uint8_t leds_pause;     /* 暂停 LED */
+    uint8_t leds_child_lock;     /* 童锁 LED */
+    uint8_t leds_head_select[4];     /* 炉头选择 LED */
+    uint8_t leds_power_level[10];     /* 功率档位 LED */
+} MODULE_INPUT_PARAMS(AppHmi, DrvDisplay);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-} MODULE_INPUT_PARAMS(Hmi, Display);
+    MODULE_INPUT_PARAMS(AppHmi, DrvDisplay) *params;
+} MODULE_INPUT_LINK(AppHmi, DrvDisplay);
 
-/* Hmi_to_Display_Input_Link — 输入管道 (与 AppHmi OUTPUT 配对) */
+/* DrvDisplay_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_INPUT_PARAMS(Hmi, Display) *params;
-} MODULE_INPUT_LINK(Hmi, Display);
-
-/* DrvDisplay_Input — 输入聚合 */
-typedef struct {
-    MODULE_INPUT_LINK(Hmi, Display) *hmi;  /* 从 AppHmi 得到 */
+    MODULE_INPUT_LINK(AppHmi, DrvDisplay) *AppHmi_params;  /* 指向 AppHmi 输出的 LINK 列 */
 } MODULE_INPUT(DrvDisplay);
 
-#endif /* DRV_DISPLAY_IO_H */
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(DrvDisplay);
+
+#endif /* DRVDISPLAY_IO_H */

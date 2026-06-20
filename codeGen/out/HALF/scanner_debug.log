@@ -20,3 +20,51 @@
       EKF_LKF          layer=base_class  
 [OK] 管道数: 7
 [OK] 已写入: D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF\project.json
+[INFO] 扫描目录: D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src
+============================================================
+[OK] 扫描完成！
+[OK] 模块数: 6
+      AppAdc           layer=app         
+      AppPower         layer=app         
+      Calculator       layer=base_class  
+      ElecParams       layer=base_class  
+      EKF_LKF          layer=base_class  
+      Telemetry        layer=base_class  
+[OK] 管道数: 8
+[OK] 已写入: D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF\project.json
+[INFO] 扫描目录: D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src
+============================================================
+[OK] 扫描完成！
+[OK] 模块数: 6
+      AppAdc           layer=app         
+      AppPower         layer=app         
+      Calculator       layer=base_class  
+      ElecParams       layer=base_class  
+      EKF_LKF          layer=base_class  
+      Telemetry        layer=base_class  
+[OK] 管道数: 8
+[OK] 已写入: D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF\project.json
+[INFO] 扫描目录: D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src
+============================================================
+[OK] 扫描完成！
+[OK] 模块数: 6
+      AppAdc           layer=app         
+      AppPower         layer=app         
+      Calculator       layer=base_class  
+      ElecParams       layer=base_class  
+      EKF_LKF          layer=base_class  
+      Telemetry        layer=base_class  
+[OK] 管道数: 9
+[OK] 已写入: D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF\project.json
+[INFO] 扫描目录: D:\OBSIDIAN\MOVING IH\ZEROLINK\m4_ekf_observer\src
+============================================================
+[OK] 扫描完成！
+[OK] 模块数: 6
+      AppAdc           layer=app         
+      AppPower         layer=app         
+      Calculator       layer=base_class  
+      ElecParams       layer=base_class  
+      EKF_LKF          layer=base_class  
+      Telemetry        layer=base_class  
+[OK] 管道数: 9
+[OK] 已写入: D:\OBSIDIAN\MOVING IH\ZEROLINK\codeGen\out\HALF\project.json

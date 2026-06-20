@@ -15,6 +15,7 @@
  *   3. 协议可替换 — 换协议只需换 proto 模块的强符号实现
  */
 #include "core/std_module.h"
+#include "../include_io/app_comm_mgr_io.h"
 #include "app_comm_mgr.h"
 #include <string.h>
 #include <stddef.h>

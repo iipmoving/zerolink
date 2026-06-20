@@ -98,7 +98,7 @@ static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uin
 /* ---- 处理逻辑入口（每帧被调）---- */
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags)
 {
-	out->ElecParams_params.status &= ~ST_NEW;
+	out->ElecParams_params->status &= ~ST_NEW;
 //    MODULE_INPUT(Calculator)*   pIn = g_input.para;
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
@@ -115,14 +115,14 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 				{
 						// 完成 Calculator→PowerBase 直接参数平均值 // 每20ms计算一次
 					
-					if((out->AppAdc_params.status&ST_NEW)==0)			//以经执行就不再执行这个时间片，等ADC把数据取走
+					if((out->AppAdc_params->status&ST_NEW)==0)			//以经执行就不再执行这个时间片，等ADC把数据取走
 					{		
 						
 
-						out->ElecParams_params.status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
+						out->ElecParams_params->status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
 						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
-						out->AppAdc_params.status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
+						out->AppAdc_params->status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
 					}
 				}
 				

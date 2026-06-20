@@ -21,6 +21,7 @@
  *   下4位 = 按键类型字符串
  */
 #include "core/std_module.h"
+#include "../include_io/drv_display_io.h"
 #include "drv_display.h"
 #include "../hal/hal_smg.h"
 #include "../hal/hal_display.h"

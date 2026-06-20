@@ -1,7 +1,7 @@
 # RESTART.md — 四头电磁炉固件 · AI 重启入口
 
 > **用途**: 新 AI 会话或接管工程师的第一个文件。读完本文件 ≈ 继承全部项目记忆。
-> **最后更新**: 2026-05-27
+> **最后更新**: 2026-06-19 (v2.3 指针直穿)
 
 ---
 
@@ -274,8 +274,33 @@ PROTO 层: Proto_{Action}        → Proto_BuildRead, Proto_Parse (特殊: 返�
 | `core/interface_map.h` | **公共声明链接表** — __weak 通道注册表 (文档) |
 | `core/msg_def.h` | 消息 ID 定义 (已废弃, 保留参考) |
 | `core/msg_scheduler.c/.h` | 消息调度器 (已废弃, v2.0 用 __weak 替代) |
+| `core/std_module.h` | v2.3 统一模块骨架 (MODULE_SKELETON / MODULE_EXPORT / LINK 宏) |
+| `core/data_switcher.c/.h` | v2.3 PULL 路由调度器 (INPUT_CALLBACK / INPUT_GET_SLOT) |
+| `include_io/*_io.h` | v2.3 模块 IO 接口 (由 codeGen 生成, 指针模式) |
+| `json/project.json` | codeGen 数据源 — 模块/管道/字段的唯一真相 |
 
-### 4.2 工具脚本 (tools/)
+### 4.2 外部工具链 (codeGen/)
+
+> codeGen 是跨项目共享的代码生成工具，独立于 four_head 仓库。
+
+| 路径 | 用途 | 命令 |
+|------|------|------|
+| `ZEROLINK/codeGen/scan_project.py` | 扫描 include_io/ → project.json | `python scan_project.py <src路径> --name four_head` |
+| `ZEROLINK/codeGen/code_gen.py` | project.json → io.h + switcher + module | `python code_gen.py gen --config project.json -o <src路径>` |
+| `ZEROLINK/codeGen/gui_editor.py` | GUI 编辑 project.json + 预览 + 生成 | `python gui_editor.py` |
+| `ZEROLINK/codeGen/gen_io_h.py` | io.h 生成器 (被 code_gen.py 调用) | — |
+| `ZEROLINK/codeGen/gen_switcher.py` | data_switcher.c 生成器 | — |
+| `ZEROLINK/codeGen/gen_module_c.py` | module .c/.h 生成器 | — |
+| `ZEROLINK/codeGen/keil_parser.py` | Keil uvprojx 解析器 | — |
+
+**典型工作流**:
+```
+1. 修改 src/json/project.json (或 GUI 编辑)
+2. python code_gen.py gen --config project.json -o <src路径> [--only-io | --only-switcher | --only-modules]
+3. 生成文件覆盖 src/include_io/ 和 src/core/
+```
+
+### 4.3 项目本地工具 (tools/)
 
 | 文件 | 用途 | 何时运行 |
 |------|------|---------|
@@ -283,7 +308,7 @@ PROTO 层: Proto_{Action}        → Proto_BuildRead, Proto_Parse (特殊: 返�
 | `tools/check_msgs.py` | 消息通道一致性 | 每次编码后 |
 | `tools/v4json_to_c.py` | JSON→C 数据转换 | JSON 规则变更后 |
 
-### 4.3 项目文件 (Project/)
+### 4.4 项目文件 (Project/)
 
 | 文件 | 用途 |
 |------|------|
@@ -487,24 +512,30 @@ void App_Xxx_Run(void) {
 ## 十、快速参考卡
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    FOUR_HEAD 快速参考                         │
-├─────────────────────────────────────────────────────────────┤
+┌───────────────────────────────────────────────────────────┐
+│                    FOUR_HEAD 快速参考 (v2.3)                 │
+├────────────────────────────────────────────────────────────┤
 │ 层依赖:     APP → DRV → HAL    (HAL 零依赖)                   │
 │            APP → PROTO (仅 __weak 返回值函数)                  │
-│ 通信:      __weak 回调直调, 链接器接线                         │
+│ 通信:      PULL 路由, Switcher 指针直穿 (零拷贝)              │
+│ OUTPUT:    *{Consumer}_params 指针, .c 中 static 实例绑定     │
+│ INPUT:     *{Producer}_params 指针, InputCallback 直穿赋值    │
 │ 头文件:    HAL 正常 include guard, 其余 //#define              │
-│ 接口表:    src/core/interface_map.h (纯文档, 禁 include)       │
+│ IO接口:    include_io/*_io.h (codeGen 生成, 指针模式)          │
+│ 数据源:    json/project.json (codeGen 唯一真相)               │
+│ Switcher:  core/data_switcher.c (codeGen 生成)               │
+│ 骨架:      core/std_module.h (MODULE_SKELETON + MODULE_EXPORT)│
 │ 调度:      10 槽 × 1ms, 每 10ms 完整周期                      │
 │ 编译器:    ARMCC V5.06, C99, Cortex-M0+                      │
 │ 项目文件:   Project/32L14Tdmoe.uvprojx                        │
 │ 验证:      check_deps.py → armcc → 提交                       │
+│ codeGen:   ZEROLINK/codeGen/ (scan_project → code_gen)        │
 │ 铁律:      违规应被阻断, 不被提醒                               │
 │            L0(编译器) > L1(pre-commit) > L2(生成器) > L3(文档) │
-└─────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 *本文件是 four_head 项目的唯一重启入口。任何新 AI 会话或接管工程师应从此文件开始。*
-*与之配套的方法论体系见: `../methodology-seed/ONBOARDING.md`*
+*与之配套的方法论体系见: `../methodology-seed-v2.0/ONBOARDING.md`*

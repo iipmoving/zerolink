@@ -11,11 +11,30 @@
  * 核心原则：单向调用 — 下游拉 (InputCallback), 上游不推
  * ================================================================
  *
+ * seq 有效性索引号机制 (v2.3):
+ *   - LINK 头部 seq 字段: 生产者每次产出 seq++, 消费者比对 last_seq
+ *   - seq != last_seq → 新数据, 处理后 last_seq = seq
+ *   - seq == last_seq → 已处理, 跳过 (空闲SLOT重复调用幂等)
+ *   - 多消费者共享同一 LINK 互不干扰 (各维护自己的 last_seq)
+ *   - 不需要清除标志, 彻底解决误清问题
+ *
+ * route 子功能入口机制 (v2.3):
+ *   - Info_Header.route 字段: 区分同一 LINK 的不同 PARAMS 入口
+ *   - 每个模块只有一个 DoWork 对外, route 决定内部走哪条处理路径
+ *   - 同一 LINK 可包含多个 PARAMS (如 write_params + block_params),
+ *     route 指定本次产出/消费的是哪个 PARAMS
+ *   - 生产者: 输出时设置 info.route = N, 标识本次数据属于哪个 PARAMS
+ *   - 消费者: 输入段检查 info.route, 选择对应的 PARAMS 处理
+ *   - 不需要 route 的场景: 统一读取所有 PARAMS 字段即可
+ *   - 两模块间只有一条管道(一个 LINK), 多子功能合并到同一 LINK 的不同 PARAMS
+ *
  * 数据流:
- *   上游 DoWork() → 写 g_output.para + 置 ST_OUT
+ *   上游 DoWork() → 写 g_output.para + LINK.seq++ + 置 ST_OUT
+ *                 → 可选: 设置 info.route 标识子功能入口
  *   中间层 name_InputCallback (强符号) → 从上游 s_slot[].pOut 拉数据
  *                                     → 写下游 s_slot[].pIn + 置 ST_NEW
- *   下游 DoWork() → ProcessInput() → 消费 g_input.para
+ *   下游 DoWork() → ProcessInput() → LINK.seq 比对 → 消费 g_input.para
+ *                 → 可选: 检查 info.route 选择处理路径
  *
  * DoWork 调用顺序:
  *   1. name##_InputCallback()  — weak 空壳, 中间层覆盖强符号注入数据

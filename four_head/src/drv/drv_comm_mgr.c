@@ -13,6 +13,7 @@
  * 层级: DRV
  */
 #include "core/std_module.h"
+#include "../include_io/drv_comm_mgr_io.h"
 #include "drv_comm_mgr.h"
 #include "drv_comm.h"
 #include <string.h>

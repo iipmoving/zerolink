@@ -8,6 +8,7 @@
  * 定时: 100ms 执行功率链（IGBT降功率→炉面高温→软启动→间断加热）
  */
 #include "core/std_module.h"
+#include "../include_io/app_power_io.h"
 #include "app_power.h"
 #include <string.h>
 

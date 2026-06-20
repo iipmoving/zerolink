@@ -106,26 +106,26 @@ INPUT_CALLBACK(ElecParams)
 
 INPUT_CALLBACK(Telemetry)
 {
-//    INPUT_GET_SLOT(Calculator, Telemetry);
-//    INPUT_GET_SLOT(ElecParams, Telemetry);
+    INPUT_GET_SLOT(Calculator, Telemetry);
+    INPUT_GET_SLOT(ElecParams, Telemetry);
 	
-	    do { \
-        MODULE_OUTPUT(Calculator) *__out = \
-            (MODULE_OUTPUT(Calculator) *)s_slot[SLOT(Calculator)].pOut->para; \
-        MODULE_INPUT(Telemetry)   *__in  = \
-            (MODULE_INPUT(Telemetry)   *)s_slot[SLOT(Telemetry)].pIn->para; \
-        __in->Calculator_params = (void*)__out->Telemetry_params; \
-    } while (0);		
-	
-	
-	
-    do { \
-        MODULE_OUTPUT(ElecParams) *__out = \
-            (MODULE_OUTPUT(ElecParams) *)s_slot[SLOT(ElecParams)].pOut->para; \
-        MODULE_INPUT(Telemetry)   *__in  = \
-            (MODULE_INPUT(Telemetry)   *)s_slot[SLOT(Telemetry)].pIn->para; \
-        __in->ElecParams_params = (void*)__out->Telemetry_params; \
-    } while (0);		
+//	    do { \
+//        MODULE_OUTPUT(Calculator) *__out = \
+//            (MODULE_OUTPUT(Calculator) *)s_slot[SLOT(Calculator)].pOut->para; \
+//        MODULE_INPUT(Telemetry)   *__in  = \
+//            (MODULE_INPUT(Telemetry)   *)s_slot[SLOT(Telemetry)].pIn->para; \
+//        __in->Calculator_params = (void*)__out->Telemetry_params; \
+//    } while (0);		
+//	
+//	
+//	
+//    do { \
+//        MODULE_OUTPUT(ElecParams) *__out = \
+//            (MODULE_OUTPUT(ElecParams) *)s_slot[SLOT(ElecParams)].pOut->para; \
+//        MODULE_INPUT(Telemetry)   *__in  = \
+//            (MODULE_INPUT(Telemetry)   *)s_slot[SLOT(Telemetry)].pIn->para; \
+//        __in->ElecParams_params = (void*)__out->Telemetry_params; \
+//    } while (0);		
 	
 }
 

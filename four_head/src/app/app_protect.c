@@ -16,6 +16,7 @@
  *   收到 AppProtect_OnRegData 时更新寄存器缓存
  */
 #include "core/std_module.h"
+#include "../include_io/app_protect_io.h"
 #include "app_protect.h"
 #include <stddef.h>
 

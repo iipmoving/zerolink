@@ -20,6 +20,7 @@
  */
 
 #include "core/std_module.h"
+#include "../include_io/app_seg_align_io.h"
 #include "app_seg_align.h"
 #include <string.h>
 #include <stddef.h>

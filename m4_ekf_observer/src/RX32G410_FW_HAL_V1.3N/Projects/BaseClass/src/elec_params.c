@@ -397,7 +397,7 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     result->Q_factor = (fabsf(denom_q) > 1e-6f) ? (tanf(phi_rad) / denom_q) : 0.0f;
     
     // R = ω_res × L / Q — 等效串联电阻
-    result->R_ohm = (result->Q_factor > 1e-6f)
+    result->R_ohm= (result->Q_factor > 1e-6f)
         ? (omega_res * (result->L_uH * 1e-6f) / result->Q_factor) : 0.0f;
     
     // I_rms = I_peak × √2/2 ≈ I_peak × 0.7071 — 正弦电流有效值
@@ -481,7 +481,7 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 				result=&out->EKF_LKF_params->params[h];
 			
         // 指向当前炉头的 20 周期数据块
-        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h][PERIO_CNT];
+        const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h][0];
         uint8_t calc_ok = ElecParams_Calc(result, cycles, ws);
 
 

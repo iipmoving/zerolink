@@ -336,9 +336,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>RX32G410,DEBUG_POWER_OUTX,SimZeroX,I2C2_PORT,PrintMessage,Fmac9,COMM_UART</Define>
+              <Define>RX32G410,DEBUG_POWER_OUT,SimZero,I2C2_PORT,PrintMessage,Fmac9,CurrentFromTxa,COMM_UART,TxaFmac,DEBUG_POWER_OUT_CONST</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\modbus\inc</IncludePath>
+              <IncludePath>..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\modbus\inc;..\..\core</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -597,16 +597,6 @@
               <FileType>1</FileType>
               <FilePath>..\..\DRV\SRC\DRV_GPIO.C</FilePath>
             </File>
-            <File>
-              <FileName>adc_processing.s</FileName>
-              <FileType>2</FileType>
-              <FilePath>..\..\DRV\SRC\adc_processing.s</FilePath>
-            </File>
-            <File>
-              <FileName>adc_processing1.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\DRV\SRC\adc_processing1.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -758,6 +748,46 @@
               <FileType>1</FileType>
               <FilePath>..\..\BaseClass\src\CommClass.c</FilePath>
             </File>
+            <File>
+              <FileName>calculator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\calculator.c</FilePath>
+            </File>
+            <File>
+              <FileName>ekf_lkf.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\ekf_lkf.c</FilePath>
+            </File>
+            <File>
+              <FileName>elec_params.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\elec_params.c</FilePath>
+            </File>
+            <File>
+              <FileName>pluse.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\pluse.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_calculator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\power_calculator.c</FilePath>
+            </File>
+            <File>
+              <FileName>telemetry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\telemetry.c</FilePath>
+            </File>
+            <File>
+              <FileName>wave_capture.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\wave_capture.c</FilePath>
+            </File>
+            <File>
+              <FileName>printMessage.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\printMessage.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -881,6 +911,11 @@
               <FileName>Modbus_Lib_Init_An_Analysis.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\modbus\src\Modbus_Lib_Init_An_Analysis.c</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_ekf_regs.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\modbus\src\modbus_ekf_regs.c</FilePath>
             </File>
           </Files>
         </Group>

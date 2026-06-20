@@ -1,69 +1,81 @@
 /**
- * app_protect_io.h —— AppProtect 输入输出接口定义 (v2.3)
+ * @file    app_protect_io.h
+ * @brief   AppProtect Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 数据流:
- *   INPUT: AppCommMgr → AppProtect (寄存器数据)
- *   OUTPUT: AppProtect → AppPower (故障数据)
+ * 故障保护逻辑 — 从 CommMgr 获取寄存器，输出故障状态到 Power
  *
- * Include 权限:
- *   - 仅 app_protect.c 和 data_switcher.c 可 include
- *   - 使用全路径: #include "include/app_protect_io.h"
+ * 输入源:
+ *   AppCommMgr → AppProtect  (Modbus 寄存器数据 → Protect)
  *
- * 本文件包含 std_module.h，调用者无需再包含
+ * 输出目标:
+ *   AppProtect → AppPower  (故障状态 → Power)
  */
-#ifndef APP_PROTECT_IO_H
-#define APP_PROTECT_IO_H
 
-#include "../core/std_module.h"
+#ifndef APPPROTECT_IO_H
+#define APPPROTECT_IO_H
+
 #include <stdint.h>
+#include "std_module.h"
 
-/* ========== OUTPUT (AppProtect 给别的模块提供的数据) ========== */
+#pragma pack(4)
 
-/* Protect_to_Power_Params — 输出数据参数 */
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppProtect → AppPower  输出参数  (故障状态 → Power)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;      /* 炉头索引 0-3 */
-    uint8_t  slave_addr;      /* MODBUS 站号 */
-    uint16_t fault;           /* ProtectFault_t: 故障位集合 */
-    uint8_t  res[2];
-} MODULE_OUTPUT_PARAMS(Protect, Power);
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint16_t fault;     /* 故障位集合 ProtectFault_t */
+} MODULE_OUTPUT_PARAMS(AppProtect, AppPower);
 
-/* Protect_to_Power_Output_Link — 输出管道 */
 typedef struct {
-    uint8_t  status;          /* ST_NEW/ST_OUT */
-    uint8_t  max_count;       /* 最大炉头数 = 4 */
-    uint8_t  count;           /* 当前周期索引 */
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(Protect, Power) *params;
-} MODULE_OUTPUT_LINK(Protect, Power);
+    MODULE_OUTPUT_PARAMS(AppProtect, AppPower) *params;
+} MODULE_OUTPUT_LINK(AppProtect, AppPower);
 
-/* AppProtect_Output — 输出聚合 */
+/* AppProtect_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
-    MODULE_OUTPUT_LINK(Protect, Power) *to_power;
+    MODULE_OUTPUT_LINK(AppProtect, AppPower) *AppPower_params;  /* → AppPower */
 } MODULE_OUTPUT(AppProtect);
 
-/* ========== INPUT (AppProtect 从别的模块得到的数据) ========== */
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
 
-/* CommMgr_to_Protect_Params — 输入数据参数 (布局与 AppCommMgr OUTPUT 一致) */
+/* ------------------------------------------------------------------
+ * AppCommMgr → AppProtect  输入参数  (Modbus 寄存器数据 → Protect)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;
-    uint8_t  slave_addr;
-    uint8_t  online;
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t online;     /* 是否在线 */
+    uint16_t regs[22];     /* 寄存器值 0x1000-0x1015 */
+} MODULE_INPUT_PARAMS(AppCommMgr, AppProtect);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    uint16_t regs[22];
-} MODULE_INPUT_PARAMS(CommMgr, Protect);
+    MODULE_INPUT_PARAMS(AppCommMgr, AppProtect) *params;
+} MODULE_INPUT_LINK(AppCommMgr, AppProtect);
 
-/* CommMgr_to_Protect_Input_Link — 输入管道 (与 AppCommMgr OUTPUT 配对) */
+/* AppProtect_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_INPUT_PARAMS(CommMgr, Protect) *params;
-} MODULE_INPUT_LINK(CommMgr, Protect);
-
-/* AppProtect_Input — 输入聚合 */
-typedef struct {
-    MODULE_INPUT_LINK(CommMgr, Protect) *comm;  /* 从 AppCommMgr 得到 */
+    MODULE_INPUT_LINK(AppCommMgr, AppProtect) *AppCommMgr_params;  /* 指向 AppCommMgr 输出的 LINK 列 */
 } MODULE_INPUT(AppProtect);
 
-#endif /* APP_PROTECT_IO_H */
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(AppProtect);
+
+#endif /* APPPROTECT_IO_H */

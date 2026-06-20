@@ -20,7 +20,10 @@ MODULE_SKELETON(DrvKey);
 static MODULE_INPUT(DrvKey)*   s_inPara;
 static MODULE_OUTPUT(DrvKey)   s_outPara;
 
-/* 每条管道的 PARAMS 实体（LINK.params 指针指向这些） */
+static MODULE_OUTPUT_LINK(DrvKey, AppHmi)       s_hmi_link;
+static MODULE_OUTPUT_LINK(DrvKey, AppCooking)    s_cooking_link;
+static MODULE_OUTPUT_LINK(DrvKey, AppSegAlign)   s_segalign_link;
+
 static MODULE_OUTPUT_PARAMS(DrvKey, AppHmi)       s_hmi_params;
 static MODULE_OUTPUT_PARAMS(DrvKey, AppCooking)    s_cooking_params;
 static MODULE_OUTPUT_PARAMS(DrvKey, AppSegAlign)   s_segalign_params;
@@ -33,16 +36,8 @@ typedef union {
     } bits;
 } DrvKey_PipeFlags_t;
 
-static void user_Process(MODULE_INPUT(DrvKey) *in, MODULE_OUTPUT(DrvKey) *out, DrvKey_PipeFlags_t flags);
-
 static void ProcessInput(void)
 {
-    MODULE_INPUT(DrvKey) *in  = (MODULE_INPUT(DrvKey)*)g_input.para;
-    MODULE_OUTPUT(DrvKey) *out = (MODULE_OUTPUT(DrvKey)*)g_output.para;
-
-    DrvKey_PipeFlags_t flags = {0};
-
-    user_Process(in, out, flags);
 }
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
@@ -146,12 +141,18 @@ static void Init(void)
     s_long_sent     = 0u;
     s_release_cnt   = 0u;
     memset(&s_outPara, 0, sizeof(s_outPara));
+    memset(&s_hmi_link, 0, sizeof(s_hmi_link));
+    memset(&s_cooking_link, 0, sizeof(s_cooking_link));
+    memset(&s_segalign_link, 0, sizeof(s_segalign_link));
     memset(&s_hmi_params, 0, sizeof(s_hmi_params));
     memset(&s_cooking_params, 0, sizeof(s_cooking_params));
     memset(&s_segalign_params, 0, sizeof(s_segalign_params));
-    s_outPara.AppHmi_params.params      = &s_hmi_params;
-    s_outPara.AppCooking_params.params   = &s_cooking_params;
-    s_outPara.AppSegAlign_params.params  = &s_segalign_params;
+    s_hmi_link.params      = &s_hmi_params;
+    s_cooking_link.params   = &s_cooking_params;
+    s_segalign_link.params  = &s_segalign_params;
+    s_outPara.AppHmi_params      = &s_hmi_link;
+    s_outPara.AppCooking_params   = &s_cooking_link;
+    s_outPara.AppSegAlign_params  = &s_segalign_link;
     g_input.para  = &s_inPara;
     g_output.para = &s_outPara;
 }
@@ -161,17 +162,17 @@ MODULE_EXPORT(DrvKey);
 static void Key_PostEvent(uint8_t key_code, uint8_t key_state)
 {
     MODULE_OUTPUT(DrvKey) *out = &s_outPara;
-    out->AppHmi_params.params->key_code  = key_code;
-    out->AppHmi_params.params->key_state = key_state;
-    out->AppHmi_params.status |= ST_NEW;
+    out->AppHmi_params->params->key_code  = key_code;
+    out->AppHmi_params->params->key_state = key_state;
+    out->AppHmi_params->status |= ST_NEW;
 
-    out->AppCooking_params.params->key_code  = key_code;
-    out->AppCooking_params.params->key_state = key_state;
-    out->AppCooking_params.status |= ST_NEW;
+    out->AppCooking_params->params->key_code  = key_code;
+    out->AppCooking_params->params->key_state = key_state;
+    out->AppCooking_params->status |= ST_NEW;
 
-    out->AppSegAlign_params.params->key_code  = key_code;
-    out->AppSegAlign_params.params->key_state = key_state;
-    out->AppSegAlign_params.status |= ST_NEW;
+    out->AppSegAlign_params->params->key_code  = key_code;
+    out->AppSegAlign_params->params->key_state = key_state;
+    out->AppSegAlign_params->status |= ST_NEW;
 
     g_output.info.status |= ST_OUT;
 }

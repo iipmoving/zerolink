@@ -1,132 +1,144 @@
 /**
- * app_power_io.h —— AppPower 输入输出接口定义 (v2.3)
+ * @file    app_power_io.h
+ * @brief   AppPower Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 数据流:
- *   INPUT: AppCommMgr → AppPower (寄存器数据)
- *   INPUT: AppProtect → AppPower (故障数据)
- *   INPUT: AppCooking → AppPower (烹饪状态)
- *   OUTPUT: AppPower → DrvCommMgr (功率命令)
- *   OUTPUT: AppPower → AppHmi (功率状态)
+ * 功率控制 PID — 聚合 CommMgr/Protect/Cooking 输入，输出功率命令到 CommMgr 和状态到 Hmi
  *
- * Include 权限:
- *   - 仅 app_power.c 和 data_switcher.c 可 include
- *   - 使用全路径: #include "include/app_power_io.h"
+ * 输入源:
+ *   AppCommMgr → AppPower  (Modbus 寄存器数据 → Power)
+ *   AppCooking → AppPower  (烹饪状态 → Power)
+ *   AppProtect → AppPower  (故障状态 → Power)
  *
- * 本文件包含 std_module.h，调用者无需再包含
+ * 输出目标:
+ *   AppPower → AppHmi  (功率状态 → Hmi)
+ *   AppPower → DrvCommMgr  (功率命令 → DrvCommMgr)
  */
-#ifndef APP_POWER_IO_H
-#define APP_POWER_IO_H
 
-#include "../core/std_module.h"
+#ifndef APPPOWER_IO_H
+#define APPPOWER_IO_H
+
 #include <stdint.h>
+#include "std_module.h"
 
-/* ========== OUTPUT (AppPower 给别的模块提供的数据) ========== */
+#pragma pack(4)
 
-/* Power_to_DrvCommMgr_Params — 输出数据参数 */
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppPower → AppHmi  输出参数  (功率状态 → Hmi)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;      /* 炉头索引 0-3 */
-    uint8_t  slave_addr;      /* MODBUS 站号 */
-    uint8_t  power_on;        /* 功率开关 0/1 */
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t power_on;     /* 功率开关 0/1 */
+    uint8_t power_level;     /* 功率档位 0-9 */
+    uint16_t actual_power;     /* 实际功率 W */
+} MODULE_OUTPUT_PARAMS(AppPower, AppHmi);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    uint16_t target_power;    /* 目标功率 W */
-    uint16_t actual_power;    /* 实际功率 W */
-} MODULE_OUTPUT_PARAMS(Power, DrvCommMgr);
+    MODULE_OUTPUT_PARAMS(AppPower, AppHmi) *params;
+} MODULE_OUTPUT_LINK(AppPower, AppHmi);
 
-/* Power_to_DrvCommMgr_Output_Link — 输出管道 */
+/* ------------------------------------------------------------------
+ * AppPower → DrvCommMgr  输出参数  (功率命令 → DrvCommMgr)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;          /* ST_NEW/ST_OUT */
-    uint8_t  max_count;       /* 最大炉头数 = 4 */
-    uint8_t  count;           /* 当前周期索引 */
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t power_on;     /* 功率开关 0/1 */
+    uint16_t target_power;     /* 目标功率 W */
+    uint16_t actual_power;     /* 实际功率 W */
+} MODULE_OUTPUT_PARAMS(AppPower, DrvCommMgr);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(Power, DrvCommMgr) *params;
-} MODULE_OUTPUT_LINK(Power, DrvCommMgr);
+    MODULE_OUTPUT_PARAMS(AppPower, DrvCommMgr) *params;
+} MODULE_OUTPUT_LINK(AppPower, DrvCommMgr);
 
-/* Power_to_Hmi_Params — 输出数据参数 */
+/* AppPower_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
-    uint8_t  head_index;      /* 炉头索引 0-3 */
-    uint8_t  power_on;        /* 功率开关 0/1 */
-    uint8_t  power_level;     /* 功率档位 0-9 */
-    uint8_t  res[1];
-    uint16_t actual_power;    /* 实际功率 W */
-} MODULE_OUTPUT_PARAMS(Power, Hmi);
-
-/* Power_to_Hmi_Output_Link — 输出管道 */
-typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(Power, Hmi) *params;
-} MODULE_OUTPUT_LINK(Power, Hmi);
-
-/* AppPower_Output — 输出聚合 (v2.3 对称命名: 成员名 = {Consumer}_params) */
-typedef struct {
-    MODULE_OUTPUT_LINK(Power, DrvCommMgr) *DrvCommMgr_params;  /* → DrvCommMgr */
-    MODULE_OUTPUT_LINK(Power, Hmi)       *Hmi_params;          /* → AppHmi */
+    MODULE_OUTPUT_LINK(AppPower, AppHmi) *AppHmi_params;  /* → AppHmi */
+    MODULE_OUTPUT_LINK(AppPower, DrvCommMgr) *DrvCommMgr_params;  /* → DrvCommMgr */
 } MODULE_OUTPUT(AppPower);
 
-/* ========== INPUT (AppPower 从别的模块得到的数据) ========== */
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
 
-/* CommMgr_to_Power_Params — 输入数据参数 (布局与 AppCommMgr OUTPUT 一致) */
+/* ------------------------------------------------------------------
+ * AppCommMgr → AppPower  输入参数  (Modbus 寄存器数据 → Power)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;
-    uint8_t  slave_addr;
-    uint8_t  online;
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t online;     /* 是否在线 */
+    uint16_t regs[22];     /* 寄存器值 0x1000-0x1015 */
+} MODULE_INPUT_PARAMS(AppCommMgr, AppPower);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    uint16_t regs[22];
-} MODULE_INPUT_PARAMS(CommMgr, Power);
+    MODULE_INPUT_PARAMS(AppCommMgr, AppPower) *params;
+} MODULE_INPUT_LINK(AppCommMgr, AppPower);
 
-/* CommMgr_to_Power_Input_Link — 输入管道 (与 AppCommMgr OUTPUT 配对) */
+/* ------------------------------------------------------------------
+ * AppCooking → AppPower  输入参数  (烹饪状态 → Power)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
+    uint8_t head_index;     /* 炉头索引 */
+    uint8_t cooking_state;     /* 烹饪状态 COOKING_STATE_* */
+    uint8_t power_level;     /* 功率档位 0-9 */
+    uint16_t target_power;     /* 目标功率 W */
+    uint16_t actual_power;     /* 实际功率 W */
+    uint32_t cooking_time;     /* 烹饪时间 ms */
+} MODULE_INPUT_PARAMS(AppCooking, AppPower);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_INPUT_PARAMS(CommMgr, Power) *params;
-} MODULE_INPUT_LINK(CommMgr, Power);
+    MODULE_INPUT_PARAMS(AppCooking, AppPower) *params;
+} MODULE_INPUT_LINK(AppCooking, AppPower);
 
-/* Protect_to_Power_Params — 输入数据参数 (布局与 AppProtect OUTPUT 一致) */
+/* ------------------------------------------------------------------
+ * AppProtect → AppPower  输入参数  (故障状态 → Power)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;
-    uint8_t  slave_addr;
-    uint16_t fault;           /* ProtectFault_t: 故障位集合 */
-    uint8_t  res[2];
-} MODULE_INPUT_PARAMS(Protect, Power);
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint16_t fault;     /* 故障位集合 ProtectFault_t */
+} MODULE_INPUT_PARAMS(AppProtect, AppPower);
 
-/* Protect_to_Power_Input_Link — 输入管道 (与 AppProtect OUTPUT 配对) */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_INPUT_PARAMS(Protect, Power) *params;
-} MODULE_INPUT_LINK(Protect, Power);
+    MODULE_INPUT_PARAMS(AppProtect, AppPower) *params;
+} MODULE_INPUT_LINK(AppProtect, AppPower);
 
-/* Cooking_to_Power_Params — 输入数据参数 (布局与 AppCooking OUTPUT 一致) */
+/* AppPower_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
-    uint8_t  head_index;
-    uint8_t  cooking_state;
-    uint8_t  power_level;
-    uint8_t  res[1];
-    uint16_t target_power;
-    uint16_t actual_power;
-    uint32_t cooking_time;
-} MODULE_INPUT_PARAMS(Cooking, Power);
-
-/* Cooking_to_Power_Input_Link — 输入管道 (与 AppCooking OUTPUT 配对) */
-typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_INPUT_PARAMS(Cooking, Power) *params;
-} MODULE_INPUT_LINK(Cooking, Power);
-
-/* AppPower_Input — 输入聚合 (v2.3 对称命名: 成员名 = {Producer}_params) */
-typedef struct {
-    MODULE_INPUT_LINK(CommMgr, Power)   *CommMgr_params;   /* 从 AppCommMgr 得到 */
-    MODULE_INPUT_LINK(Protect, Power)   *Protect_params;   /* 从 AppProtect 得到 */
-    MODULE_INPUT_LINK(Cooking, Power)   *Cooking_params;   /* 从 AppCooking 得到 */
+    MODULE_INPUT_LINK(AppCommMgr, AppPower) *AppCommMgr_params;  /* 指向 AppCommMgr 输出的 LINK 列 */
+    MODULE_INPUT_LINK(AppCooking, AppPower) *AppCooking_params;  /* 指向 AppCooking 输出的 LINK 列 */
+    MODULE_INPUT_LINK(AppProtect, AppPower) *AppProtect_params;  /* 指向 AppProtect 输出的 LINK 列 */
 } MODULE_INPUT(AppPower);
 
-#endif /* APP_POWER_IO_H */
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(AppPower);
+
+#endif /* APPPOWER_IO_H */

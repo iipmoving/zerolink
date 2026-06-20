@@ -1,91 +1,99 @@
 /**
- * app_comm_mgr_io.h —— AppCommMgr 输出接口定义 (v2.3)
+ * @file    app_comm_mgr_io.h
+ * @brief   AppCommMgr Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 数据流: AppCommMgr → AppPower / AppCooking / AppProtect
+ * Modbus 通信轮询调度器 — 分发寄存器数据到 Power/Cooking/Protect
  *
- * AppCommMgr 只有 OUTPUT (寄存器数据)，没有 INPUT
- *
- * Include 权限:
- *   - 仅 app_comm_mgr.c 和 data_switcher.c 可 include
- *   - 使用全路径: #include "include/app_comm_mgr_io.h"
- *
- * 本文件包含 std_module.h，调用者无需再包含
+ * 输出目标:
+ *   AppCommMgr → AppPower  (Modbus 寄存器数据 → Power)
+ *   AppCommMgr → AppCooking  (Modbus 寄存器数据 → Cooking)
+ *   AppCommMgr → AppProtect  (Modbus 寄存器数据 → Protect)
  */
-#ifndef APP_COMM_MGR_IO_H
-#define APP_COMM_MGR_IO_H
 
-#include "../core/std_module.h"
+#ifndef APPCOMMMGR_IO_H
+#define APPCOMMMGR_IO_H
+
 #include <stdint.h>
+#include "std_module.h"
 
-/* ========== OUTPUT (AppCommMgr 给别的模块提供的数据) ========== */
+#pragma pack(4)
 
-/* CommMgr_to_Power_Params — 输出数据参数 */
+/* ================================================================
+ * OUTPUT — 本模块输出的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * AppCommMgr → AppPower  输出参数  (Modbus 寄存器数据 → Power)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;      /* 炉头索引 0-3 */
-    uint8_t  slave_addr;      /* MODBUS 站号 */
-    uint8_t  online;          /* 是否在线 */
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t online;     /* 是否在线 */
+    uint16_t regs[22];     /* 寄存器值 0x1000-0x1015 */
+} MODULE_OUTPUT_PARAMS(AppCommMgr, AppPower);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    uint16_t regs[22];        /* 寄存器值 0x1000-0x1015 */
-} MODULE_OUTPUT_PARAMS(CommMgr, Power);
+    MODULE_OUTPUT_PARAMS(AppCommMgr, AppPower) *params;
+} MODULE_OUTPUT_LINK(AppCommMgr, AppPower);
 
-/* CommMgr_to_Power_Output_Link — 输出管道 */
+/* ------------------------------------------------------------------
+ * AppCommMgr → AppCooking  输出参数  (Modbus 寄存器数据 → Cooking)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  status;          /* ST_NEW/ST_OUT */
-    uint8_t  max_count;       /* 最大炉头数 = 4 */
-    uint8_t  count;           /* 当前周期索引 */
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t online;     /* 是否在线 */
+    uint16_t regs[22];     /* 寄存器值 0x1000-0x1015 */
+} MODULE_OUTPUT_PARAMS(AppCommMgr, AppCooking);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(CommMgr, Power) *params;
-} MODULE_OUTPUT_LINK(CommMgr, Power);
+    MODULE_OUTPUT_PARAMS(AppCommMgr, AppCooking) *params;
+} MODULE_OUTPUT_LINK(AppCommMgr, AppCooking);
 
-/* CommMgr_to_Cooking_Params */
+/* ------------------------------------------------------------------
+ * AppCommMgr → AppProtect  输出参数  (Modbus 寄存器数据 → Protect)
+ * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t  head_index;
-    uint8_t  slave_addr;
-    uint8_t  online;
+    uint8_t head_index;     /* 炉头索引 0-3 */
+    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t online;     /* 是否在线 */
+    uint16_t regs[22];     /* 寄存器值 0x1000-0x1015 */
+} MODULE_OUTPUT_PARAMS(AppCommMgr, AppProtect);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-    uint16_t regs[22];
-} MODULE_OUTPUT_PARAMS(CommMgr, Cooking);
+    MODULE_OUTPUT_PARAMS(AppCommMgr, AppProtect) *params;
+} MODULE_OUTPUT_LINK(AppCommMgr, AppProtect);
 
-/* CommMgr_to_Cooking_Output_Link */
+/* AppCommMgr_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(CommMgr, Cooking) *params;
-} MODULE_OUTPUT_LINK(CommMgr, Cooking);
-
-/* CommMgr_to_Protect_Params */
-typedef struct {
-    uint8_t  head_index;
-    uint8_t  slave_addr;
-    uint8_t  online;
-    uint8_t  res[1];
-    uint16_t regs[22];
-} MODULE_OUTPUT_PARAMS(CommMgr, Protect);
-
-/* CommMgr_to_Protect_Output_Link */
-typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(CommMgr, Protect) *params;
-} MODULE_OUTPUT_LINK(CommMgr, Protect);
-
-/* AppCommMgr_Output — 输出聚合 */
-typedef struct {
-    MODULE_OUTPUT_LINK(CommMgr, Power)    *to_power;
-    MODULE_OUTPUT_LINK(CommMgr, Cooking)  *to_cooking;
-    MODULE_OUTPUT_LINK(CommMgr, Protect)  *to_protect;
+    MODULE_OUTPUT_LINK(AppCommMgr, AppPower) *AppPower_params;  /* → AppPower */
+    MODULE_OUTPUT_LINK(AppCommMgr, AppCooking) *AppCooking_params;  /* → AppCooking */
+    MODULE_OUTPUT_LINK(AppCommMgr, AppProtect) *AppProtect_params;  /* → AppProtect */
 } MODULE_OUTPUT(AppCommMgr);
 
-/* ========== INPUT (无) ========== */
-/* AppCommMgr 是通信轮询调度器，没有输入 */
+/* ========== INPUT (无) — 本模块没有输入 ========== */
 
-/* ========== Consumer INPUT_LINK 定义在 Consumer 的 io.h ========== */
-/* AppPower_INPUT_LINK(CommMgr, Power) 定义在 app_power_io.h */
-/* AppCooking_INPUT_LINK(CommMgr, Cooking) 定义在 app_cooking_io.h */
-/* AppProtect_INPUT_LINK(CommMgr, Protect) 定义在 app_protect_io.h */
+/* AppCommMgr_Input — 无输入 */
+typedef struct {
+    uint8_t  res[4];
+} MODULE_INPUT(AppCommMgr);
 
-#endif /* APP_COMM_MGR_IO_H */
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(AppCommMgr);
+
+#endif /* APPCOMMMGR_IO_H */

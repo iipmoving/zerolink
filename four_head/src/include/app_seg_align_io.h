@@ -1,48 +1,58 @@
 /**
- * app_seg_align_io.h —— AppSegAlign 输入接口定义 (v2.3)
+ * @file    app_seg_align_io.h
+ * @brief   AppSegAlign Data Switcher IO interface (v2.3 LINK+PARAMS)
+ * @layer   app
  *
- * 数据流:
- *   INPUT: DrvKey → AppSegAlign (按键事件)
+ * 段码对齐处理 — 从 Key 输入，无输出
  *
- * AppSegAlign 只有 INPUT，没有 OUTPUT
- *
- * Include 权限:
- *   - 仅 app_seg_align.c 和 data_switcher.c 可 include
- *   - 使用全路径: #include "include/app_seg_align_io.h"
- *
- * 本文件包含 std_module.h，调用者无需再包含
+ * 输入源:
+ *   DrvKey → AppSegAlign  (按键事件 → SegAlign 调校模式)
  */
-#ifndef APP_SEG_ALIGN_IO_H
-#define APP_SEG_ALIGN_IO_H
 
-#include "../core/std_module.h"
+#ifndef APPSEGALIGN_IO_H
+#define APPSEGALIGN_IO_H
+
 #include <stdint.h>
+#include "std_module.h"
 
-/* ========== OUTPUT (无) ========== */
-/* AppSegAlign 没有输出 */
+#pragma pack(4)
 
-/* ========== INPUT (AppSegAlign 从别的模块得到的数据) ========== */
+/* ========== OUTPUT (无) — 本模块没有输出 ========== */
 
-/* Key_to_SegAlign_Params — 输入数据参数 (布局与 DrvKey OUTPUT 一致) */
+/* AppSegAlign_Output — 无输出 */
 typedef struct {
-    uint8_t  key_code;        /* KeyCode_t: 按键码 */
-    uint8_t  key_state;       /* KEY_STATE_*: 按键状态 */
-    uint8_t  head_index;      /* 炉头索引 */
+    uint8_t  res[4];
+} MODULE_OUTPUT(AppSegAlign);
+
+/* ================================================================
+ * INPUT — 本模块输入的数据管道
+ * ================================================================ */
+
+/* ------------------------------------------------------------------
+ * DrvKey → AppSegAlign  输入参数  (按键事件 → SegAlign 调校模式)
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint8_t key_code;     /* 按键码 KeyCode_t */
+    uint8_t key_state;     /* 按键状态 KEY_STATE_* */
+    uint8_t head_index;     /* 关联炉头索引 */
+} MODULE_INPUT_PARAMS(DrvKey, AppSegAlign);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  count;            /* 当前周期索引 */
     uint8_t  res[1];
-} MODULE_INPUT_PARAMS(Key, SegAlign);
+    MODULE_INPUT_PARAMS(DrvKey, AppSegAlign) *params;
+} MODULE_INPUT_LINK(DrvKey, AppSegAlign);
 
-/* Key_to_SegAlign_Input_Link — 输入管道 (与 DrvKey OUTPUT 配对) */
+/* AppSegAlign_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
-    uint8_t  status;
-    uint8_t  max_count;
-    uint8_t  count;
-    uint8_t  res[1];
-    MODULE_INPUT_PARAMS(Key, SegAlign) *params;
-} MODULE_INPUT_LINK(Key, SegAlign);
-
-/* AppSegAlign_Input — 输入聚合 */
-typedef struct {
-    MODULE_INPUT_LINK(Key, SegAlign) *key;  /* 从 DrvKey 得到 */
+    MODULE_INPUT_LINK(DrvKey, AppSegAlign) *DrvKey_params;  /* 指向 DrvKey 输出的 LINK 列 */
 } MODULE_INPUT(AppSegAlign);
 
-#endif /* APP_SEG_ALIGN_IO_H */
+#pragma pack()
+
+/* ---- v2.3 统一接口 ---- */
+MODULE_IO_H(AppSegAlign);
+
+#endif /* APPSEGALIGN_IO_H */

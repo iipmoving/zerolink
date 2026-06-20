@@ -164,5 +164,5 @@ void EKF_Regs_Update(unsigned char slave_idx)
     ekf->i_rms_ax10 = (uint16_t)((int32_t)p[8] / 10);
 
     /* 0x1029: 阻抗模 — Z_mag_ohm ÷10 → 0.1Ω */
-    ekf->z_ohm_x10 = (uint16_t)((int32_t)p[10] / 10);
+    ekf->z_ohm_x10 =(uint16_t)((int32_t)p[10] / 10);
 }

@@ -7,6 +7,7 @@
  * 输出: PowerCtrl(→app_power), DisplayCmd(→drv_display)
  */
 #include "core/std_module.h"
+#include "../include_io/app_cooking_io.h"
 #include "app_cooking.h"
 #include <string.h>
 

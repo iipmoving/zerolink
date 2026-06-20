@@ -338,7 +338,7 @@
               <MiscControls></MiscControls>
               <Define>RX32G410,DEBUG_POWER_OUTX,SimZeroX,I2C2_PORT,PrintMessage,Fmac9,</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc</IncludePath>
+              <IncludePath>..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\core</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1925,14 +1925,14 @@
           <GroupName>AppLibSch</GroupName>
           <Files>
             <File>
-              <FileName>APP_ADC.C</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\LIB\APP\APP_ADC.C</FilePath>
-            </File>
-            <File>
               <FileName>app_power.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\LIB\APP\app_power.c</FilePath>
+            </File>
+            <File>
+              <FileName>adc_sensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\src\RX32G410_FW_HAL_V1.3N\Projects\LIB\APP\adc_sensor.c</FilePath>
             </File>
           </Files>
         </Group>

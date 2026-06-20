@@ -1,0 +1,1542 @@
+{
+  "files": [
+    {
+      "rel_path": "../src/app/app_comm_mgr.c",
+      "group": "app",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_comm_mgr.h\"",
+        "#include <string.h>",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "send_read_req",
+          "decl": "static void send_read_req(uint8_t head_idx)",
+          "has_body": false
+        },
+        {
+          "name": "handle_response",
+          "decl": "static void handle_response(const uint8_t *rx_data, uint16_t frame_len)",
+          "has_body": false
+        },
+        {
+          "name": "AppCommMgr_OnDataUpdate",
+          "decl": "void AppCommMgr_OnDataUpdate(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "AppCommMgr_OnTxDone",
+          "decl": "void AppCommMgr_OnTxDone(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "AppCommMgr_OnPowerCmd",
+          "decl": "void AppCommMgr_OnPowerCmd(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "App_CommMgr_Run",
+          "decl": "void App_CommMgr_Run(void)",
+          "has_body": false
+        },
+        {
+          "name": "App_CommMgr_Init",
+          "decl": "void App_CommMgr_Init(void) { Constructor(); }",
+          "has_body": true
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {",
+        "void App_CommMgr_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "PROTO_PARSE_OK",
+          "value": "0      /* 解析成功 (与 PROTO_PARSE_OK 对齐) */"
+        },
+        {
+          "name": "PROTO_FUNC_READ",
+          "value": "0x03u  /* 读寄存器 (协议知识, 仅本模块)       */"
+        },
+        {
+          "name": "COMM_REG_WORKSTATE",
+          "value": "0x2014u /* 工作状态 bit0=总开关 bit1=风机 bit4=电压 */"
+        },
+        {
+          "name": "COMM_REG_TARGETPOWER",
+          "value": "0x2016u /* 目标功率 = W */"
+        },
+        {
+          "name": "APP_COMM_SEND_BUF_SIZE",
+          "value": "64u"
+        },
+        {
+          "name": "APP_COMM_RX_BUF_SIZE",
+          "value": "256u"
+        },
+        {
+          "name": "COMM_S_IDLE",
+          "value": "0u"
+        },
+        {
+          "name": "COMM_S_WAIT_TX",
+          "value": "1u"
+        },
+        {
+          "name": "COMM_S_WAIT_RX",
+          "value": "2u"
+        }
+      ],
+      "total_lines": 297
+    },
+    {
+      "rel_path": "../src/app/app_protect.c",
+      "group": "app",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_protect.h\"",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "check_igbt",
+          "decl": "static void check_igbt(uint8_t idx)",
+          "has_body": false
+        },
+        {
+          "name": "check_bot",
+          "decl": "static void check_bot(uint8_t idx)",
+          "has_body": false
+        },
+        {
+          "name": "check_comm",
+          "decl": "static void check_comm(uint8_t idx)",
+          "has_body": false
+        },
+        {
+          "name": "check_voltage",
+          "decl": "static void check_voltage(void)",
+          "has_body": false
+        },
+        {
+          "name": "check_hardware",
+          "decl": "static void check_hardware(uint8_t idx)",
+          "has_body": false
+        },
+        {
+          "name": "AppProtect_OnRegData",
+          "decl": "void AppProtect_OnRegData(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "App_Protect_Run",
+          "decl": "void App_Protect_Run(void)",
+          "has_body": false
+        },
+        {
+          "name": "App_Protect_Init",
+          "decl": "void App_Protect_Init(void) { Constructor(); }",
+          "has_body": true
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } InData_t;",
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {",
+        "void App_Protect_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "PROT_REG_COUNT",
+          "value": "22u"
+        },
+        {
+          "name": "PROT_SLAVE_ADDR_BASE",
+          "value": "5u"
+        },
+        {
+          "name": "PROT_SLAVE_ADDR_STEP",
+          "value": "5u"
+        }
+      ],
+      "total_lines": 317
+    },
+    {
+      "rel_path": "../src/app/app_power.c",
+      "group": "app",
+      "brief": "4炉头功率管理",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_power.h\"",
+        "#include <string.h>"
+      ],
+      "functions": [
+        {
+          "name": "igbt_derate",
+          "decl": "static uint16_t igbt_derate(PowerCtx_t *ctx, uint16_t power)",
+          "has_body": false
+        },
+        {
+          "name": "top_temp_stop",
+          "decl": "static uint16_t top_temp_stop(PowerCtx_t *ctx, uint16_t power)",
+          "has_body": false
+        },
+        {
+          "name": "soft_start",
+          "decl": "static uint16_t soft_start(PowerCtx_t *ctx, uint16_t power)",
+          "has_body": false
+        },
+        {
+          "name": "interrupted_heat",
+          "decl": "static uint16_t interrupted_heat(PowerCtx_t *ctx, uint16_t power)",
+          "has_body": false
+        },
+        {
+          "name": "level_to_watt",
+          "decl": "static uint16_t level_to_watt(uint8_t level)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnCookingData",
+          "decl": "void AppPower_OnCookingData(Para_Grp_t *pOut)",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnProtectData",
+          "decl": "void AppPower_OnProtectData(Para_Grp_t *pOut)",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnCommMgrData",
+          "decl": "void AppPower_OnCommMgrData(Para_Grp_t *pOut)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {"
+      ],
+      "defines": [],
+      "total_lines": 274
+    },
+    {
+      "rel_path": "../src/app/app_cooking.c",
+      "group": "app",
+      "brief": "4炉头烹饪状态机",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_cooking.h\"",
+        "#include <string.h>"
+      ],
+      "functions": [
+        {
+          "name": "detect_boil",
+          "decl": "static uint8_t detect_boil(CookCtx_t *ctx)",
+          "has_body": false
+        },
+        {
+          "name": "temp_hysteresis",
+          "decl": "static uint16_t temp_hysteresis(CookCtx_t *ctx, uint8_t target, uint8_t lv)",
+          "has_body": false
+        },
+        {
+          "name": "out_power",
+          "decl": "static void out_power(uint8_t h, uint8_t on, uint16_t w, uint8_t lv, uint8_t md, uint16_t tmp)",
+          "has_body": false
+        },
+        {
+          "name": "out_disp",
+          "decl": "static void out_disp(uint8_t h, uint8_t cmd)",
+          "has_body": false
+        },
+        {
+          "name": "on_cmd",
+          "decl": "static void on_cmd(uint8_t head, uint8_t cmd, uint8_t menu)",
+          "has_body": false
+        },
+        {
+          "name": "cook_tick",
+          "decl": "static void cook_tick(void)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppCooking_OnKey",
+          "decl": "void AppCooking_OnKey(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "AppCooking_OnRegData",
+          "decl": "void AppCooking_OnRegData(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "AppCooking_OnTimer1s",
+          "decl": "void AppCooking_OnTimer1s(uint16_t param, void *data_ptr)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct {"
+      ],
+      "defines": [],
+      "total_lines": 283
+    },
+    {
+      "rel_path": "../src/app/app_hmi.c",
+      "group": "app",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_hmi.h\"",
+        "#include <string.h>",
+        "#include <stddef.h>",
+        "#include <stdint.h>"
+      ],
+      "functions": [
+        {
+          "name": "DrvDisplay_OnRefresh",
+          "decl": "void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "head_key_to_index",
+          "decl": "static int8_t head_key_to_index(uint8_t key);",
+          "has_body": false
+        },
+        {
+          "name": "head_index_to_key",
+          "decl": "static uint8_t head_index_to_key(uint8_t idx);",
+          "has_body": false
+        },
+        {
+          "name": "digit_key_to_level",
+          "decl": "static int8_t digit_key_to_level(uint8_t key);",
+          "has_body": false
+        },
+        {
+          "name": "is_head_key",
+          "decl": "static uint8_t is_head_key(uint8_t key);",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_OnKey",
+          "decl": "void AppHmi_OnKey(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_OnTimer100ms",
+          "decl": "void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_OnTimer1s",
+          "decl": "void AppHmi_OnTimer1s(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "hmi_match_dynamic_route",
+          "decl": "static uint8_t hmi_match_dynamic_route(const HmiRoute_t *route,",
+          "has_body": false
+        },
+        {
+          "name": "hmi_execute_action",
+          "decl": "static void hmi_execute_action(HmiAction_t action, int8_t param,",
+          "has_body": false
+        },
+        {
+          "name": "hmi_apply_actions",
+          "decl": "static void hmi_apply_actions(const HmiAction_t *actions,",
+          "has_body": false
+        },
+        {
+          "name": "select_head",
+          "decl": "static void select_head(uint8_t index);",
+          "has_body": false
+        },
+        {
+          "name": "confirm_select",
+          "decl": "static void confirm_select(int8_t head_idx);",
+          "has_body": false
+        },
+        {
+          "name": "handle_power_key",
+          "decl": "static void handle_power_key(uint8_t level);",
+          "has_body": false
+        },
+        {
+          "name": "enter_boost",
+          "decl": "static void enter_boost(void);",
+          "has_body": false
+        },
+        {
+          "name": "exit_boost",
+          "decl": "static void exit_boost(int8_t idx);",
+          "has_body": false
+        },
+        {
+          "name": "exit_boost_set_power",
+          "decl": "static void exit_boost_set_power(uint8_t level);",
+          "has_body": false
+        },
+        {
+          "name": "enter_timer_setting",
+          "decl": "static void enter_timer_setting(int8_t keep_value);",
+          "has_body": false
+        },
+        {
+          "name": "confirm_timer",
+          "decl": "static void confirm_timer(int8_t head_idx);",
+          "has_body": false
+        },
+        {
+          "name": "cancel_timer_setting",
+          "decl": "static void cancel_timer_setting(void);",
+          "has_body": false
+        },
+        {
+          "name": "cancel_timer_active",
+          "decl": "static void cancel_timer_active(void);",
+          "has_body": false
+        },
+        {
+          "name": "handle_timer_adjust",
+          "decl": "static void handle_timer_adjust(int8_t delta);",
+          "has_body": false
+        },
+        {
+          "name": "go_working",
+          "decl": "static void go_working(void);",
+          "has_body": false
+        },
+        {
+          "name": "go_powered_off",
+          "decl": "static void go_powered_off(void);",
+          "has_body": false
+        },
+        {
+          "name": "enter_deep_sleep",
+          "decl": "static void enter_deep_sleep(void);",
+          "has_body": false
+        },
+        {
+          "name": "toggle_pause",
+          "decl": "static void toggle_pause(void);",
+          "has_body": false
+        },
+        {
+          "name": "toggle_child_lock",
+          "decl": "static void toggle_child_lock(void);",
+          "has_body": false
+        },
+        {
+          "name": "resolve_target",
+          "decl": "static int8_t resolve_target(void);",
+          "has_body": false
+        },
+        {
+          "name": "find_timer_head",
+          "decl": "static int8_t find_timer_head(void);",
+          "has_body": false
+        },
+        {
+          "name": "push_to_stack",
+          "decl": "static void push_to_stack(uint8_t idx);",
+          "has_body": false
+        },
+        {
+          "name": "remove_from_stack",
+          "decl": "static void remove_from_stack(uint8_t idx);",
+          "has_body": false
+        },
+        {
+          "name": "get_stack_top",
+          "decl": "static int8_t get_stack_top(void);",
+          "has_body": false
+        },
+        {
+          "name": "reassign_hot_head",
+          "decl": "static void reassign_hot_head(uint8_t old_idx);",
+          "has_body": false
+        },
+        {
+          "name": "clear_all_heads",
+          "decl": "static void clear_all_heads(void);",
+          "has_body": false
+        },
+        {
+          "name": "reset_idle_timer",
+          "decl": "static void reset_idle_timer(void);",
+          "has_body": false
+        },
+        {
+          "name": "post_display",
+          "decl": "static void post_display(void);",
+          "has_body": false
+        },
+        {
+          "name": "derive_seg_mode",
+          "decl": "static void derive_seg_mode(void);",
+          "has_body": false
+        },
+        {
+          "name": "derive_seg_blink",
+          "decl": "static void derive_seg_blink(void);",
+          "has_body": false
+        },
+        {
+          "name": "update_head_display",
+          "decl": "static void update_head_display(uint8_t idx);",
+          "has_body": false
+        },
+        {
+          "name": "update_all_displays",
+          "decl": "static void update_all_displays(void);",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct {",
+        "void App_Hmi_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "TEST_LED_COUNT",
+          "value": "16u"
+        }
+      ],
+      "total_lines": 1888
+    },
+    {
+      "rel_path": "../src/app/app_seg_align.c",
+      "group": "app",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"app_seg_align.h\"",
+        "#include <string.h>",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "calc_crc8",
+          "decl": "static uint8_t calc_crc8(const uint8_t *data, uint8_t len)",
+          "has_body": false
+        },
+        {
+          "name": "update_map_crc",
+          "decl": "static void update_map_crc(void)",
+          "has_body": false
+        },
+        {
+          "name": "logical_to_physical",
+          "decl": "static uint8_t logical_to_physical(uint8_t logical_mask)",
+          "has_body": false
+        },
+        {
+          "name": "get_step_seg_mask",
+          "decl": "static uint8_t get_step_seg_mask(void)",
+          "has_body": false
+        },
+        {
+          "name": "adjust_current_seg",
+          "decl": "static void adjust_current_seg(void)",
+          "has_body": false
+        },
+        {
+          "name": "adjust_current_com",
+          "decl": "static void adjust_current_com(void)",
+          "has_body": false
+        },
+        {
+          "name": "refresh_alignment_display",
+          "decl": "static void refresh_alignment_display(void)",
+          "has_body": false
+        },
+        {
+          "name": "serial_putc",
+          "decl": "static void serial_putc(char c)",
+          "has_body": false
+        },
+        {
+          "name": "serial_putd",
+          "decl": "static void serial_putd(uint8_t n)",
+          "has_body": false
+        },
+        {
+          "name": "serial_report_status",
+          "decl": "static void serial_report_status(void)",
+          "has_body": false
+        },
+        {
+          "name": "serial_report_mapping",
+          "decl": "static void serial_report_mapping(void)",
+          "has_body": false
+        },
+        {
+          "name": "serial_parse_cmd",
+          "decl": "static void serial_parse_cmd(const char *cmd)",
+          "has_body": false
+        },
+        {
+          "name": "advance_step",
+          "decl": "static void advance_step(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppSegAlign_IsActive",
+          "decl": "uint8_t AppSegAlign_IsActive(void)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppSegAlign_Init",
+          "decl": "void AppSegAlign_Init(void) { Constructor(); }",
+          "has_body": true
+        },
+        {
+          "name": "AppSegAlign_Run",
+          "decl": "void AppSegAlign_Run(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppSegAlign_OnKey",
+          "decl": "void AppSegAlign_OnKey(uint16_t param, void *data_ptr)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } InData_t;",
+        "typedef struct { uint8_t dummy; } OutData_t;",
+        "typedef struct {",
+        "void AppSegAlign_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "SEG_BIT_A",
+          "value": "0u"
+        },
+        {
+          "name": "SEG_BIT_B",
+          "value": "1u"
+        },
+        {
+          "name": "SEG_BIT_C",
+          "value": "2u"
+        },
+        {
+          "name": "SEG_BIT_D",
+          "value": "3u"
+        },
+        {
+          "name": "SEG_BIT_E",
+          "value": "4u"
+        },
+        {
+          "name": "SEG_BIT_F",
+          "value": "5u"
+        },
+        {
+          "name": "SEG_BIT_G",
+          "value": "6u"
+        },
+        {
+          "name": "SEG_BIT_DP",
+          "value": "7u"
+        },
+        {
+          "name": "SEG_MASK_A",
+          "value": "(1u << SEG_BIT_A)    /* 0x01 */"
+        },
+        {
+          "name": "SEG_MASK_B",
+          "value": "(1u << SEG_BIT_B)    /* 0x02 */"
+        },
+        {
+          "name": "SEG_MASK_C",
+          "value": "(1u << SEG_BIT_C)    /* 0x04 */"
+        },
+        {
+          "name": "SEG_MASK_D",
+          "value": "(1u << SEG_BIT_D)    /* 0x08 */"
+        },
+        {
+          "name": "SEG_MASK_E",
+          "value": "(1u << SEG_BIT_E)    /* 0x10 */"
+        },
+        {
+          "name": "SEG_MASK_F",
+          "value": "(1u << SEG_BIT_F)    /* 0x20 */"
+        },
+        {
+          "name": "SEG_MASK_G",
+          "value": "(1u << SEG_BIT_G)    /* 0x40 */"
+        },
+        {
+          "name": "SEG_MASK_DP",
+          "value": "(1u << SEG_BIT_DP)   /* 0x80 */"
+        },
+        {
+          "name": "SEG_DIGIT_0",
+          "value": "(SEG_MASK_A|SEG_MASK_B|SEG_MASK_C|SEG_MASK_D|SEG_MASK_E|SEG_MASK_F)"
+        },
+        {
+          "name": "SEG_DIGIT_1",
+          "value": "(SEG_MASK_B|SEG_MASK_C)"
+        },
+        {
+          "name": "SEG_DIGIT_8",
+          "value": "(SEG_MASK_A|SEG_MASK_B|SEG_MASK_C|SEG_MASK_D|SEG_MASK_E|SEG_MASK_F|SEG_MASK_G)"
+        },
+        {
+          "name": "ALIGN_STATE_IDLE",
+          "value": "0u"
+        }
+      ],
+      "total_lines": 530
+    },
+    {
+      "rel_path": "../src/cfg/hmi_data.c",
+      "group": "cfg",
+      "brief": "",
+      "includes": [
+        "#include \"../app/app_hmi.h\""
+      ],
+      "functions": [],
+      "structs": [],
+      "defines": [],
+      "total_lines": 276
+    },
+    {
+      "rel_path": "../src/drv/drv_key.c",
+      "group": "drv",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"drv_key.h\"",
+        "#include \"../hal/hal_key.h\"",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "Key_Lookup",
+          "decl": "static uint8_t Key_Lookup(uint32_t phy_mask)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Key_Init",
+          "decl": "void Drv_Key_Init(void) { Constructor(); }",
+          "has_body": true
+        },
+        {
+          "name": "Key_PostEvent",
+          "decl": "static void Key_PostEvent(uint8_t key_code, uint8_t key_state)",
+          "has_body": false
+        },
+        {
+          "name": "Key_Release",
+          "decl": "static void Key_Release(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Key_Scan",
+          "decl": "void Drv_Key_Scan(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } InData_t;",
+        "typedef struct {",
+        "typedef struct {",
+        "void Drv_Key_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "TK_CH(n)",
+          "value": "(1UL << (n))  /* 通道n的位掩码                         */"
+        },
+        {
+          "name": "DF_TK1",
+          "value": "TK_CH(28)"
+        },
+        {
+          "name": "DF_TK2",
+          "value": "TK_CH(29)"
+        },
+        {
+          "name": "DF_TK3",
+          "value": "TK_CH(24)"
+        },
+        {
+          "name": "DF_TK4",
+          "value": "TK_CH(30)"
+        },
+        {
+          "name": "DF_TK5",
+          "value": "TK_CH(23)"
+        },
+        {
+          "name": "DF_TK6",
+          "value": "TK_CH(22)"
+        },
+        {
+          "name": "DF_TK7",
+          "value": "TK_CH(10)"
+        },
+        {
+          "name": "DF_TK8",
+          "value": "TK_CH(11)"
+        },
+        {
+          "name": "DF_TK9",
+          "value": "TK_CH(13)"
+        },
+        {
+          "name": "DF_TK10",
+          "value": "TK_CH(7)"
+        },
+        {
+          "name": "DF_TK11",
+          "value": "TK_CH(8)"
+        },
+        {
+          "name": "DF_TK12",
+          "value": "TK_CH(21)"
+        },
+        {
+          "name": "DF_TK13",
+          "value": "TK_CH(20)"
+        },
+        {
+          "name": "DF_TK14",
+          "value": "TK_CH(19)"
+        },
+        {
+          "name": "DF_TK15",
+          "value": "TK_CH(18)"
+        },
+        {
+          "name": "DF_TK16",
+          "value": "TK_CH(17)"
+        },
+        {
+          "name": "DF_TK17",
+          "value": "TK_CH(16)"
+        },
+        {
+          "name": "DF_TK18",
+          "value": "TK_CH(15)"
+        },
+        {
+          "name": "DF_TK19",
+          "value": "TK_CH(14)"
+        }
+      ],
+      "total_lines": 217
+    },
+    {
+      "rel_path": "../src/drv/drv_display.c",
+      "group": "drv",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"drv_display.h\"",
+        "#include \"../hal/hal_smg.h\"",
+        "#include \"../hal/hal_display.h\"",
+        "#include <string.h>",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "Drv_Display_SetRawLEDs",
+          "decl": "void Drv_Display_SetRawLEDs(uint8_t io8, uint8_t io9, uint8_t io10)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Display_ShowRawSMG",
+          "decl": "void Drv_Display_ShowRawSMG(const char *upper, const char *lower)",
+          "has_body": false
+        },
+        {
+          "name": "apply_blink_dp",
+          "decl": "static void apply_blink_dp(void)",
+          "has_body": false
+        },
+        {
+          "name": "sync_hmi_display",
+          "decl": "static void sync_hmi_display(const DisplayFrame_t *disp)",
+          "has_body": false
+        },
+        {
+          "name": "DrvDisplay_OnRefresh",
+          "decl": "void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "DrvSegAlign_BlockHmi",
+          "decl": "void DrvSegAlign_BlockHmi(uint8_t block)",
+          "has_body": false
+        },
+        {
+          "name": "DrvSegAlign_WriteCom",
+          "decl": "void DrvSegAlign_WriteCom(uint8_t com, uint8_t seg_mask)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "flash_sync",
+          "decl": "static void flash_sync(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Display_ShowKey",
+          "decl": "void Drv_Display_ShowKey(uint8_t key_code, uint8_t key_state)",
+          "has_body": false
+        },
+        {
+          "name": "refresh_display",
+          "decl": "static void refresh_display(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Display_Update",
+          "decl": "void Drv_Display_Update(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Display_Scan",
+          "decl": "void Drv_Display_Scan(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Display_Init",
+          "decl": "void Drv_Display_Init(void) { Constructor(); }",
+          "has_body": true
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } In_t;",
+        "typedef struct { uint8_t dummy; } Out_t;",
+        "typedef struct {",
+        "static const struct { uint8_t io; uint8_t mask; } s_mode_map[LED_MODE_COUNT] = {",
+        "static const struct { uint8_t io; uint8_t mask; } s_lvl_map[LED_LVL_COUNT] = {",
+        "static const struct { uint8_t io; uint8_t mask; } s_hs_map[LED_HS_COUNT] = {",
+        "void Drv_Display_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "LED_LVL_COUNT",
+          "value": "10"
+        },
+        {
+          "name": "LED_HS_COUNT",
+          "value": "4"
+        }
+      ],
+      "total_lines": 500
+    },
+    {
+      "rel_path": "../src/drv/drv_buzzer.c",
+      "group": "drv",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"drv_buzzer.h\"",
+        "#include \"../hal/hal_buzzer.h\"",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "Buzz_MY_SetupNote",
+          "decl": "static void Buzz_MY_SetupNote(void)",
+          "has_body": false
+        },
+        {
+          "name": "Buzz_Mode_MY",
+          "decl": "static void Buzz_Mode_MY(uint8_t mode)",
+          "has_body": false
+        },
+        {
+          "name": "Buzz_Dispose_MY",
+          "decl": "static void Buzz_Dispose_MY(void)",
+          "has_body": false
+        },
+        {
+          "name": "Buzz_Dispose_Set",
+          "decl": "static void Buzz_Dispose_Set(uint8_t count, uint8_t hz_timer, uint8_t jiange)",
+          "has_body": false
+        },
+        {
+          "name": "Buzz_Mode",
+          "decl": "static void Buzz_Mode(uint8_t mode)",
+          "has_body": false
+        },
+        {
+          "name": "Buzz_Dispose",
+          "decl": "static void Buzz_Dispose(void)",
+          "has_body": false
+        },
+        {
+          "name": "DrvBuzzer_OnCtrl",
+          "decl": "void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Buzzer_Select",
+          "decl": "void Drv_Buzzer_Select(uint8_t out_sel, uint8_t mode)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Buzzer_Timer_1ms",
+          "decl": "void Drv_Buzzer_Timer_1ms(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Buzzer_Init",
+          "decl": "void Drv_Buzzer_Init(void) { Constructor(); }",
+          "has_body": true
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } InData_t;",
+        "typedef struct { uint8_t dummy; } OutData_t;",
+        "void Drv_Buzzer_Init(void) { Constructor(); }"
+      ],
+      "defines": [],
+      "total_lines": 433
+    },
+    {
+      "rel_path": "../src/drv/drv_comm_mgr.c",
+      "group": "drv",
+      "brief": "",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"drv_comm_mgr.h\"",
+        "#include \"drv_comm.h\"",
+        "#include <string.h>",
+        "#include <stddef.h>"
+      ],
+      "functions": [
+        {
+          "name": "AppCommMgr_OnTxDone",
+          "decl": "void AppCommMgr_OnTxDone(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppCommMgr_OnDataUpdate",
+          "decl": "void AppCommMgr_OnDataUpdate(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "DrvCommMgr_OnSendReq",
+          "decl": "void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void) {}",
+          "has_body": true
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_CommMgr_Update",
+          "decl": "void Drv_CommMgr_Update(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_CommMgr_Init",
+          "decl": "void Drv_CommMgr_Init(void) { Constructor(); }",
+          "has_body": true
+        }
+      ],
+      "structs": [
+        "typedef struct { uint8_t dummy; } InData_t;",
+        "typedef struct { uint8_t dummy; } OutData_t;",
+        "typedef struct {",
+        "typedef struct {",
+        "void Drv_CommMgr_Init(void) { Constructor(); }"
+      ],
+      "defines": [
+        {
+          "name": "DRV_COMM_SEND_BUF_SIZE",
+          "value": "64u"
+        },
+        {
+          "name": "DRV_COMM_RX_BUF_SIZE",
+          "value": "256u"
+        }
+      ],
+      "total_lines": 122
+    },
+    {
+      "rel_path": "../src/drv/drv_comm.c",
+      "group": "drv",
+      "brief": "",
+      "includes": [
+        "#include \"drv_comm.h\"",
+        "#include \"../hal/hal_comm.h\"",
+        "#include \"../hal/hal_uart.h\"",
+        "#include <stdarg.h>",
+        "#include <stdio.h>"
+      ],
+      "functions": [
+        {
+          "name": "Drv_Comm_Init",
+          "decl": "void Drv_Comm_Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Send",
+          "decl": "uint8_t Drv_Comm_Send(const uint8_t *data, uint16_t len)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Available",
+          "decl": "uint16_t Drv_Comm_Available(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Read",
+          "decl": "uint16_t Drv_Comm_Read(uint8_t *buf, uint16_t max_len)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Flush",
+          "decl": "void Drv_Comm_Flush(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_TxDone",
+          "decl": "uint8_t Drv_Comm_TxDone(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_RecvPoll",
+          "decl": "uint16_t Drv_Comm_RecvPoll(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_UART_ISR",
+          "decl": "void Drv_Comm_UART_ISR(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_DMA_ISR",
+          "decl": "void Drv_Comm_DMA_ISR(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_Init",
+          "decl": "void Drv_Comm_Debug_Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_PutChar",
+          "decl": "void Drv_Comm_Debug_PutChar(uint8_t ch)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_Print",
+          "decl": "void Drv_Comm_Debug_Print(const char *str)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_HexDump",
+          "decl": "void Drv_Comm_Debug_HexDump(const uint8_t *data, uint16_t len)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_Printf",
+          "decl": "int Drv_Comm_Debug_Printf(const char *fmt, ...)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_Print_NB",
+          "decl": "void Drv_Comm_Debug_Print_NB(const char *str)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_TxBusy",
+          "decl": "uint8_t Drv_Comm_Debug_TxBusy(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_Flush",
+          "decl": "void Drv_Comm_Debug_Flush(void)",
+          "has_body": false
+        },
+        {
+          "name": "Drv_Comm_Debug_ISR",
+          "decl": "void Drv_Comm_Debug_ISR(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [],
+      "defines": [],
+      "total_lines": 117
+    },
+    {
+      "rel_path": "../src/proto/proto_modbus.c",
+      "group": "proto",
+      "brief": "",
+      "includes": [
+        "#include \"proto_modbus.h\""
+      ],
+      "functions": [
+        {
+          "name": "Proto_Modbus_CRC16",
+          "decl": "uint16_t Proto_Modbus_CRC16(const uint8_t *data, uint16_t len)",
+          "has_body": false
+        },
+        {
+          "name": "append_crc",
+          "decl": "static uint16_t append_crc(uint8_t *buf, uint16_t pos)",
+          "has_body": false
+        },
+        {
+          "name": "Proto_Modbus_BuildRead",
+          "decl": "uint16_t Proto_Modbus_BuildRead(uint8_t slave_addr, uint16_t reg_addr,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_Modbus_BuildWriteSingle",
+          "decl": "uint16_t Proto_Modbus_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_Modbus_BuildWriteMulti",
+          "decl": "uint16_t Proto_Modbus_BuildWriteMulti(uint8_t slave_addr, uint16_t reg_addr,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_Modbus_Parse",
+          "decl": "int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_BuildRead",
+          "decl": "uint16_t Proto_BuildRead(uint8_t slave_addr, uint16_t reg_addr,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_Parse",
+          "decl": "int8_t Proto_Parse(const uint8_t *rx_buf, uint16_t rx_len,",
+          "has_body": false
+        },
+        {
+          "name": "Proto_BuildWriteSingle",
+          "decl": "uint16_t Proto_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,",
+          "has_body": false
+        }
+      ],
+      "structs": [],
+      "defines": [],
+      "total_lines": 258
+    },
+    {
+      "rel_path": "../src/main.c",
+      "group": "src",
+      "brief": "",
+      "includes": [
+        "#include \"sc32_conf.h\"",
+        "#include \"system_sc32f1xxx.h\"",
+        "#include \"hal/hal_timer.h\"",
+        "#include \"hal/hal_uart.h\"",
+        "#include \"hal/hal_gpio.h\"",
+        "#include \"hal/hal_buzzer.h\"",
+        "#include <stddef.h>",
+        "#include \"drv/drv_key.h\"",
+        "#include \"drv/drv_display.h\"",
+        "#include \"drv/drv_buzzer.h\"",
+        "#include \"drv/drv_comm_mgr.h\"",
+        "#include \"app/app_comm_mgr.h\"",
+        "#include \"app/app_protect.h\"",
+        "#include \"app/app_power.h\"",
+        "#include \"app/app_cooking.h\"",
+        "#include \"app/app_hmi.h\"",
+        "#include \"app/app_seg_align.h\"",
+        "#include \"core/data_switcher.h\""
+      ],
+      "functions": [
+        {
+          "name": "Key_OnEvent",
+          "decl": "static void Key_OnEvent(MsgId_t id, uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "Heartbeat_OnTimer100ms",
+          "decl": "static void Heartbeat_OnTimer100ms(MsgId_t id, uint16_t param, void *data_ptr)",
+          "has_body": false
+        },
+        {
+          "name": "Slot_TimerTick",
+          "decl": "static void Slot_TimerTick(void)",
+          "has_body": false
+        },
+        {
+          "name": "ExecSlot_Run",
+          "decl": "static void ExecSlot_Run(void)",
+          "has_body": false
+        },
+        {
+          "name": "main",
+          "decl": "int main(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [],
+      "defines": [],
+      "total_lines": 195
+    },
+    {
+      "rel_path": "../src/core/data_switcher.c",
+      "group": "src",
+      "brief": "Data Switcher — PULL 路由调度器",
+      "includes": [
+        "#include \"core/std_module.h\"",
+        "#include \"data_switcher.h\""
+      ],
+      "functions": [
+        {
+          "name": "AppPower_GetIO",
+          "decl": "void AppPower_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_GetIO",
+          "decl": "void AppHmi_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "AppCommMgr_GetIO",
+          "decl": "void AppCommMgr_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "AppProtect_GetIO",
+          "decl": "void AppProtect_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "AppSegAlign_GetIO",
+          "decl": "void AppSegAlign_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "DrvKey_GetIO",
+          "decl": "void DrvKey_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "DrvCommMgr_GetIO",
+          "decl": "void DrvCommMgr_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "DrvBuzzer_GetIO",
+          "decl": "void DrvBuzzer_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "DrvDisplay_GetIO",
+          "decl": "void DrvDisplay_GetIO(Para_Grp_t **ppIn, Para_Grp_t **ppOut, void (**ppDoWork)(void));",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnCookingData",
+          "decl": "void AppPower_OnCookingData(Para_Grp_t *pOut);",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnProtectData",
+          "decl": "void AppPower_OnProtectData(Para_Grp_t *pOut);",
+          "has_body": false
+        },
+        {
+          "name": "AppPower_OnCommMgrData",
+          "decl": "void AppPower_OnCommMgrData(Para_Grp_t *pOut);",
+          "has_body": false
+        },
+        {
+          "name": "AppCooking_OnRegData",
+          "decl": "void AppCooking_OnRegData(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppProtect_OnRegData",
+          "decl": "void AppProtect_OnRegData(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_OnKey",
+          "decl": "void AppHmi_OnKey(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppCooking_OnKey",
+          "decl": "void AppCooking_OnKey(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "AppSegAlign_OnKey",
+          "decl": "void AppSegAlign_OnKey(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "DrvDisplay_OnRefresh",
+          "decl": "void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "DrvBuzzer_OnCtrl",
+          "decl": "void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr);",
+          "has_body": false
+        },
+        {
+          "name": "_register",
+          "decl": "static void _register(uint8_t idx, void (*pDoWork)(void), Para_Grp_t *pOut)",
+          "has_body": false
+        },
+        {
+          "name": "Switcher_Init",
+          "decl": "void Switcher_Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "_route_comm_mgr",
+          "decl": "static void _route_comm_mgr(void)",
+          "has_body": false
+        },
+        {
+          "name": "_route_protect",
+          "decl": "static void _route_protect(void)",
+          "has_body": false
+        },
+        {
+          "name": "_route_key",
+          "decl": "static void _route_key(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppHmi_OnOutput",
+          "decl": "void AppHmi_OnOutput(Para_Grp_t *pOut)",
+          "has_body": false
+        },
+        {
+          "name": "_route_hmi",
+          "decl": "static void _route_hmi(void)",
+          "has_body": false
+        },
+        {
+          "name": "Switcher_Run",
+          "decl": "void Switcher_Run(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "MAX_MODULES",
+          "value": "16"
+        }
+      ],
+      "total_lines": 203
+    }
+  ]
+}

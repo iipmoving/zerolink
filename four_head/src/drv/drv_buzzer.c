@@ -16,6 +16,7 @@
  *   包络: PE4电源引脚控制音符开关
  */
 #include "core/std_module.h"
+#include "../include_io/drv_buzzer_io.h"
 #include "drv_buzzer.h"
 #include "../hal/hal_buzzer.h"
 #include <stddef.h>

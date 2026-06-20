@@ -85,6 +85,14 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append(f"static MODULE_OUTPUT({mod_name})  s_outPara;   // 输出参数缓冲区")
     lines.append("")
 
+    # ---- 消费者 seq 比对变量 (每条输入管道一个) ----
+    if in_pipes:
+        lines.append("/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */")
+        for p in in_pipes:
+            p_name = p["from"]
+            lines.append(f"static uint8_t s_last_seq_{p_name};  /* {p_name}→{mod_name} */")
+        lines.append("")
+
     # ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ----
     if out_pipes:
         lines.append("/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */")
@@ -111,6 +119,8 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append("")
 
     # user_Process 前向声明 — 统一签名, NULL 由用户内部处理
+    lines.append(f"/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)")
+    lines.append(f" * 输出段请对产出数据的 LINK 执行 seq++: out->{'' if not out_pipes else out_pipes[0]['to']}_params->seq++; */")
     lines.append(f"static void user_Process(MODULE_INPUT({mod_name}) *in, MODULE_OUTPUT({mod_name}) *out, {mod_name}_PipeFlags_t flags);")
     lines.append("")
 
@@ -120,11 +130,18 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append(f"    MODULE_INPUT({mod_name}) *in  = (MODULE_INPUT({mod_name})*)g_input.para;")
     lines.append(f"    MODULE_OUTPUT({mod_name}) *out = (MODULE_OUTPUT({mod_name})*)g_output.para;")
     lines.append("")
-    lines.append("    /* === 输入段: 数据有效检查 === */")
+    lines.append("    /* === 输入段: seq 有效性比对 === */")
     lines.append(f"    {mod_name}_PipeFlags_t flags = {{0}};")
     if in_pipes:
-        for pn in p_names:
-            lines.append(f"    flags.bits.{pn.lower()} = (in->{pn}_params->status & ST_NEW) ? 1 : 0;")
+        for p in in_pipes:
+            p_name = p["from"]
+            lines.append(f"    {{")
+            lines.append(f"        uint8_t cur_seq = in->{p_name}_params->seq;")
+            lines.append(f"        if (cur_seq != s_last_seq_{p_name}) {{")
+            lines.append(f"            flags.bits.{p_name.lower()} = 1;")
+            lines.append(f"            s_last_seq_{p_name} = cur_seq;")
+            lines.append(f"        }}")
+            lines.append(f"    }}")
     lines.append("")
     lines.append("    /* === 计算段: 用户业务 === */")
     lines.append(f"    user_Process(in, out, flags);")

@@ -9,6 +9,7 @@
  */
 
 #include "core/std_module.h"
+#include "../include_io/app_hmi_io.h"
 #include "app_hmi.h"
 #include <string.h>
 #include <stddef.h>
