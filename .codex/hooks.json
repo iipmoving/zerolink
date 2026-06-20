@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"D:\\OBSIDIAN\\MOVING IH\\ZEROLINK\\superpowers\\hooks\\run-hook.cmd\" session-start"
+          }
+        ]
+      }
+    ]
+  }
+}
