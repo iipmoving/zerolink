@@ -15,9 +15,17 @@ code_gen.py — v2.3 LINK+PARAMS 框架代码自动生成器 主入口
     base_class/ ← base_class 层模块 .c
     proto/      ← proto 层模块 .c
 
+生成粒度 (--gen 子选项, 互斥):
+  (无选项)        全部生成
+  --only-io       仅 io.h
+  --only-switcher 仅 data_switcher.c
+  --only-modules  仅模块 .c/.h (已有 .c 只替换 AI 块, 保留用户代码)
+  --only-pipes    仅管道相关 (io.h + data_switcher.c, 不动模块 .c/.h)
+
 使用:
   python code_gen.py --init flow.json --output project.json
   python code_gen.py --gen project.json --output ./out
+  python code_gen.py --gen project.json --output ./out --only-pipes
 """
 
 import argparse
@@ -28,7 +36,7 @@ import shutil
 import sys
 from gen_io_h import generate_io_h
 from gen_switcher import generate_switcher
-from gen_module_c import generate_module_c, generate_module_h
+from gen_module_c import generate_module_c, generate_module_h, find_ai_block, replace_ai_block
 
 
 def _pascal_to_snake(name: str) -> str:
@@ -127,7 +135,10 @@ def cmd_gen(args):
     print(f"  输出根目录: {output_root}")
 
     # ---- 1. 生成 io.h ----
-    if not args.only_switcher and not args.only_modules:
+    gen_io = not args.only_switcher and not args.only_modules
+    if args.only_pipes:
+        gen_io = True
+    if gen_io:
         print("\n--- io.h ---")
         io_out = os.path.join(output_root, io_dir)
         for mod in modules:
@@ -136,20 +147,26 @@ def cmd_gen(args):
             save_file(os.path.join(io_out, fname), content)
 
     # ---- 2. 生成 data_switcher.c ----
-    if not args.only_io and not args.only_modules:
+    gen_switcher = not args.only_io and not args.only_modules
+    if args.only_pipes:
+        gen_switcher = True
+    if gen_switcher:
         print("\n--- data_switcher.c ---")
         core_out = os.path.join(output_root, core_dir)
         content = generate_switcher(modules, pipes, slot_order, project, slot_chains)
         save_file(os.path.join(core_out, "data_switcher.c"), content)
 
     # ---- 3. 生成模块 .c + .h ----
-    if not args.only_io and not args.only_switcher:
+    gen_modules = not args.only_io and not args.only_switcher and not args.only_pipes
+    if gen_modules:
         print("\n--- 模块 .c / .h ---")
         for mod in modules:
             mod_out = _mod_output_dir(mod)
             c_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.c")
 
-            # 生成 .c (检测现有文件，保留用户区)
+            # generate_module_c 统一处理:
+            #   已有文件 → 剥离旧 AI 块+文件头, 插入新 AI 块, 保留用户代码
+            #   新文件 → 生成完整骨架
             content_c = generate_module_c(mod, pipes, project, c_path)
             save_file(c_path, content_c)
 
@@ -176,6 +193,7 @@ def main():
     p_gen.add_argument("--only-io", action="store_true", help="仅生成 io.h")
     p_gen.add_argument("--only-switcher", action="store_true", help="仅生成 data_switcher.c")
     p_gen.add_argument("--only-modules", action="store_true", help="仅生成模块 .c/.h")
+    p_gen.add_argument("--only-pipes", action="store_true", help="仅生成管道相关 (io.h + data_switcher.c)")
 
     args = parser.parse_args()
     if args.mode == "init":

@@ -203,36 +203,55 @@ def replace_ai_block(content: str, new_block: str) -> str:
 
 # ========== 主接口 ==========
 
-def generate_module_c(module: dict, pipes: list, project: dict, existing_file: str = "") -> str:
-    """生成全新模块 .c 文件内容"""
-    mod_name = module["name"]
-    mod_lower = _pascal_to_snake(mod_name)
-    layer = module.get("layer", "app")
-    comment = module.get("comment", "")
+_FILE_HEADER_RE = re.compile(
+    r'^\s*/\*\*?\s*\n'          
+    r'(?:\s*\*\s*[^\n]*\n)*'   
+    r'\s*\*/\s*\n',            
+    re.MULTILINE
+)
 
+
+def _strip_file_header(content: str) -> str:
+    """去除文件开头的 Doxygen 风格注释块"""
+    return _FILE_HEADER_RE.sub("", content, count=1).lstrip("\n")
+
+
+def generate_module_c(module: dict, pipes: list, project: dict, existing_file: str = "") -> str:
+    """生成模块 .c 文件内容
+
+    原则:
+      - AI 块始终在文件最前端
+      - 有文件: 剥离旧 AI 块 + 旧文件头 → 新 AI 块 + 保留原用户代码
+      - 有文件但无范式段: 在文件最前插入新 AI 块, 保留原内容
+      - 无文件: 新 AI 块 + 占位注释
+    """
+    mod_name = module["name"]
     out_pipes = [p for p in pipes if p["from"] == mod_name]
     in_pipes  = [p for p in pipes if p["to"] == mod_name]
 
-    parts = []
-
-    # 文件头
-    header = []
-    header.append("/**")
-    header.append(f" * @file    {mod_lower}.c")
-    header.append(f" * @brief   {mod_name} 模块实现 (v2.3 LINK+PARAMS)")
-    header.append(f" * @layer   {layer}")
-    if comment:
-        header.append(" *")
-        header.append(f" * {comment}")
-    header.append(" */")
-    parts.append("\n".join(header))
-
-    # AI 块 (全部在文件头部)
     io_dir = project.get("paths", {}).get("io_dir", "include")
+
+    # 读取已有文件
+    original_content = ""
+    if existing_file and os.path.isfile(existing_file):
+        try:
+            with open(existing_file, "r", encoding="utf-8") as f:
+                original_content = f.read()
+        except (IOError, UnicodeDecodeError):
+            original_content = ""
+
+    # 剥离旧 AI 块 + 旧文件头 → 得到纯用户代码
+    clean = _strip_ai_blocks(original_content)
+    clean = _strip_file_header(clean).strip("\n")
+
+    # 组装: 新 AI 块 (文件头部) + 用户代码
+    parts = []
     parts.append(_generate_ai_block(mod_name, in_pipes, out_pipes, io_dir, module.get("source_file", "")))
 
-    # 用户代码占位
-    parts.append("// (新模块 — 在此插入业务代码)")
+    if clean:
+        parts.append(clean)
+    else:
+        parts.append("// (新模块 — 在此插入业务代码)")
 
     return "\n\n".join(parts) + "\n"
 
@@ -243,34 +262,11 @@ def generate_module_c_refactored(
     project: dict,
     original_path: str,
 ) -> str:
-    """生成重构后的 .c 内容: 替换头部 AI 块，保留原内容"""
-    mod_name = module["name"]
-    out_pipes = [p for p in pipes if p["from"] == mod_name]
-    in_pipes  = [p for p in pipes if p["to"] == mod_name]
+    """生成重构后的 .c 内容 — 与 generate_module_c 统一逻辑
 
-    original_content = ""
-    if original_path:
-        try:
-            with open(original_path, "r", encoding="utf-8") as f:
-                original_content = f.read()
-        except (IOError, UnicodeDecodeError):
-            original_content = ""
-
-    clean_content = _strip_ai_blocks(original_content).strip("\n")
-
-    parts = []
-
-    # [1] AI 块 (文件头部)
-    io_dir = project.get("paths", {}).get("io_dir", "include")
-    parts.append(_generate_ai_block(mod_name, in_pipes, out_pipes, io_dir, module.get("source_file", "")))
-
-    # [2] 原用户代码
-    if clean_content:
-        parts.append(clean_content)
-    else:
-        parts.append("// (新模块 — 在此插入业务代码)")
-
-    return "\n\n".join(parts) + "\n"
+    保留此函数签名以兼容 GUI 调用, 内部委托给 generate_module_c
+    """
+    return generate_module_c(module, pipes, project, existing_file=original_path)
 
 
 def generate_module_h(module: dict) -> str:
