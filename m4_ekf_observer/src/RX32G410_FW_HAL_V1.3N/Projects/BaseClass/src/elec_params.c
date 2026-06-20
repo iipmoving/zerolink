@@ -315,7 +315,7 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     // ---- 单循环：逐周期提取 + 累加（i=1..19, 高压段平均替代中值）----
     uint8_t valid_cnt = 0;
     float I_sum = 0.0f, L_sum = 0.0f, Vdc_sum = 0.0f;
-    float phi_sum = 0.0f;
+    float phi_sum = 0.0f, p_sum = 0.0f;
     uint8_t phi_n = 0, vn = 0, pn = 0;
 
     for (uint8_t i = 1; i < PERIO_CNT; i++) {
@@ -362,22 +362,24 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
             phi_n++;
         }
 
-        // ---- P_W: 全部周期参与（无电压时贡献为0）----
+        // ---- P_W: 20ms周期平均（跳过电压无效周期）----
         float i_high = (loff > 0.0f) ? ((float)c->active_current_sum_high / loff) : 0.0f;
         float i_low  = (loff > 0.0f) ? ((float)c->active_current_sum_low  / loff) : 0.0f;
-        float p_avg = (c->voltage_count >= IH_HV_WIN_CNT_MIN)
-            ? (float)c->voltage_sum / (float)c->voltage_count : 0.0f;
-        ws->P_arr[pn++] = (i_high + i_low) * p_avg * IH_VDC_SCALE;
+        if (c->voltage_count >= IH_HV_WIN_CNT_MIN) {
+            float p_avg = (float)c->voltage_sum / (float)c->voltage_count;
+            p_sum += (i_high + i_low) * p_avg * IH_VDC_SCALE;
+            pn++;
+        }
     }
     if (valid_cnt < 1) return 0;  // 无有效数据
 
     // ---- 聚合结果（平均替代中值）-----------------------------------------
     result->I_peak_A = I_sum / (float)valid_cnt;
     result->Vdc_mean = (vn > 0) ? (Vdc_sum / (float)vn) : 0.0f;
-    result->f_sw_Hz  = median_f(ws->f_sw + 1, PERIO_CNT - 1);
+    result->f_sw_Hz  = (ws->f_sw[1] + ws->f_sw[2] + ws->f_sw[3] + ws->f_sw[4] + ws->f_sw[5] + ws->f_sw[6] + ws->f_sw[7] + ws->f_sw[8] + ws->f_sw[9] + ws->f_sw[10] + ws->f_sw[11] + ws->f_sw[12] + ws->f_sw[13] + ws->f_sw[14] + ws->f_sw[15] + ws->f_sw[16] + ws->f_sw[17] + ws->f_sw[18] + ws->f_sw[19]) / 19.0f;
     result->L_uH     = L_sum / (float)valid_cnt;
     result->phi_deg  = (phi_n > 0) ? (phi_sum / (float)phi_n) : 0.0f;
-    result->P_W      = median_f(ws->P_arr, pn);
+    result->P_W      = (pn > 0) ? (p_sum / (float)pn) : 0.0f;
     // ---- 谐振参数计算 -------------------------------------------------
     // f_res = 1/(2π√(LC)) — 谐振频率
     float LC = (result->L_uH * 1e-6f) * IH_C_FARAD;  // L(μH→H) × C(F)
@@ -447,7 +449,11 @@ static void Init(void) {
  *  4. 将浮点结果转换为整型定标输出（×100）
  *  5. 更新输出状态标志
  */
-ElecParams_Ws		new;
+/* ---- P_W 低通滤波状态 (每炉头) ---- */
+#define P_W_ALPHA 0.3f   /* 滤波系数: 越小越平滑, 响应越慢 */
+static float s_pw_filt[ELEC_POTMAX];
+static uint8_t s_pw_init[ELEC_POTMAX];
+static	ElecParams_Ws		new;
 #include	"API_gpio.h"
 static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags)
  {
@@ -483,6 +489,16 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
         // 指向当前炉头的 20 周期数据块
         const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles = &in->Calculator_params->params[h][0];
         uint8_t calc_ok = ElecParams_Calc(result, cycles, ws);
+
+            /* ---- P_W 一阶低通滤波 (20ms平均值 → 平滑输出) ---- */
+            float pw_raw = result->P_W;
+            if (!s_pw_init[h]) {
+                s_pw_filt[h] = pw_raw;
+                s_pw_init[h] = 1;
+            } else {
+                s_pw_filt[h] = s_pw_filt[h] * (1.0f - P_W_ALPHA) + pw_raw * P_W_ALPHA;
+            }
+            result->P_W = s_pw_filt[h];
 
 
 		}

@@ -84,6 +84,6 @@ void Switcher_Run(void);
 void Switcher_Run_All(void);
 
 extern const uint8_t SWITCHER_SLOT_COUNT;
-#define SLOT_COUNT 11
+
 
 #endif /* DATA_SWITCHER_H */

@@ -14,6 +14,9 @@
 #include "hal/hal_timer.h"
 #include "hal/hal_uart.h"
 #include "hal/hal_gpio.h"
+#include "hal/hal_buzzer.h"
+#include "drv/drv_buzzer.h"
+#include "drv/drv_display.h"
 #include <stddef.h>
 
 /* __weak 调度入口 — Switcher 提供强符号实现 */
@@ -60,6 +63,7 @@ int main(void)
     HAL_UART_Debug_Print("12345");
 
     HAL_GPIO_Init();
+    HAL_Buzzer_Init();
     Slot_Init();
 
     s_prog_slot = 0u;
@@ -69,10 +73,13 @@ int main(void)
 
     for (;;) {
         if (HAL_Timer_1msElapsed()) {
+            Drv_Buzzer_Timer_1ms();
+            Drv_Display_Scan();
             Slot_every1ms();
             ExecSlot_Run();
         }
 
+        HAL_UART_Debug_Flush();
         Slot_loop1ms();
     }
 }

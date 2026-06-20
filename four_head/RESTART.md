@@ -132,91 +132,54 @@ python tools/check_deps.py src/
 
 ---
 
-## 三、接口管理系统：__weak 回调 + interface_map.h
+## 三、接口管理系统：Switcher PULL 路由 + project.json
 
-### 3.1 核心机制
+### 3.1 核心机制 (v2.3)
 
-**模块间通信不走消息队列，不走注册，不走 ID。发送方定义一个 `__weak` 空壳函数，接收方定义同名强符号函数。链接器自动接线。**
-
-```c
-// ===== 发送方 (如 drv_key.c) =====
-__weak void AppHmi_OnKey(uint16_t param, void *data_ptr)
-{ (void)param; (void)data_ptr; }  // 空壳 — 无人接收时静默丢弃
-
-// 在适当位置调用:
-AppHmi_OnKey(key_code, &key_data);
-
-// ===== 接收方 (如 app_hmi.c) =====
-void AppHmi_OnKey(uint16_t param, void *data_ptr)  // 强符号 — 覆盖空壳
-{
-    // 实际处理逻辑
-}
-```
-
-### 3.2 命名约定
+**模块间通信通过 Switcher PULL 路由，零拷贝指针直穿。** 数据流由 `json/project.json` 定义，codeGen 生成 `include_io/*_io.h` + `data_switcher.c`。
 
 ```
-{接收方模块前缀}_On{事件名}(uint16_t param, void *data_ptr)
-
-APP 模块: App{Name}_On{Event}   → AppHmi_OnKey, AppPower_OnRegData
-DRV 模块: Drv{Name}_On{Event}   → DrvDisplay_OnRefresh, DrvBuzzer_OnCtrl
-PROTO 层: Proto_{Action}        → Proto_BuildRead, Proto_Parse (特殊: 返回值函数)
+生产者 DoWork() → 写 output LINK.params + seq++ + ST_OUT
+Switcher InputCallback (强符号) → 指针直穿: __in->Producer_params = __out->Consumer_params
+消费者 DoWork() → ProcessInput() → seq 比对 → 消费 input LINK.params
 ```
 
-### 3.3 跨模块数据结构：独立声明，同布局不同名
+**与 1.0 的区别**: 无 __weak 回调、无 interface_map.h、无消息队列。编译器保证字段一致性。
 
-发送方和接收方**各自独立声明**结构体，名字不同但内存布局一致：
+### 3.2 数据源: project.json
 
+**位置**: `src/json/project.json`
+**性质**: 模块/管道/字段的唯一真相源。codeGen 从此文件生成所有 IO 接口。
+
+**修改流程**:
 ```
-发送方 (app_power.c):          接收方 (app_comm_mgr.c):
-  PowerOutput_t                   CommPowerCmd_t
-    uint8_t  head_idx               uint8_t  head_idx
-    uint16_t power_watt             uint16_t power_watt
-  sizeof = 4 (packed)             sizeof = 4 (packed)
-```
-
-**AI 的职责**: 修改任一方时，必须同步修改配对。
-
-### 3.4 interface_map.h — 公共声明链接表
-
-**位置**: `src/core/interface_map.h`
-**性质**: 纯文档文件，**禁止被任何 .c/.h include**。如果有代码尝试 include 它会触发 `#error`。
-
-**内容**:
-1. **结构体配对表** — 7 对跨模块结构体的发送/接收声明对照
-2. **__weak 通道全局注册表** — 20 条通道（发送方/接收方/数据类型）
-3. **AI 管理规则** — 新增/修改通道的标准操作流程
-
-**工作流**: 每次新增或修改跨模块通信:
-```
-1. 确定发送方和接收方
-2. 发送方 .c: 添加 __weak 空壳 + 调用点
-3. 接收方 .c: 强符号实现
-4. 如需新结构体: 两端各独立声明 (不同名, 同布局)
-5. 在 interface_map.h 注册新通道
-6. check_deps.py → armcc 编译 → 提交
+1. 编辑 project.json (或 GUI 编辑)
+2. python code_gen.py gen --config project.json -o <src路径>
+3. 生成文件覆盖 include_io/ + data_switcher.c
+4. armcc 编译验证 → 提交
 ```
 
-### 3.5 当前通道清单 (20 条)
+### 3.3 当前管道清单 (16 条)
 
 | # | 方向 | 用途 |
 |---|------|------|
-| 0 | drv_key → app_hmi, app_cooking | 按键事件 |
-| 1 | (app_cooking 内部) | 烹饪控制自收 |
-| 2 | app_cooking → app_power | 功率控制指令 |
-| 3 | (预留) | |
-| 4 | app_hmi, app_cooking → drv_display | 显示刷新 |
-| 5 | main → app_hmi | 100ms 定时 |
-| 6 | main → app_hmi, app_cooking | 1s 定时 |
-| 7 | drv_comm_mgr → app_comm_mgr | 发送完成通知 |
-| 8 | drv_comm_mgr → app_comm_mgr | 通讯数据更新 |
-| 9 | app_protect → app_power | 系统错误 |
-| 10-12 | (预留/测试) | |
-| 13 | app_comm_mgr → app_power, app_cooking, app_protect | 寄存器数据广播 |
-| 14 | app_hmi → drv_buzzer | 蜂鸣器控制 |
-| 15 | app_comm_mgr → drv_comm_mgr | 发送请求 |
-| 16 | app_power → app_comm_mgr | 功率下发命令 |
-| 17-19 | app_comm_mgr → proto_modbus | 协议抽象 (返回值函数) |
+| 0 | DrvKey → AppHmi | 按键事件 |
+| 1 | DrvKey → AppCooking | 按键事件 |
+| 2 | DrvKey → AppSegAlign | 按键事件 |
+| 3 | AppCommMgr → AppPower | 寄存器数据 |
+| 4 | AppCommMgr → AppCooking | 寄存器数据 |
+| 5 | AppCommMgr → AppProtect | 寄存器数据 |
+| 6 | AppCooking → AppPower | 烹饪状态 |
+| 7 | AppHmi → DrvDisplay | 显示数据 |
+| 8 | AppHmi → DrvBuzzer | 蜂鸣命令 (edge) |
+| 9 | AppPower → AppHmi | 功率状态 |
+| 10 | AppPower → DrvCommMgr | 功率命令 |
+| 11 | AppProtect → AppPower | 故障状态 |
+| 12 | AppCommMgr → ProtoModbus | 协议请求 |
+| 13 | ProtoModbus → AppCommMgr | 协议响应 |
+| 14 | AppCommMgr → DrvCommMgr | TX发送请求 |
+| 15 | DrvCommMgr → AppCommMgr | TX/RX事件 |
+| 16 | AppSegAlign → DrvDisplay | 段码控制 |
 
 ---
 
@@ -531,7 +494,7 @@ void App_Xxx_Run(void) {
 │ 验证:      check_deps.py → armcc → 提交                       │
 │ codeGen:   ZEROLINK/codeGen/ (scan_project → code_gen)        │
 │ 铁律:      违规应被阻断, 不被提醒                               │
-│            L0(编译器) > L1(pre-commit) > L2(生成器) > L3(文档) │
+│            L0(编译器) > L1(check_deps) > L2(codeGen) > L3(文档) │
 └───────────────────────────────────────────────────────────┘
 ```
 

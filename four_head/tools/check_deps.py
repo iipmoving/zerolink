@@ -27,20 +27,16 @@ import tempfile
 # ============================================================
 BUILTIN_PRESETS = {
     'four_head': {
-        'layer_dirs': ['app', 'api', 'drv', 'hal', 'proto', 'core', 'cfg'],
-        'scan_dirs': ['app', 'api', 'drv', 'hal', 'proto', 'core', 'cfg', 'src'],
-        'weak_whitelist': [],  # APP→APP __weak 例外白名单
+        'layer_dirs': ['app', 'drv', 'hal', 'proto', 'core', 'cfg', 'include_io', 'include'],
+        'scan_dirs': ['app', 'drv', 'hal', 'proto', 'core', 'cfg', 'src'],
+        'weak_whitelist': [],
         'rules': {
             'app': {
-                'allowed': ['app/', 'core/', 'proto/', 'cfg/', '<'],
-                'forbidden': ['api/', 'drv/', 'hal/'],
-            },
-            'api': {
-                'allowed': ['api/', 'core/', 'cfg/', '<'],
-                'forbidden': ['app/', 'drv/', 'hal/', 'proto/'],
+                'allowed': ['app/', 'include_io/', 'include/', 'core/', 'proto/', 'cfg/', '<'],
+                'forbidden': ['drv/', 'hal/'],
             },
             'drv': {
-                'allowed': ['drv/', 'core/', 'hal/', 'cfg/', '<'],
+                'allowed': ['drv/', 'include_io/', 'include/', 'core/', 'hal/', 'cfg/', '<'],
                 'forbidden': ['app/', 'proto/'],
             },
             'hal': {
@@ -52,11 +48,11 @@ BUILTIN_PRESETS = {
                 'forbidden': ['core/', 'app/', 'drv/', 'proto/', 'cfg/'],
             },
             'proto': {
-                'allowed': ['proto/', 'core/', '<'],
+                'allowed': ['proto/', 'include_io/', 'core/', '<'],
                 'forbidden': ['app/', 'drv/', 'hal/', 'cfg/'],
             },
             'core': {
-                'allowed': ['core/', '<'],
+                'allowed': ['core/', 'include_io/', 'include/', '<'],
                 'forbidden': ['app/', 'drv/', 'hal/', 'proto/', 'cfg/'],
             },
             'cfg': {

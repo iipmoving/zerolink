@@ -12,11 +12,6 @@
 #include "std_module.h"
 #include "data_switcher.h"
 
-#include "hal/hal_buzzer.h"
-#include "hal/hal_uart.h"
-#include "drv/drv_buzzer.h"
-#include "drv/drv_display.h"
-
 /* IO 接口文件 — 全模块接入 */
 #include "../include_io/drv_key_io.h"
 #include "../include_io/app_comm_mgr_io.h"
@@ -43,7 +38,7 @@ typedef enum {
     SLOT_DrvCommMgr = 8,
     SLOT_DrvBuzzer = 9,
     SLOT_DrvDisplay = 10,
-    SLOT_COUNT
+    SLOT_COUNT,
 } SwitcherSlot_t;
 
 static ModuleSlotDef s_slot[SLOT_COUNT];
@@ -182,21 +177,13 @@ void Switcher_Run_All(void)
 
 void Slot_Init(void)
 {
-    HAL_Buzzer_Init();
     Switcher_Init();
     Switcher_Run_All();
 }
 
-void Slot_every1ms(void)
-{
-    Drv_Buzzer_Timer_1ms();
-    Drv_Display_Scan();
-}
+void Slot_every1ms(void) { }
 
-void Slot_loop1ms(void)
-{
-    HAL_UART_Debug_Flush();
-}
+void Slot_loop1ms(void)  { }
 
 /* Slot0 — 定时消息生成(100ms/1s) */
 void Switcher_Run_Slot0(void)
