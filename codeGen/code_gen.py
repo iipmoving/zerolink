@@ -161,16 +161,18 @@ def cmd_gen(args):
     if gen_modules:
         print("\n--- 模块 .c / .h ---")
         for mod in modules:
-            mod_out = _mod_output_dir(mod)
-            c_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.c")
+            source_file = mod.get("source_file", "")
+            if source_file:
+                c_path = os.path.abspath(os.path.join(output_root, source_file))
+            else:
+                mod_out = _mod_output_dir(mod)
+                c_path = os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.c")
 
-            # generate_module_c 统一处理:
-            #   已有文件 → 剥离旧 AI 块+文件头, 插入新 AI 块, 保留用户代码
-            #   新文件 → 生成完整骨架
+            mod_out = os.path.dirname(c_path)
+
             content_c = generate_module_c(mod, pipes, project, c_path)
             save_file(c_path, content_c)
 
-            # 生成 .h
             content_h = generate_module_h(mod)
             save_file(os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.h"), content_h)
 
