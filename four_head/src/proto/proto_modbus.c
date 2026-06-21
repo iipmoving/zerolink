@@ -1,13 +1,77 @@
-/**
- * proto_modbus.c —— MODBUS RTU 协议编解码实现
- *
- * 依赖: proto_modbus.h
- * 层级: PROTO —— 纯协议层
- *
- * CRC-16: 软件查表法，查表数据来自参考程序 CRC_CalculatedArrays.c
- * 芯片硬件CRC不支持REFIN/REFOUT，故不采用
- */
-#include "proto_modbus.h"
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/proto_modbus_io.h"
+
+MODULE_SKELETON(ProtoModbus);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+    } bits;
+} ProtoModbus_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(ProtoModbus)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(ProtoModbus)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppCommMgr;  /* AppCommMgr→ProtoModbus */
+
+/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+static MODULE_OUTPUT_LINK(ProtoModbus, AppCommMgr)  s_ProtoModbusToAppCommMgrLink;
+
+/* ---- 初始化 ---- */
+static void Init(void)
+{
+    memset(&s_outPara, 0, sizeof(s_outPara));
+
+    /* 绑定 OUTPUT_LINK 指钺 */
+    s_outPara.AppCommMgr_params = &s_ProtoModbusToAppCommMgrLink;
+
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+}
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 输出段请对产出数据的 LINK 执行 seq++: out->AppCommMgr_params->seq++; */
+static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(ProtoModbus) *in  = (MODULE_INPUT(ProtoModbus)*)g_input.para;
+    MODULE_OUTPUT(ProtoModbus) *out = (MODULE_OUTPUT(ProtoModbus)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    ProtoModbus_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(ProtoModbus);
+
+// ===== [END AI GENERATED] =====
+
+#include <stddef.h>
+
+/* ========== MODBUS 功能码 & 错误码 ========== */
+#define MODBUS_FUNC_READ         0x03u
+#define MODBUS_FUNC_WRITE_SINGLE 0x06u
+#define MODBUS_FUNC_WRITE_MULTI  0x10u
+#define MODBUS_EXC_FLAG          0x80u
+
+#define PROTO_MODBUS_OK       ((int8_t)0)
+#define PROTO_MODBUS_ERR_CRC  ((int8_t)-1)
+#define PROTO_MODBUS_ERR_EXC  ((int8_t)-2)
+#define PROTO_MODBUS_ERR_LEN  ((int8_t)-3)
 
 /* ========== CRC-16 高位字节查表 ========== */
 static const uint8_t crc_hi_table[256] = {
@@ -70,7 +134,7 @@ static const uint8_t crc_lo_table[256] = {
 };
 
 /* ========== CRC-16 计算 (MODBUS) ========== */
-uint16_t Proto_Modbus_CRC16(const uint8_t *data, uint16_t len)
+static uint16_t Proto_Modbus_CRC16(const uint8_t *data, uint16_t len)
 {
     uint8_t  crc_hi = 0xFFu;
     uint8_t  crc_lo = 0xFFu;
@@ -100,7 +164,7 @@ static uint16_t append_crc(uint8_t *buf, uint16_t pos)
 }
 
 /* ========== 构建 0x03 读寄存器帧 ========== */
-uint16_t Proto_Modbus_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
+static uint16_t Proto_Modbus_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
                                 uint16_t reg_count, uint8_t *tx_buf)
 {
     tx_buf[0u] = slave_addr;
@@ -113,7 +177,7 @@ uint16_t Proto_Modbus_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
 }
 
 /* ========== 构建 0x06 写单个寄存器帧 ========== */
-uint16_t Proto_Modbus_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
+static uint16_t Proto_Modbus_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
                                        uint16_t data, uint8_t *tx_buf)
 {
     tx_buf[0u] = slave_addr;
@@ -126,7 +190,7 @@ uint16_t Proto_Modbus_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
 }
 
 /* ========== 构建 0x10 写多个寄存器帧 ========== */
-uint16_t Proto_Modbus_BuildWriteMulti(uint8_t slave_addr, uint16_t reg_addr,
+static uint16_t Proto_Modbus_BuildWriteMulti(uint8_t slave_addr, uint16_t reg_addr,
                                       uint16_t reg_count, const uint8_t *data,
                                       uint8_t *tx_buf)
 {
@@ -151,7 +215,7 @@ uint16_t Proto_Modbus_BuildWriteMulti(uint8_t slave_addr, uint16_t reg_addr,
 }
 
 /* ========== 解析 MODBUS 响应帧 ========== */
-int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,
+static int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,
                           uint8_t *out_slave, uint8_t *out_func,
                           uint16_t *out_data, uint16_t *out_count)
 {
@@ -234,7 +298,7 @@ int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,
     return PROTO_MODBUS_OK;
 }
 
-/* ========== 协议抽象接口: __weak 强符号, 供 app_comm_mgr 直调 ========== */
+/* ========== 协议抽象接口: 强符号, 供 app_comm_mgr __weak 链接 ========== */
 uint16_t Proto_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
                          uint16_t reg_count, uint8_t *tx_buf)
 {
@@ -254,4 +318,51 @@ uint16_t Proto_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
                                 uint16_t data, uint8_t *tx_buf)
 {
     return Proto_Modbus_BuildWriteSingle(slave_addr, reg_addr, data, tx_buf);
+}
+
+/* ========== 用户业务: 管道驱动的 MODBUS 编解码 ========== */
+static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags)
+{
+    MODULE_INPUT_LINK(AppCommMgr, ProtoModbus) *req;
+    MODULE_OUTPUT_PARAMS(ProtoModbus, AppCommMgr) *rsp;
+
+    if (!flags.bits.appcommmgr) return;
+    if (!in || !in->AppCommMgr_params) return;
+
+    req = in->AppCommMgr_params;
+    if (!req->params) return;
+
+    rsp = out->AppCommMgr_params->params;
+    if (!rsp) return;
+
+    switch (req->params->cmd) {
+    case 1u:
+        rsp->tx_len = Proto_Modbus_BuildRead(
+            req->params->slave, req->params->read_reg,
+            req->params->read_count, rsp->tx_data);
+        rsp->result  = 0;
+        rsp->slave   = req->params->slave;
+        rsp->func    = MODBUS_FUNC_READ;
+        break;
+    case 2u:
+        rsp->tx_len = Proto_Modbus_BuildWriteSingle(
+            req->params->slave, req->params->write_reg,
+            req->params->write_val, rsp->tx_data);
+        rsp->result  = 0;
+        rsp->slave   = req->params->slave;
+        rsp->func    = MODBUS_FUNC_WRITE_SINGLE;
+        break;
+    case 3u:
+        rsp->result = Proto_Modbus_Parse(
+            req->params->rx_data, req->params->rx_len,
+            &rsp->slave, &rsp->func,
+            rsp->data, &rsp->data_count);
+        break;
+    default:
+        break;
+    }
+
+    out->AppCommMgr_params->status |= ST_NEW;
+    out->AppCommMgr_params->seq++;
+    g_output.info.status |= ST_OUT;
 }

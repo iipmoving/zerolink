@@ -99,7 +99,7 @@
       "id": "proto_modbus",
       "name": "ProtoModbus",
       "layer": "proto",
-      "source_file": "proto/proto_modbus_module.c",
+      "source_file": "proto/proto_modbus.c",
       "comment": "MODBUS RTU 协议编解码 — 从 AppCommMgr 接收请求，返回编码帧/解析结果 (2tick)",
       "types": []
     }
