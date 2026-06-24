@@ -16,6 +16,7 @@ import os
 import csv
 import json
 import time
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
@@ -307,7 +308,7 @@ class M4DebugApp:
         self.plotter: LivePlotter | None = None
         self.monitoring = False
         self.monitor_job = None
-        self._sample_interval_ms = 50   # 默认 20Hz 刷新
+        self._sample_interval_ms = 40   # 25Hz 刷新
 
         # 遥测选择
         self._mon_std = tk.BooleanVar(value=False)  # 标准遥测 (默认关, 节省带宽)
@@ -1210,6 +1211,7 @@ class M4DebugApp:
         self.power_slider.configure(state=state)
         self.cap_btn.configure(state=state)
         self.telem_btn.configure(state=state)
+        self.telem_read_btn.configure(state=state)
         for btn in getattr(self, '_quick_btns', []):
             btn.configure(state=state)
 
@@ -1425,8 +1427,12 @@ class M4DebugApp:
         if not self.client:
             return
         self.monitoring = True
+        self._telem_poll_skip = 0
         self.mon_btn.configure(text="■ 停止", fg=YELLOW)
-        self._monitor_poll()
+        self._latest_std = None
+        self._latest_ekf = None
+        self._latest_telem = None
+        threading.Thread(target=self._poll_loop, daemon=True).start()
 
     def _stop_monitor(self):
         self.monitoring = False
@@ -1435,63 +1441,139 @@ class M4DebugApp:
             self.monitor_job = None
         self.mon_btn.configure(text="▶ 监视", fg=FG)
 
-    def _monitor_poll(self):
-        if not self.monitoring or not self.client:
+    def _poll_loop(self):
+        """后台线程循环：固定 40ms 间隔读取 MODBUS"""
+        while self.monitoring:
+            t0 = time.perf_counter()
+            self._poll_once()
+            elapsed = (time.perf_counter() - t0) * 1000
+            sleep = max(0.005, (self._sample_interval_ms - elapsed) / 1000)
+            time.sleep(sleep)
+
+    def _poll_once(self):
+        """单次 MODBUS 读取 + 提交 UI 更新"""
+        try:
+            if not self.monitoring or not self.client:
+                return
+            pwr = 0
+            ekf = None
+            if self._mon_std.get():
+                data = self.client.read_telemetry()
+                if data:
+                    self._latest_std = data
+                    pwr = data.get("power_w", 0)
+                    work_sta = data.get("sys_sta", 0)
+                    heat_color = RED if (work_sta & 0x10) else DIM
+                    self.root.after(0, lambda c=heat_color: self.heat_led.itemconfig(
+                        self._heat_circle, fill=c))
+            else:
+                pwr = self.client._heartbeat_power_w * 25
+                heat_on = bool(self.client._heartbeat_work_sta & 0x10)
+                self.root.after(0, lambda: self.heat_led.itemconfig(
+                    self._heat_circle, fill=RED if heat_on else DIM))
+
+            if self._mon_ekf.get():
+                ekf = self.client.read_ekf_telemetry()
+                if ekf:
+                    pwr_raw = self.client.read_registers(0x1006, 1)
+                    if pwr_raw is not None:
+                        ekf["power_actual"] = pwr_raw[0]
+                    self._latest_ekf = ekf
+
+            # Telemetry 0x7000 — 约 100ms 读取一次 (每3次轮询 ≈ 120ms)
+            self._telem_poll_skip += 1
+            if self._telem_poll_skip >= 3:
+                self._telem_poll_skip = 0
+                telem = self.client.read_telemetry_pipe()
+                if telem:
+                    self._latest_telem = telem
+                    self.root.after(0, self._update_telem_panel)
+
+            # 数据记录 (内存攒, 停止时批量写 CSV)
+            if self._recording and ekf:
+                self._records.append({
+                    "timestamp": datetime.now().isoformat(timespec="milliseconds"),
+                    "freq_hz": ekf.get("f_sw_hz", 0) * 1.0,
+                    "phase_deg": ekf.get("phi_deg_x10", 0) * 0.1,
+                    "vdc_mean": ekf.get("vdc_mean_v_x10", 0) * 0.1,
+                    "power_actual": ekf.get("power_actual", 0),
+                    "power_target": self.client._heartbeat_power_w * 25,
+                })
+
+            # 喂绘图器
+            if self.plotter and ekf:
+                self.plotter.feed(power_w=pwr,
+                                 freq_hz=ekf.get("freq_hz", 0),
+                                 phase_deg=ekf.get("phase_deg", 0),
+                                 delta_ppg=ekf.get("delta_ppg_signed", 0))
+                self.plotter.update_plot()
+
+            # 切回主线程更新 UI
+            self.root.after(0, self._update_ui_from_worker)
+        except Exception:
+            pass  # 断线时静默容错
+
+    def _update_ui_from_worker(self):
+        """主线程：更新 UI 控件"""
+        if self._latest_std:
+            self._update_reg_display(self._latest_std, self.reg_rows)
+            self._latest_std = None
+        if self._latest_ekf:
+            self._update_reg_display(self._latest_ekf, self.ekf_rows)
+            self._update_ekf_computed(self._latest_ekf)
+            status = f"监视中 @ {datetime.now().strftime('%H:%M:%S')}  |  {self._sample_interval_ms}ms"
+            if self._recording:
+                status += f"  |  已记录 {len(self._records)} 条"
+            self._set_status(status)
+            self._latest_ekf = None
+
+    def _update_telem_panel(self):
+        """主线程：刷新 Telemetry 0x7000 面板"""
+        telem = self._latest_telem
+        if not telem:
             return
-
-        pwr = 0
-
-        if self._mon_std.get():
-            data = self.client.read_telemetry()
-            if data:
-                self._update_reg_display(data, self.reg_rows)
-                pwr = data.get("power_w", 0)
-                work_sta = data.get("sys_sta", 0)
-                heat_color = RED if (work_sta & 0x10) else DIM
-                self.heat_led.itemconfig(self._heat_circle, fill=heat_color)
-        else:
-            # 不从标准遥测读功率时, 用心跳状态推算
-            pwr = self.client._heartbeat_power_w * 25
-            heat_on = bool(self.client._heartbeat_work_sta & 0x10)
-            self.heat_led.itemconfig(self._heat_circle,
-                                    fill=RED if heat_on else DIM)
-
-        ekf = None
-        if self._mon_ekf.get():
-            ekf = self.client.read_ekf_telemetry()
-            if ekf:
-                # 补充实际功率 (0x1006 = Practical_Power, 单位 W)
-                pwr_raw = self.client.read_registers(0x1006, 1)
-                if pwr_raw is not None:
-                    ekf["power_actual"] = pwr_raw[0]
-                self._update_reg_display(ekf, self.ekf_rows)
-                self._update_ekf_computed(ekf)
-
-        # 数据记录 (内存攒, 停止时批量写 CSV)
-        if self._recording and ekf:
-            self._records.append({
-                "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-                "freq_hz": ekf.get("f_sw_hz", 0) * 1.0,
-                "phase_deg": ekf.get("phi_deg_x10", 0) * 0.1,
-                "vdc_mean": ekf.get("vdc_mean_v_x10", 0) * 0.1,
-                "power_actual": ekf.get("power_actual", 0),
-                "power_target": self.client._heartbeat_power_w * 25,
-            })
-
-        # 喂绘图器
-        if self.plotter and ekf:
-            self.plotter.feed(power_w=pwr,
-                             freq_hz=ekf.get("freq_hz", 0),
-                             phase_deg=ekf.get("phase_deg", 0),
-                             delta_ppg=ekf.get("delta_ppg_signed", 0))
-            self.plotter.update_plot()
-
-        status = f"监视中 @ {datetime.now().strftime('%H:%M:%S')}  |  {self._sample_interval_ms}ms"
-        if self._recording:
-            status += f"  |  已记录 {len(self._records)} 条"
-        self._set_status(status)
-
-        self.monitor_job = self.root.after(self._sample_interval_ms, self._monitor_poll)
+        # 更新 Calculator 20周期表格
+        for p, cp in enumerate(telem.get("calc_periods", [])):
+            if p >= len(self.telem_calc_rows):
+                break
+            row = self.telem_calc_rows[p]
+            row[0].configure(text=str(p))
+            row[1].configure(text=str(cp.get("hrtim_highOff", 0)))
+            row[2].configure(text=str(cp.get("hrtim_lowOff", 0)))
+            row[3].configure(text=str(cp.get("hrtim_highOn", 0)))
+            row[4].configure(text=str(cp.get("hrtim_lowOn", 0)))
+            row[5].configure(text=str(cp.get("peak_current", 0)))
+            row[6].configure(text=str(cp.get("voltage_count", 0)))
+            row[7].configure(text=str(cp.get("zero_cross_high", 0)))
+            row[8].configure(text=str(cp.get("zero_cross_low", 0)))
+            row[9].configure(text=str(cp.get("peak_point", 0)))
+            row[10].configure(text=str(cp.get("act_curr_high", 0)))
+            row[11].configure(text=str(cp.get("act_curr_low", 0)))
+            row[12].configure(text=str(cp.get("volt_sum", 0)))
+        # 更新 ElecParams 浮点值
+        elec = telem.get("elec", {})
+        ep_keys = ["I_peak_A", "Vdc_mean", "phi_deg", "f_sw_Hz",
+                    "L_uH", "f_res_kHz", "Q_factor", "R_ohm",
+                    "I_rms", "P_W", "Z_mag_ohm", "X_ohm"]
+        for i, key in enumerate(ep_keys):
+            val = elec.get(key, 0)
+            if isinstance(val, float):
+                if abs(val) < 10:
+                    self.telem_ep_labels[i].configure(text=f"{val:.4f}")
+                elif abs(val) < 1000:
+                    self.telem_ep_labels[i].configure(text=f"{val:.2f}")
+                else:
+                    self.telem_ep_labels[i].configure(text=f"{val:.1f}")
+            else:
+                self.telem_ep_labels[i].configure(text=str(val))
+        self.telem_ep_labels[12].configure(text=str(elec.get("valid", 0)))
+        st = telem.get("status", 0)
+        flags = []
+        if st & 0x01: flags.append("RUN")
+        if st & 0x02: flags.append("CALC")
+        if st & 0x04: flags.append("ELEC")
+        self.telem_ep_labels[13].configure(text=f"0x{st:02X} {' '.join(flags)}")
+        self.telem_status_lbl.configure(text="OK", fg=GREEN)
 
     # ---- 绘图 --------------------------------------------------
 
