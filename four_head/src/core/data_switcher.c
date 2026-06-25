@@ -1,12 +1,8 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    data_switcher.c
  * @brief   Data Switcher — PULL 路由调度器 (v2.3 LINK+PARAMS)
  * @layer   core
- *
- * ================================================================
- * [AI GENERATED] 此文件由 codeGen 自动生成，请勿手动修改
- * 修改方式: 编辑 project.json → 运行 GUI / code_gen.py 重新生成
- * ================================================================
  */
 
 #include "std_module.h"
@@ -38,7 +34,7 @@ typedef enum {
     SLOT_DrvCommMgr = 8,
     SLOT_DrvBuzzer = 9,
     SLOT_DrvDisplay = 10,
-    SLOT_COUNT,
+    SLOT_COUNT
 } SwitcherSlot_t;
 
 static ModuleSlotDef s_slot[SLOT_COUNT];
@@ -70,6 +66,7 @@ INPUT_CALLBACK(AppCommMgr)
 {
     INPUT_GET_SLOT(ProtoModbus, AppCommMgr);
     INPUT_GET_SLOT(DrvCommMgr, AppCommMgr);
+    INPUT_GET_SLOT(AppPower, AppCommMgr);
 }
 
 
@@ -112,15 +109,9 @@ INPUT_CALLBACK(DrvBuzzer)
     INPUT_GET_SLOT(AppHmi, DrvBuzzer);
 }
 
-OUTPUT_CALLBACK(DrvBuzzer)
-{
-    s_slot[SLOT_DrvBuzzer].pDoWork();
-}
-
 
 INPUT_CALLBACK(DrvCommMgr)
 {
-    INPUT_GET_SLOT(AppPower, DrvCommMgr);
     INPUT_GET_SLOT(AppCommMgr, DrvCommMgr);
 }
 
@@ -154,7 +145,37 @@ void Switcher_Slot_DrvBuzzer(void) { s_slot[SLOT_DrvBuzzer].pDoWork(); }
 void Switcher_Slot_DrvDisplay(void) { s_slot[SLOT_DrvDisplay].pDoWork(); }
 
 /* ================================================================
- * Switcher_Run_All — 一次执行全部模块 (批量初始化模式)
+ * 时间片轮转 — 覆盖 main.c 的 __weak Switcher_Run_Slot0~10
+ *
+ * 11ms 完整周期, 每个模块每11ms被调用一次
+ * Slot 分配:
+ *   0: DrvKey        (按键扫描, 需高频)
+ *   1: DrvCommMgr    (通信轮询)
+ *   2: AppCommMgr    (MODBUS帧处理)
+ *   3: ProtoModbus   (协议编解码)
+ *   4: AppPower      (功率PID)
+ *   5: AppCooking    (烹饪逻辑)
+ *   6: AppHmi        (HMI显示刷新)
+ *   7: AppProtect    (保护检测)
+ *   8: AppSegAlign   (对齐模式)
+ *   9: DrvBuzzer     (蜂鸣器)
+ *  10: DrvDisplay    (显示驱动)
+ * ================================================================ */
+
+void Switcher_Run_Slot0(void)  { Switcher_Slot_DrvKey(); }
+void Switcher_Run_Slot1(void)  { Switcher_Slot_DrvCommMgr(); }
+void Switcher_Run_Slot2(void)  { Switcher_Slot_AppCommMgr(); }
+void Switcher_Run_Slot3(void)  { Switcher_Slot_ProtoModbus(); }
+void Switcher_Run_Slot4(void)  { Switcher_Slot_AppPower(); }
+void Switcher_Run_Slot5(void)  { Switcher_Slot_AppCooking(); }
+void Switcher_Run_Slot6(void)  { Switcher_Slot_AppHmi(); }
+void Switcher_Run_Slot7(void)  { Switcher_Slot_AppProtect(); }
+void Switcher_Run_Slot8(void)  { Switcher_Slot_AppSegAlign(); }
+void Switcher_Run_Slot9(void)  { Switcher_Slot_DrvBuzzer(); }
+void Switcher_Run_Slot10(void) { Switcher_Slot_DrvDisplay(); }
+
+/* ================================================================
+ * Switcher_Run_All — 一次执行全部模块 (批量模式/Init用)
  * ================================================================ */
 void Switcher_Run_All(void)
 {
@@ -172,7 +193,7 @@ void Switcher_Run_All(void)
 }
 
 /* ================================================================
- * main __weak 强符号实现
+ * main.c __weak 覆盖 — 调度入口强符号
  * ================================================================ */
 
 void Slot_Init(void)
@@ -181,73 +202,13 @@ void Slot_Init(void)
     Switcher_Run_All();
 }
 
-void Slot_every1ms(void) { }
-
-void Slot_loop1ms(void)  { }
-
-/* Slot0 — 定时消息生成(100ms/1s) */
-void Switcher_Run_Slot0(void)
+void Slot_every1ms(void)
 {
-    Slot_TimerTick();
 }
 
-/* Slot1 — ProtoModbus 协议处理 */
-void Switcher_Run_Slot1(void)
+void Slot_loop1ms(void)
 {
-    Switcher_Slot_ProtoModbus();
 }
 
-/* Slot2 — AppPower 功率控制 */
-void Switcher_Run_Slot2(void)
-{
-    Switcher_Slot_AppPower();
-}
+// ===== [END AI GENERATED] =====
 
-/* Slot3 — DrvKey 按键扫描 */
-void Switcher_Run_Slot3(void)
-{
-    Switcher_Slot_DrvKey();
-}
-
-/* Slot4 — DrvCommMgr 通讯 + AppCommMgr */
-void Switcher_Run_Slot4(void)
-{
-    Switcher_Slot_DrvCommMgr();
-    Switcher_Slot_AppCommMgr();
-}
-
-/* Slot5 — AppProtect 保护检测 */
-void Switcher_Run_Slot5(void)
-{
-    Switcher_Slot_AppProtect();
-}
-
-/* Slot6 — AppCooking 烹饪状态机 */
-void Switcher_Run_Slot6(void)
-{
-    Switcher_Slot_AppCooking();
-}
-
-/* Slot7 — AppHmi 人机交互 */
-void Switcher_Run_Slot7(void)
-{
-    Switcher_Slot_AppHmi();
-}
-
-/* Slot8 — AppSegAlign 对齐调校 */
-void Switcher_Run_Slot8(void)
-{
-    Switcher_Slot_AppSegAlign();
-}
-
-/* Slot9 — DrvBuzzer 蜂鸣器 */
-void Switcher_Run_Slot9(void)
-{
-    Switcher_Slot_DrvBuzzer();
-}
-
-/* Slot10 — DrvDisplay 显示更新 */
-void Switcher_Run_Slot10(void)
-{
-    Switcher_Slot_DrvDisplay();
-}

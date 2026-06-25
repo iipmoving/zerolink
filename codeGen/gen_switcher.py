@@ -47,11 +47,6 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
     lines.append(" * @file    data_switcher.c")
     lines.append(" * @brief   Data Switcher — PULL 路由调度器 (v2.3 LINK+PARAMS)")
     lines.append(" * @layer   core")
-    lines.append(" *")
-    lines.append(" * ================================================================")
-    lines.append(" * [AI GENERATED] 此文件由 codeGen 自动生成，请勿手动修改")
-    lines.append(" * 修改方式: 编辑 project.json → 运行 GUI / code_gen.py 重新生成")
-    lines.append(" * ================================================================")
     lines.append(" */")
     lines.append("")
 
@@ -112,11 +107,8 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
             from_name = pipe["from"]
             ptype = pipe.get("callback_type", "pull")
 
-            if ptype == "pull":
+            if ptype == "pull" or ptype == "edge":
                 lines.append(f"    INPUT_GET_SLOT({from_name}, {consumer_name});")
-            elif ptype == "edge":
-                member = pipe.get("edge_member", "params")
-                lines.append(f"    INPUT_EDGE_PULL({from_name}, {consumer_name}, {member});")
             elif ptype == "field_copy":
                 # 生成逐字段搬运模板
                 fields = pipe.get("fields", [])
@@ -179,4 +171,10 @@ def generate_switcher(modules: list, pipes: list, slot_order: list, project: dic
             lines.append("}")
             lines.append("")
 
-    return "\n".join(lines)
+    content = "\n".join(lines)
+
+    # 包裹在 AI GENERATED 标记中 — 整个文件体都是生成内容
+    from gen_module_c import AI_BLOCK_BEGIN, AI_BLOCK_END
+    content = f"{AI_BLOCK_BEGIN}\n{content}\n{AI_BLOCK_END}\n"
+
+    return content

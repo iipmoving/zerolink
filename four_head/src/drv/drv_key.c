@@ -1,3 +1,52 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/drv_key_io.h"
+
+static void Init(void);
+MODULE_SKELETON(DrvKey);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t _unused;
+    } bits;
+} DrvKey_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(DrvKey)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(DrvKey)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(DrvKey, AppHmi)  s_DrvKeyToAppHmiParams;
+static MODULE_OUTPUT_LINK(DrvKey, AppHmi)  s_DrvKeyToAppHmiLink;
+static MODULE_OUTPUT_PARAMS(DrvKey, AppCooking)  s_DrvKeyToAppCookingParams;
+static MODULE_OUTPUT_LINK(DrvKey, AppCooking)  s_DrvKeyToAppCookingLink;
+static MODULE_OUTPUT_PARAMS(DrvKey, AppSegAlign)  s_DrvKeyToAppSegAlignParams;
+static MODULE_OUTPUT_LINK(DrvKey, AppSegAlign)  s_DrvKeyToAppSegAlignLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 输出段请对产出数据的 LINK 执行 seq++: out->AppHmi_params->seq++; */
+static void user_Process(MODULE_INPUT(DrvKey) *in, MODULE_OUTPUT(DrvKey) *out, DrvKey_PipeFlags_t flags)
+{
+    (void)in; (void)out; (void)flags;
+}
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(DrvKey) *in  = (MODULE_INPUT(DrvKey)*)g_input.para;
+    MODULE_OUTPUT(DrvKey) *out = (MODULE_OUTPUT(DrvKey)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    DrvKey_PipeFlags_t flags = {0};
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(DrvKey);
+
+// ===== [END AI GENERATED] =====
 /**
  * drv_key.c —— 按键驱动层实现
  *
@@ -14,30 +63,18 @@
 #include "../hal/hal_key.h"
 #include <stddef.h>
 
-MODULE_SKELETON(DrvKey);
-
-/* ---- 数据实体（模块私有）---- */
-static MODULE_INPUT(DrvKey)*   s_inPara;
-static MODULE_OUTPUT(DrvKey)   s_outPara;
-
-static MODULE_OUTPUT_LINK(DrvKey, AppHmi)       s_hmi_link;
-static MODULE_OUTPUT_LINK(DrvKey, AppCooking)    s_cooking_link;
-static MODULE_OUTPUT_LINK(DrvKey, AppSegAlign)   s_segalign_link;
-
-static MODULE_OUTPUT_PARAMS(DrvKey, AppHmi)       s_hmi_params;
-static MODULE_OUTPUT_PARAMS(DrvKey, AppCooking)    s_cooking_params;
-static MODULE_OUTPUT_PARAMS(DrvKey, AppSegAlign)   s_segalign_params;
-
-/* 管道就绪标志 */
-typedef union {
-    uint8_t all;
-    struct {
-        uint8_t _unused;
-    } bits;
-} DrvKey_PipeFlags_t;
-
-static void ProcessInput(void)
+static void Init(void)
 {
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_DrvKeyToAppHmiLink.params      = &s_DrvKeyToAppHmiParams;
+    s_outPara.AppHmi_params          = &s_DrvKeyToAppHmiLink;
+    s_DrvKeyToAppCookingLink.params  = &s_DrvKeyToAppCookingParams;
+    s_outPara.AppCooking_params      = &s_DrvKeyToAppCookingLink;
+    s_DrvKeyToAppSegAlignLink.params = &s_DrvKeyToAppSegAlignParams;
+    s_outPara.AppSegAlign_params     = &s_DrvKeyToAppSegAlignLink;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    HAL_Key_Init();
 }
 
 /* ========== MCU触摸通道位掩码（与TKDriver.h MCU_TK定义一致）========== */
@@ -129,34 +166,6 @@ static uint8_t Key_Lookup(uint32_t phy_mask)
     }
     return (uint8_t)KEY_NONE;
 }
-
-/* ========== 初始化 ========== */
-static void Init(void)
-{
-    HAL_Key_Init();
-    s_debounce_mask = 0u;
-    s_debounce_cnt  = 0u;
-    s_last_key      = (uint8_t)KEY_NONE;
-    s_hold_cnt      = 0u;
-    s_long_sent     = 0u;
-    s_release_cnt   = 0u;
-    memset(&s_outPara, 0, sizeof(s_outPara));
-    memset(&s_hmi_link, 0, sizeof(s_hmi_link));
-    memset(&s_cooking_link, 0, sizeof(s_cooking_link));
-    memset(&s_segalign_link, 0, sizeof(s_segalign_link));
-    memset(&s_hmi_params, 0, sizeof(s_hmi_params));
-    memset(&s_cooking_params, 0, sizeof(s_cooking_params));
-    memset(&s_segalign_params, 0, sizeof(s_segalign_params));
-    s_hmi_link.params      = &s_hmi_params;
-    s_cooking_link.params   = &s_cooking_params;
-    s_segalign_link.params  = &s_segalign_params;
-    s_outPara.AppHmi_params      = &s_hmi_link;
-    s_outPara.AppCooking_params   = &s_cooking_link;
-    s_outPara.AppSegAlign_params  = &s_segalign_link;
-    g_input.para  = &s_inPara;
-    g_output.para = &s_outPara;
-}
-MODULE_EXPORT(DrvKey);
 
 /* ========== 按键事件发送 ========== */
 static void Key_PostEvent(uint8_t key_code, uint8_t key_state)

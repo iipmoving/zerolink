@@ -162,7 +162,7 @@ static void ekf_init(EKF_InternalState *s, const MODULE_INPUT_PARAMS(ElecParams,
     s->R = (i_peak > 0.1f) ? (vdc / (2.0f * i_peak)) : 10.0f;
 
     /* L = L_uH × 1e-6 → H */
-    s->L = (float)p->L_uH * 0.01f * 1e-6f;
+    s->L = (float)p->L_uH * 1e-6f;
 
     /* f_res = f_res_Hz (0.01Hz) / 100 → Hz */
     s->f_res = (float)p->f_res_Hz * 0.01f;
@@ -249,7 +249,7 @@ static void ekf_update(EKF_InternalState *s, const float *z,
     /* 待 PC 端 EKF 整定后替换下方为完整 EKF 数学 */
 
     /* 使用 ElecParams 的 L_uH 和 R_ohm 作为当前状态估计 */
-    float L_uH = (float)p->L_uH * 0.01f;
+    float L_uH = (float)p->L_uH;
     s->L = L_uH * 1e-6f;  /* μH → H */
     s->R = (float)p->R_ohm * 0.01f;
     s->f_res = (float)p->f_res_Hz * 0.01f;

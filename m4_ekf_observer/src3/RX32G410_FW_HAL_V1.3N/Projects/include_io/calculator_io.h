@@ -62,8 +62,8 @@ typedef struct {
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_OUTPUT_PARAMS(Calculator, ElecParams) params[4][20];
 } MODULE_OUTPUT_LINK(Calculator, ElecParams);
@@ -89,8 +89,8 @@ typedef struct {
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_OUTPUT_PARAMS(Calculator, AppAdc) params[4][20];
 } MODULE_OUTPUT_LINK(Calculator, AppAdc);
@@ -118,8 +118,8 @@ typedef struct {
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_INPUT_PARAMS(AppAdc, Calculator) *params;
 } MODULE_INPUT_LINK(AppAdc, Calculator);

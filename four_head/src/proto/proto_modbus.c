@@ -1,6 +1,7 @@
 // ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 #include "../include_io/proto_modbus_io.h"
 
+static void Init(void);
 MODULE_SKELETON(ProtoModbus);
 
 /* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
@@ -16,26 +17,19 @@ static MODULE_INPUT(ProtoModbus)*   s_inPara;    // 输入参数实体在ADC， 
 static MODULE_OUTPUT(ProtoModbus)  s_outPara;   // 输出参数缓冲区
 
 /* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
-static uint8_t s_last_seq_AppCommMgr;  /* AppCommMgr→ProtoModbus */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→ProtoModbus */
 
-/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(ProtoModbus, AppCommMgr)  s_ProtoModbusToAppCommMgrParams;
 static MODULE_OUTPUT_LINK(ProtoModbus, AppCommMgr)  s_ProtoModbusToAppCommMgrLink;
 
-/* ---- 初始化 ---- */
-static void Init(void)
-{
-    memset(&s_outPara, 0, sizeof(s_outPara));
-
-    /* 绑定 OUTPUT_LINK 指钺 */
-    s_outPara.AppCommMgr_params = &s_ProtoModbusToAppCommMgrLink;
-
-    g_input.para  = &s_inPara;
-    g_output.para = &s_outPara;
-}
 
 /* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
  * 输出段请对产出数据的 LINK 执行 seq++: out->AppCommMgr_params->seq++; */
-static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags)
+{
+    (void)in; (void)out; (void)flags;
+}
 
 static void ProcessInput(void)
 {
@@ -59,8 +53,16 @@ static void ProcessInput(void)
 MODULE_EXPORT(ProtoModbus);
 
 // ===== [END AI GENERATED] =====
-
 #include <stddef.h>
+
+static void Init(void)
+{
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_ProtoModbusToAppCommMgrLink.params = &s_ProtoModbusToAppCommMgrParams;
+    s_outPara.AppCommMgr_params          = &s_ProtoModbusToAppCommMgrLink;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+}
 
 /* ========== MODBUS 功能码 & 错误码 ========== */
 #define MODBUS_FUNC_READ         0x03u
@@ -321,6 +323,8 @@ uint16_t Proto_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
 }
 
 /* ========== 用户业务: 管道驱动的 MODBUS 编解码 ========== */
+#if 0  /* DEDUP: user_Process */
+#if 0  /* DEDUP: user_Process */
 static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags)
 {
     MODULE_INPUT_LINK(AppCommMgr, ProtoModbus) *req;
@@ -366,3 +370,5 @@ static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbu
     out->AppCommMgr_params->seq++;
     g_output.info.status |= ST_OUT;
 }
+#endif  /* DEDUP: user_Process */
+#endif  /* DEDUP: user_Process */

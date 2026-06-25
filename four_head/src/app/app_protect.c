@@ -1,26 +1,62 @@
-/**
- * app_protect.c —— 4炉头故障检测与保护实现
- *
- * 依赖: app_protect.h (仅本模块头文件)
- * 层级: APP —— 应用层故障检测
- * 零外部依赖: 无跨模块 include
- *
- * 参考: 参考程序 User_Main/APP/Err_Check.c
- *
- * 简化说明:
- *   参考程序使用闭源.lib库(NTC_OSH_Check/Vol_HL_Check等),
- *   本模块用AD阈值直接判断替代,逻辑等价但自包含。
- *
- * 调度:
- *   每10ms调用一次(槽位5), 内部100ms节拍检测各炉头
- *   收到 AppProtect_OnRegData 时更新寄存器缓存
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/app_protect_io.h"
+
+static void Init(void);
+MODULE_SKELETON(AppProtect);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+    } bits;
+} AppProtect_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppProtect)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppProtect)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→AppProtect */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(AppProtect, AppPower)  s_AppProtectToAppPowerParams;
+static MODULE_OUTPUT_LINK(AppProtect, AppPower)  s_AppProtectToAppPowerLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 输出段请对产出数据的 LINK 执行 seq++: out->AppPower_params->seq++; */
+static void user_Process(MODULE_INPUT(AppProtect) *in, MODULE_OUTPUT(AppProtect) *out, AppProtect_PipeFlags_t flags)
+{
+    (void)in; (void)out; (void)flags;
+}
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppProtect) *in  = (MODULE_INPUT(AppProtect)*)g_input.para;
+    MODULE_OUTPUT(AppProtect) *out = (MODULE_OUTPUT(AppProtect)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    AppProtect_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppProtect);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/app_protect_io.h"
 #include "app_protect.h"
 #include <stddef.h>
-
-typedef struct { uint8_t dummy; } InData_t;
 /* 输出 — 系统错误 (Switcher 路由到 app_power) */
 typedef struct {
     uint8_t  has_err;
@@ -28,9 +64,14 @@ typedef struct {
     uint8_t  slave_addr;
     uint16_t fault;
 } OutData_t;
-static InData_t  s_in;
-static OutData_t s_out;
+
+typedef struct { uint8_t dummy; } InData_t;
+
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_SKELETON(AppProtect);
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 
 /* 独立声明 — 与 app_comm_mgr.h 的 RegData_t 布局一致 (AI保证) */
 #define PROT_REG_COUNT          22u
@@ -232,6 +273,8 @@ static void check_hardware(uint8_t idx)
 }
 
 /* ========== __weak 接收: 由 app_comm_mgr 直调 ========== */
+#if 0  /* DEDUP: AppProtect_OnRegData */
+#if 0  /* DEDUP: AppProtect_OnRegData */
 void AppProtect_OnRegData(uint16_t param, void *data_ptr)
 {
     ProtRegData_t *reg;
@@ -255,8 +298,14 @@ void AppProtect_OnRegData(uint16_t param, void *data_ptr)
     ctx->init_done = (reg->regs[PROTECT_REG_STATUS] & 0x80u) ? 1u : 0u;
     ctx->data_age  = 0u;  /* 数据刷新,重置超时计数 */
 }
+#endif  /* DEDUP: AppProtect_OnRegData */
+#endif  /* DEDUP: AppProtect_OnRegData */
 
+#if 0  /* DEDUP: ProcessInput */
+#if 0  /* DEDUP: ProcessInput */
 static void ProcessInput(void) {}
+#endif  /* DEDUP: ProcessInput */
+#endif  /* DEDUP: ProcessInput */
 
 /* ========== 初始化 ========== */
 static void Init(void)
@@ -273,8 +322,11 @@ static void Init(void)
         s_ctx[i].data_age       = 0xFFu;
     }
     s_tick_10ms = 0u;
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_AppProtectToAppPowerLink.params = &s_AppProtectToAppPowerParams;
+    s_outPara.AppPower_params         = &s_AppProtectToAppPowerLink;
 }
 
 /* ========== 每10ms槽位调用 ========== */
@@ -313,5 +365,13 @@ void App_Protect_Run(void)
     }
 }
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 void App_Protect_Init(void) { Constructor(); }
+#endif  /* DEDUP */
+#endif  /* DEDUP */
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_EXPORT(AppProtect);
+#endif  /* DEDUP */
+#endif  /* DEDUP */

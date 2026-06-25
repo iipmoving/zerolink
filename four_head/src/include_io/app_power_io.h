@@ -1,3 +1,4 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    app_power_io.h
  * @brief   AppPower Data Switcher IO interface (v2.3 LINK+PARAMS)
@@ -12,7 +13,7 @@
  *
  * 输出目标:
  *   AppPower → AppHmi  (功率状态 → Hmi)
- *   AppPower → DrvCommMgr  (功率命令 → DrvCommMgr)
+ *   AppPower → AppCommMgr  (功率命令 → CommMgr, 由 CommMgr 做 MODBUS 帧构建)
  */
 
 #ifndef APPPOWER_IO_H
@@ -46,28 +47,26 @@ typedef struct {
 } MODULE_OUTPUT_LINK(AppPower, AppHmi);
 
 /* ------------------------------------------------------------------
- * AppPower → DrvCommMgr  输出参数  (功率命令 → DrvCommMgr)
+ * AppPower → AppCommMgr  输出参数  (功率命令 → CommMgr, 由 CommMgr 做 MODBUS 帧构建)
  * ------------------------------------------------------------------ */
 typedef struct {
-    uint8_t head_index;     /* 炉头索引 0-3 */
-    uint8_t slave_addr;     /* Modbus 站号 */
+    uint8_t head_idx;     /* 炉头索引 0-3 */
     uint8_t power_on;     /* 功率开关 0/1 */
     uint16_t target_power;     /* 目标功率 W */
-    uint16_t actual_power;     /* 实际功率 W */
-} MODULE_OUTPUT_PARAMS(AppPower, DrvCommMgr);
+} MODULE_OUTPUT_PARAMS(AppPower, AppCommMgr);
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
     uint8_t  max_count;        /* 最大数量 */
     uint8_t  seq;              /* 有效性索引号 — 生产者 seq++, 消费者比对 last_seq */
     uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(AppPower, DrvCommMgr) *params;
-} MODULE_OUTPUT_LINK(AppPower, DrvCommMgr);
+    MODULE_OUTPUT_PARAMS(AppPower, AppCommMgr) *params;
+} MODULE_OUTPUT_LINK(AppPower, AppCommMgr);
 
 /* AppPower_Output — 输出聚合 (对称命名: 成员 = {Consumer}_params) */
 typedef struct {
     MODULE_OUTPUT_LINK(AppPower, AppHmi) *AppHmi_params;  /* → AppHmi */
-    MODULE_OUTPUT_LINK(AppPower, DrvCommMgr) *DrvCommMgr_params;  /* → DrvCommMgr */
+    MODULE_OUTPUT_LINK(AppPower, AppCommMgr) *AppCommMgr_params;  /* → AppCommMgr */
 } MODULE_OUTPUT(AppPower);
 
 /* ================================================================
@@ -142,3 +141,6 @@ typedef struct {
 MODULE_IO_H(AppPower);
 
 #endif /* APPPOWER_IO_H */
+
+// ===== [END AI GENERATED] =====
+

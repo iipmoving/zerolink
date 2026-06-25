@@ -294,10 +294,9 @@ static void Init(void)
 
 //		s_outPara.AppPower_params->params=(MODULE_OUTPUT_PARAMS(AppAdc, AppPower)*)&AdcFunRam.inputValue;//输出缓存地址
 		s_outPara.Calculator_params->params=(MODULE_OUTPUT_PARAMS(AppAdc, Calculator)*)&AdcFunRam.inputValue;//输出缓存地址
-		s_outPara.Calculator_params->max_count=20;
 
-			s_outPara.AppPower_params->res[0]=6;						//CONST_OUT ADC_TO_APPPOWER
-			s_outPara.Calculator_params->res[0]=7;					//CONST_OUT ADC_TO_CACL
+		s_outPara.AppPower_params->res[0]=6;						//CONST_OUT ADC_TO_APPPOWER
+		s_outPara.Calculator_params->res[0]=7;					//CONST_OUT ADC_TO_CACL
 
 //    s_out.pBlock    = (ADC_INPUT_DEF*)&AdcFunRam.inputValue;
     g_input.para    = &s_inPara;

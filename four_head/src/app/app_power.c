@@ -1,12 +1,75 @@
-/**
- * @file    app_power.c
- * @brief   4炉头功率管理
- * @layer   APP
- *
- * 输入: PowerCtrl(烹饪→route=1), SystemError(保护→route=2), RegData(遥测→route=3)
- * 输出: PowerCmd(→app_comm_mgr, route=1)
- * 定时: 100ms 执行功率链（IGBT降功率→炉面高温→软启动→间断加热）
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/app_power_io.h"
+
+static void Init(void);
+MODULE_SKELETON(AppPower);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+        uint8_t appcooking   : 1;  /* AppCooking 数据就绪 */
+        uint8_t appprotect   : 1;  /* AppProtect 数据就绪 */
+    } bits;
+} AppPower_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppPower)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppPower)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→AppPower */
+static uint8_t s_last_seq_AppCooking = 0xFF;  /* AppCooking→AppPower */
+static uint8_t s_last_seq_AppProtect = 0xFF;  /* AppProtect→AppPower */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(AppPower, AppHmi)  s_AppPowerToAppHmiParams;
+static MODULE_OUTPUT_LINK(AppPower, AppHmi)  s_AppPowerToAppHmiLink;
+static MODULE_OUTPUT_PARAMS(AppPower, AppCommMgr)  s_AppPowerToAppCommMgrParams;
+static MODULE_OUTPUT_LINK(AppPower, AppCommMgr)  s_AppPowerToAppCommMgrLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppPower) *in  = (MODULE_INPUT(AppPower)*)g_input.para;
+    MODULE_OUTPUT(AppPower) *out = (MODULE_OUTPUT(AppPower)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    AppPower_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+    {
+        uint8_t cur_seq = in->AppCooking_params->seq;
+        if (cur_seq != s_last_seq_AppCooking) {
+            flags.bits.appcooking = 1;
+            s_last_seq_AppCooking = cur_seq;
+        }
+    }
+    {
+        uint8_t cur_seq = in->AppProtect_params->seq;
+        if (cur_seq != s_last_seq_AppProtect) {
+            flags.bits.appprotect = 1;
+            s_last_seq_AppProtect = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppPower);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/app_power_io.h"
 #include "app_power.h"
@@ -38,6 +101,7 @@ typedef struct {
     uint16_t power_watt[4];
 } OutData_t;
 
+
 /* 炉头状态上下文 */
 typedef struct {
     uint8_t  state;            /* PowerState_t */
@@ -61,9 +125,6 @@ typedef struct {
 /* =================================================================
  * 静态存储
  * ================================================================= */
-
-static InData_t  s_in;
-static OutData_t s_out;
 static PowerCtx_t     s_pwr[POWER_HEAD_COUNT];
 static uint8_t        s_tick_10ms;
 static uint16_t       s_power_table[] = {
@@ -74,7 +135,7 @@ static uint16_t       s_power_table[] = {
  * 骨架
  * ================================================================= */
 
-MODULE_SKELETON(AppPower);
+
 
 /* =================================================================
  * 内部函数
@@ -121,88 +182,85 @@ static uint16_t level_to_watt(uint8_t level)
     return (level > POWER_LV_MAX) ? 0 : s_power_table[level];
 }
 
-/* =================================================================
- * ProcessInput — 每帧调用，处理输入 + 定时计算
- * ================================================================= */
-
-static void ProcessInput(void)
+/* ========== route 分发: 替代 V1 OnCookingData/OnProtectData/OnCommMgrData ========== */
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags)
 {
     uint8_t  i;
     uint16_t power;
 
-    /* ====== 输入段 ====== */
-    if (g_input.info.status & ST_NEW) {
-        InData_t *in = (InData_t *)g_input.para;
-
-        if (in->src_valid & 0x01) {  /* PowerCtrl */
-            uint8_t idx = in->ctrl_head;
-            if (idx < POWER_HEAD_COUNT) {
-                PowerCtx_t *ctx = &s_pwr[idx];
-                ctx->onoff        = in->ctrl_onoff;
-                ctx->target_power = in->ctrl_power;
-                if (!in->ctrl_onoff)      ctx->state = 0;          /* OFF */
-                else if (ctx->state == 0) { ctx->state = 2;        /* RUN */
-                    ctx->soft_start_cnt = 0; ctx->saved_high_power = 0; }
-            }
+    /* === 输入段: 按 flag 分支 === */
+    if (flags.bits.appcooking) {
+        MODULE_INPUT_PARAMS(AppCooking, AppPower) *p = in->AppCooking_params->params;
+        uint8_t idx = p->head_index;
+        if (idx < POWER_HEAD_COUNT) {
+            PowerCtx_t *ctx = &s_pwr[idx];
+            ctx->onoff        = (p->cooking_state > 0u) ? 1u : 0u;
+            ctx->target_power = p->target_power;
+            ctx->power_level  = p->power_level;
+            if (!ctx->onoff)        ctx->state = 0u;
+            else if (ctx->state == 0u) { ctx->state = 2u; ctx->soft_start_cnt = 0u; ctx->saved_high_power = 0u; }
         }
-        if (in->src_valid & 0x02) {  /* SystemError */
-            uint8_t idx = in->err_head;
-            if (idx < POWER_HEAD_COUNT) {
-                PowerCtx_t *ctx = &s_pwr[idx];
-                ctx->fault_byte = in->err_fault;
-                if (in->err_fault && ctx->state == 2)      ctx->state = 4;   /* ERROR */
-                if (!in->err_fault && ctx->state == 4)     ctx->state = 2;   /* →RUN */
-            }
+    }
+    if (flags.bits.appprotect) {
+        MODULE_INPUT_PARAMS(AppProtect, AppPower) *p = in->AppProtect_params->params;
+        uint8_t idx = p->head_index;
+        if (idx < POWER_HEAD_COUNT) {
+            PowerCtx_t *ctx = &s_pwr[idx];
+            ctx->fault_byte = p->fault;
+            if (p->fault && ctx->state == 2u)   ctx->state = 4u;
+            if (!p->fault && ctx->state == 4u)  ctx->state = 2u;
         }
-        if (in->src_valid & 0x04) {  /* RegData */
-            uint8_t idx = in->reg_head;
-            if (idx < POWER_HEAD_COUNT) {
-                PowerCtx_t *ctx = &s_pwr[idx];
-                ctx->online    = in->reg_online;
-                ctx->igbt_temp = in->reg_igbt;
-                ctx->bot_temp  = in->reg_bot;
-                ctx->vol_ad    = in->reg_vol;
-            }
+    }
+    if (flags.bits.appcommmgr) {
+        MODULE_INPUT_PARAMS(AppCommMgr, AppPower) *p = in->AppCommMgr_params->params;
+        uint8_t idx = p->head_index;
+        if (idx < POWER_HEAD_COUNT) {
+            PowerCtx_t *ctx = &s_pwr[idx];
+            ctx->online    = p->online;
+            ctx->igbt_temp = p->regs[2];
+            ctx->bot_temp  = p->regs[3];
+            ctx->vol_ad    = p->regs[4];
         }
-
-        in->src_valid = 0;
-        g_input.info.status &= ~ST_NEW;
     }
 
-    /* ====== 定时段：100ms 节拍 ====== */
+    /* === 定时段: 100ms 节拍 === */
     s_tick_10ms++;
     if (s_tick_10ms < POWER_RUN_PERIOD_100MS) return;
-    s_tick_10ms = 0;
+    s_tick_10ms = 0u;
 
-    OutData_t *out = (OutData_t *)g_output.para;
-    out->heads_valid = 0;
-
-    for (i = 0; i < POWER_HEAD_COUNT; i++) {
+    for (i = 0u; i < POWER_HEAD_COUNT; i++) {
         PowerCtx_t *ctx = &s_pwr[i];
 
         switch (ctx->state) {
-        case 0: case 1: power = 0; break;                     /* OFF/IDLE */
-        case 4: power = (ctx->fault_byte & 0x4000) ? 800 : 0; break; /* ERROR: 硬件故障800W */
-        case 3: power = 0; break;                               /* PROTECT */
-        case 2:                                                 /* RUN */
+        case 0u: case 1u: power = 0u; break;
+        case 4u: power = (ctx->fault_byte & 0x4000u) ? 800u : 0u; break;
+        case 3u: power = 0u; break;
+        case 2u:
             power = ctx->target_power;
-            if (power == 0 && ctx->power_level > 0)
+            if (power == 0u && ctx->power_level > 0u)
                 power = level_to_watt(ctx->power_level);
             power = igbt_derate(ctx, power);
             power = top_temp_stop(ctx, power);
             power = soft_start(ctx, power);
             power = interrupted_heat(ctx, power);
             break;
-        default: power = 0; break;
+        default: power = 0u; break;
         }
 
         ctx->output_power = power;
-        out->heads_valid |= (uint8_t)(1u << i);
-        out->head_idx[i] = i;
-        out->power_watt[i] = power;
-    }
 
-    g_output.info.route = g_input.info.route;  /* 透传输入 route */
+        /* 写 LINK 输出 */
+        s_AppPowerToAppHmiParams.head_index    = i;
+        s_AppPowerToAppHmiParams.power_on      = (power > 0u) ? 1u : 0u;
+        s_AppPowerToAppHmiParams.power_level   = ctx->power_level;
+        s_AppPowerToAppHmiParams.actual_power  = power;
+        out->AppHmi_params->seq++;
+
+        s_AppPowerToAppCommMgrParams.head_idx      = i;
+        s_AppPowerToAppCommMgrParams.power_on      = (power > 0u) ? 1u : 0u;
+        s_AppPowerToAppCommMgrParams.target_power  = power;
+        out->AppCommMgr_params->seq++;
+    }
 }
 
 /* =================================================================
@@ -219,56 +277,17 @@ static void Init(void)
         s_pwr[i].bot_temp  = 25;
     }
     s_tick_10ms = 0;
-    memset(&s_in, 0, sizeof(s_in));
-    memset(&s_out, 0, sizeof(s_out));
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_AppPowerToAppHmiLink.params     = &s_AppPowerToAppHmiParams;
+    s_outPara.AppHmi_params           = &s_AppPowerToAppHmiLink;
+    s_AppPowerToAppCommMgrLink.params = &s_AppPowerToAppCommMgrParams;
+    s_outPara.AppCommMgr_params       = &s_AppPowerToAppCommMgrLink;
 }
 
 /* =================================================================
  * 导出
  * ================================================================= */
 
-MODULE_EXPORT(AppPower);
 
-/* =================================================================
- * Consumer 回调: Switcher PULL 路由 → 写 g_input.para + ST_NEW
- * ================================================================= */
-
-/* app_cooking → PowerCtrl */
-void AppPower_OnCookingData(Para_Grp_t *pOut)
-{
-    InData_t *in = (InData_t *)g_input.para;
-    /* pOut->para 指向 CookingPowerCmd_Item_t */
-    uint8_t *src = (uint8_t *)pOut->para;
-    in->ctrl_head   = src[0];   /* head_idx */
-    in->ctrl_onoff  = src[1];   /* onoff */
-    in->ctrl_power  = *(uint16_t *)&src[2];  /* target_power */
-    in->src_valid  |= 0x01;
-    g_input.info.status |= ST_NEW;
-}
-
-/* app_protect → SystemError */
-void AppPower_OnProtectData(Para_Grp_t *pOut)
-{
-    InData_t *in = (InData_t *)g_input.para;
-    uint8_t *src = (uint8_t *)pOut->para;
-    in->err_head  = src[0];    /* head_idx */
-    in->err_fault = *(uint16_t *)&src[2];  /* fault */
-    in->src_valid |= 0x02;
-    g_input.info.status |= ST_NEW;
-}
-
-/* app_comm_mgr → RegData */
-void AppPower_OnCommMgrData(Para_Grp_t *pOut)
-{
-    InData_t *in = (InData_t *)g_input.para;
-    uint8_t *src = (uint8_t *)pOut->para;
-    in->reg_head   = src[0];    /* head_idx */
-    in->reg_online = src[2];    /* online */
-    in->reg_igbt   = *(uint16_t *)&src[10];  /* regs[2] */
-    in->reg_bot    = *(uint16_t *)&src[12];  /* regs[3] */
-    in->reg_vol    = *(uint16_t *)&src[14];  /* regs[4] */
-    in->src_valid |= 0x04;
-    g_input.info.status |= ST_NEW;
-}

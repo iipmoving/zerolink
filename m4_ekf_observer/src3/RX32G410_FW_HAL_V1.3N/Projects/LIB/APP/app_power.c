@@ -74,10 +74,10 @@ MODULE_EXPORT(AppPower);
 #include	"API_FMAC.H"
 
 #include	"app_power.h"
-
+#include	"../BaseClass/inc/wave_capture.h"
 #ifndef HALF
 #include	"API_hrtim_fullbridge.h"
-#include	"../BaseClass/inc/wave_capture.h"
+
 #endif
 //#include "../include/app_power_io.h"
 
@@ -1028,7 +1028,7 @@ uint16_t*			Pan_ADC_AdcFmacBuff;
  * =================================================================== */
 
 int16_t* 	APP_POWER_GetPanDmaBuffAddress(void)
-
+{
 		{
 		/* 检锅高速采样: 返回 wave_capture.data[] (2000点 @ ~0.25us) */
 		WaveCaptureFrame *wf = (WaveCaptureFrame*)WaveCapture_GetFramePtr();

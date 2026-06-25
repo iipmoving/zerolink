@@ -1,35 +1,68 @@
-/**
- * app_seg_align.c —— 通用数码管段位对齐模块实现
- *
- * 依赖: app_seg_align.h, <string.h>, <stddef.h>
- * 层级: APP —— 对齐/校准工具
- *
- * 串口函数通过 __weak 桩对接 HAL 层, 不直接 include hal_uart.h
- *
- * 状态机:
- *   IDLE → SEG_ALIGN(12步) → COM_ALIGN(8步) → DONE → IDLE
- *
- * 入口:
- *   - 组合键: 关机态长按 SEG_ALIGN_KEY_ENTER 3秒
- *   - 串口:   "##ALIGN" 命令 (需 SEG_ALIGN_SERIAL_ENABLE=1)
- *
- * 操作:
- *   - CONFIRM键: 正确 → 下一步
- *   - REJECT键:  不正确 → 自动调整映射
- *   - ENTER键长按3秒: 强制退出(不保存)
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/app_seg_align_io.h"
 
+static void Init(void);
+MODULE_SKELETON(AppSegAlign);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t drvkey   : 1;  /* DrvKey 数据就绪 */
+    } bits;
+} AppSegAlign_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppSegAlign)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppSegAlign)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_DrvKey = 0xFF;  /* DrvKey→AppSegAlign */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(AppSegAlign, DrvDisplay)  s_AppSegAlignToDrvDisplayParams;
+static MODULE_OUTPUT_LINK(AppSegAlign, DrvDisplay)  s_AppSegAlignToDrvDisplayLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 输出段请对产出数据的 LINK 执行 seq++: out->DrvDisplay_params->seq++; */
+static void user_Process(MODULE_INPUT(AppSegAlign) *in, MODULE_OUTPUT(AppSegAlign) *out, AppSegAlign_PipeFlags_t flags)
+{
+    (void)in; (void)out; (void)flags;
+}
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppSegAlign) *in  = (MODULE_INPUT(AppSegAlign)*)g_input.para;
+    MODULE_OUTPUT(AppSegAlign) *out = (MODULE_OUTPUT(AppSegAlign)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    AppSegAlign_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->DrvKey_params->seq;
+        if (cur_seq != s_last_seq_DrvKey) {
+            flags.bits.drvkey = 1;
+            s_last_seq_DrvKey = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppSegAlign);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/app_seg_align_io.h"
 #include "app_seg_align.h"
 #include <string.h>
 #include <stddef.h>
-
-typedef struct { uint8_t dummy; } InData_t;
-typedef struct { uint8_t dummy; } OutData_t;
-static InData_t  s_in;
-static OutData_t s_out;
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_SKELETON(AppSegAlign);
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 
 /* ================================================================
  * 串口函数 __weak 桩 — 不直接 include hal_uart.h
@@ -369,7 +402,11 @@ uint8_t AppSegAlign_IsActive(void)
     return s_active;
 }
 
+#if 0  /* DEDUP: ProcessInput */
+#if 0  /* DEDUP: ProcessInput */
 static void ProcessInput(void) {}
+#endif  /* DEDUP: ProcessInput */
+#endif  /* DEDUP: ProcessInput */
 
 /* ========== Init ========== */
 static void Init(void)
@@ -415,11 +452,18 @@ static void Init(void)
     /* 强制进入: 立即显示第一个测试图案 */
     refresh_alignment_display();
 
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_AppSegAlignToDrvDisplayLink.params = &s_AppSegAlignToDrvDisplayParams;
+    s_outPara.DrvDisplay_params          = &s_AppSegAlignToDrvDisplayLink;
 }
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 void AppSegAlign_Init(void) { Constructor(); }
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 void AppSegAlign_Run(void)
 {
 #if SEG_ALIGN_SERIAL_ENABLE
@@ -527,4 +571,8 @@ void AppSegAlign_OnKey(uint16_t param, void *data_ptr)
     }
 }
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_EXPORT(AppSegAlign);
+#endif  /* DEDUP */
+#endif  /* DEDUP */

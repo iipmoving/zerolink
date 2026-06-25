@@ -1,25 +1,60 @@
-/**
- * drv_display.c —— 显示驱动层实现
- *
- * 依赖: drv_display.h + SMG_Disp_General_Lib.h + hal_display.h
- * 层级: DRV —— SMG库封装 + IO缓冲管理
- *
- * 缓冲布局 (与参考程序 Disp_data_Exchange_Hardware 一致):
- *   IO[0..1] = Z1 SMG (上左)  ← Disp_Upper[0..1]
- *   IO[2..3] = Z2 SMG (上右)  ← Disp_Upper[2..3]
- *   IO[4..5] = Z3 SMG (下左)  ← Disp_Lower[0..1]
- *   IO[6..7] = Z4 SMG (下右)  ← Disp_Lower[2..3]
- *   IO[8..10]= LED组
- *
- * 双缓冲:
- *   s_io_work[] — Update写入(10ms槽位)
- *   s_io_buff[] — Scan读出(每1ms)
- *   提交: Scan发现dirty标志 → memcpy work→buff → 清dirty
- *
- * 测试模式:
- *   上4位 = 按键码(hex)
- *   下4位 = 按键类型字符串
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/drv_display_io.h"
+
+static void Init(void);
+MODULE_SKELETON(DrvDisplay);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t apphmi   : 1;  /* AppHmi 数据就绪 */
+        uint8_t appsegalign   : 1;  /* AppSegAlign 数据就绪 */
+    } bits;
+} DrvDisplay_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(DrvDisplay)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(DrvDisplay)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppHmi = 0xFF;  /* AppHmi→DrvDisplay */
+static uint8_t s_last_seq_AppSegAlign = 0xFF;  /* AppSegAlign→DrvDisplay */
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(DrvDisplay) *in, MODULE_OUTPUT(DrvDisplay) *out, DrvDisplay_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(DrvDisplay) *in  = (MODULE_INPUT(DrvDisplay)*)g_input.para;
+    MODULE_OUTPUT(DrvDisplay) *out = (MODULE_OUTPUT(DrvDisplay)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    DrvDisplay_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppHmi_params->seq;
+        if (cur_seq != s_last_seq_AppHmi) {
+            flags.bits.apphmi = 1;
+            s_last_seq_AppHmi = cur_seq;
+        }
+    }
+    {
+        uint8_t cur_seq = in->AppSegAlign_params->seq;
+        if (cur_seq != s_last_seq_AppSegAlign) {
+            flags.bits.appsegalign = 1;
+            s_last_seq_AppSegAlign = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(DrvDisplay);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/drv_display_io.h"
 #include "drv_display.h"
@@ -30,9 +65,11 @@
 
 typedef struct { uint8_t dummy; } In_t;
 typedef struct { uint8_t dummy; } Out_t;
-static In_t  s_in;
-static Out_t s_out;
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_SKELETON(DrvDisplay);
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 
 /* 独立声明的显示帧类型 — 与 APP 层 HmiDisplayCache_t 布局一致，
  * 通过 MSG_DISPLAY_REFRESH 的 void* 传递。
@@ -316,7 +353,8 @@ static void sync_hmi_display(const DisplayFrame_t *disp)
     s_io_dirty = 1u;
 }
 
-/* ========== __weak 接收: 由 app_hmi / app_cooking 直调 ========== */
+/* ========== __weak 接收: 已迁移 LINK route, 保留 #if 0 过渡 ========== */
+#if 0  /* DEDUP: DrvDisplay_OnRefresh — 已迁移 user_Process route */
 void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
 {
     const DisplayFrame_t *disp;
@@ -325,9 +363,44 @@ void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr)
     disp = (const DisplayFrame_t *)data_ptr;
     sync_hmi_display(disp);
 }
+#endif
 
 /* ========== 对齐模式 HMI 阻塞 ========== */
 static uint8_t s_align_block_hmi;  /* 1=对齐模式激活, 抑制HMI刷新 */
+
+/* ========== user_Process: 从 AppHmi/AppSegAlign LINK 读取数据 ========== */
+static void user_Process(MODULE_INPUT(DrvDisplay) *in, MODULE_OUTPUT(DrvDisplay) *out, DrvDisplay_PipeFlags_t flags)
+{
+    if (flags.bits.apphmi) {
+        MODULE_INPUT_PARAMS(AppHmi, DrvDisplay) *p = in->AppHmi_params->params;
+        if (!s_align_block_hmi) {
+            DisplayFrame_t disp;
+            disp.hot_head_idx      = p->hot_head_idx;
+            disp.seg_mode          = p->seg_mode;
+            disp.leds_power        = p->leds_power;
+            disp.leds_timer        = p->leds_timer;
+            disp.leds_pause        = p->leds_pause;
+            disp.leds_child_lock   = p->leds_child_lock;
+            memcpy(disp.seg_chars, p->seg_chars, 8);
+            memcpy(disp.seg_blink, p->seg_blink, 4);
+            memcpy(disp.leds_head_select, p->leds_head_select, 4);
+            memcpy(disp.leds_power_level, p->leds_power_level, 10);
+            sync_hmi_display(&disp);
+        }
+    }
+    if (flags.bits.appsegalign) {
+        MODULE_INPUT_PARAMS(AppSegAlign, DrvDisplay) *p = in->AppSegAlign_params->params;
+        s_align_block_hmi = p->block;
+        if (!s_align_block_hmi && p->dirty) {
+            uint8_t i;
+            for (i = 0u; i < 11u; i++) {
+                s_io_work[i] = p->com_mask[i];
+            }
+            s_io_dirty = 1u;
+        }
+    }
+    (void)out;
+}
 
 void DrvSegAlign_BlockHmi(uint8_t block)
 {
@@ -346,7 +419,11 @@ void DrvSegAlign_WriteCom(uint8_t com, uint8_t seg_mask)
     }
 }
 
+#if 0  /* DEDUP: ProcessInput */
+#if 0  /* DEDUP: ProcessInput */
 static void ProcessInput(void) {}
+#endif  /* DEDUP: ProcessInput */
+#endif  /* DEDUP: ProcessInput */
 
 /* ========== 初始化 ========== */
 static void Init(void)
@@ -378,8 +455,9 @@ static void Init(void)
     /* 启动画面: 全显测试 (写工作缓冲并提交) */
     memset(s_io_work, 0xFF, sizeof(s_io_work));
     s_io_dirty = 1u;
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
 }
 
 /* ========== 500ms 闪烁同步（内部）========== */
@@ -496,5 +574,13 @@ void Drv_Display_Scan(void)
     }
 }
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 void Drv_Display_Init(void) { Constructor(); }
+#endif  /* DEDUP */
+#endif  /* DEDUP */
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_EXPORT(DrvDisplay);
+#endif  /* DEDUP */
+#endif  /* DEDUP */

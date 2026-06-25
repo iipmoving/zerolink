@@ -521,3 +521,57 @@ python ../.claude/tools/check_output_callback.py .
 - [ ] Step 5: 输出只写 g_output.para，不置 ST_OUT，不调 _onOutput
 - [ ] Step 6: `check_deps.py` → 0 violations
 - [ ] Step 6: `check_output_callback.py` → 0 unapproved callbacks
+
+---
+
+## Step 7 (可选): 多 route 分流 + Switcher_RunNow
+
+如果改的模块有"多个子功能走同一管道"的需求（如既写段码又阻塞 HMI），旧模式是多个 `__weak` 条目，新模式合并为一个 LINK + route 分流。
+
+### LINK 结构变化
+
+```c
+// 旧: res[3] 无语义
+typedef struct {
+    uint8_t  status;
+    uint8_t  res[3];
+    MODULE_OUTPUT_PARAMS(...) params[POT_MAX];
+} MODULE_OUTPUT_LINK(...);
+
+// 新: route + seq 具名, params 改指针
+typedef struct {
+    uint8_t  status;
+    uint8_t  max_count;
+    uint8_t  seq;       /* 更新有效性 */
+    uint8_t  route;     /* 路由标识 — AI 看见即理解 */
+    MODULE_OUTPUT_PARAMS(...) *params;  /* 指针 */
+} MODULE_OUTPUT_LINK(...);
+```
+
+### PARAMS 用 union 分 route
+
+```c
+typedef struct { uint8_t com; uint8_t seg_mask; uint8_t result; } Write_Params;  /* route=0 */
+typedef struct { uint8_t block; uint8_t ack; }       Block_Params;                 /* route=1 */
+
+typedef struct {
+    uint8_t route;
+    union { Write_Params write; Block_Params block; };
+} MODULE_OUTPUT_PARAMS({Module}, Consumer);
+```
+
+### producer 输出段末尾调 Switcher_RunNow
+
+```c
+s_link->params->write.com = com;
+s_link->params->write.seg_mask = mask;
+s_link->seq++;
+s_link->route = 0;
+g_output.info.status |= ST_OUT;
+Switcher_RunNow(SLOT_Consumer);    /* 即刻执行 */
+uint8_t r = s_link->params->write.result;  /* 读回传 */
+```
+
+> ⚠️ **Switcher_RunNow 不支持重入，仅单向固定调用**。consumer 不得反向调回 producer，调用链是编译期确定的直链。详见 `methodology-seed/08-data-switcher.md §5.6.3`。
+
+详见 `methodology-seed/08-data-switcher.md §5.6`。

@@ -68,7 +68,7 @@
       "name": "AppSegAlign",
       "layer": "app",
       "source_file": "app/app_seg_align.c",
-      "comment": "段码对齐处理 — 从 Key 输入，无输出",
+      "comment": "段码对齐处理 — 从 Key 输入，输出段码控制到 DrvDisplay",
       "types": []
     },
     {
@@ -84,7 +84,7 @@
       "name": "DrvCommMgr",
       "layer": "drv",
       "source_file": "drv/drv_comm_mgr.c",
-      "comment": "通信驱动管理 — 从 Power 接收功率命令，发送 Modbus",
+      "comment": "通信驱动管理 — 从 AppCommMgr 接收发送帧，驱动 UART 收发",
       "types": []
     },
     {
@@ -716,11 +716,11 @@
       ]
     },
     {
-      "id": "pipe_app_power_drv_comm_mgr",
+      "id": "pipe_app_power_app_comm_mgr",
       "from": "AppPower",
-      "to": "DrvCommMgr",
+      "to": "AppCommMgr",
       "callback_type": "pull",
-      "comment": "功率命令 → DrvCommMgr",
+      "comment": "功率命令 → AppCommMgr, 由 CommMgr 做 MODBUS 帧构建",
       "out_link": {
         "style": "pointer",
         "dims": ""
@@ -731,14 +731,9 @@
       },
       "fields": [
         {
-          "name": "head_index",
+          "name": "head_idx",
           "type": "uint8_t",
           "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
         },
         {
           "name": "power_on",
@@ -749,23 +744,13 @@
           "name": "target_power",
           "type": "uint16_t",
           "comment": "目标功率 W"
-        },
-        {
-          "name": "actual_power",
-          "type": "uint16_t",
-          "comment": "实际功率 W"
         }
       ],
       "in_fields": [
         {
-          "name": "head_index",
+          "name": "head_idx",
           "type": "uint8_t",
           "comment": "炉头索引 0-3"
-        },
-        {
-          "name": "slave_addr",
-          "type": "uint8_t",
-          "comment": "Modbus 站号"
         },
         {
           "name": "power_on",
@@ -776,11 +761,6 @@
           "name": "target_power",
           "type": "uint16_t",
           "comment": "目标功率 W"
-        },
-        {
-          "name": "actual_power",
-          "type": "uint16_t",
-          "comment": "实际功率 W"
         }
       ]
     },

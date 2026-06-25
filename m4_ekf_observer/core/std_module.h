@@ -308,4 +308,54 @@ typedef struct {
 #define MODULE_ISR_IO_H(module_name)
 #endif /* STD_MODULE_ENABLE_ISR */
 
+/* ================================================================
+ * 7. 子模块回调宏 — 生产→消费 管道回调声明
+ *
+ *   用法: MODULE_OUTPUT_CALLBACK(Calculator, CalcSlave)
+ *   生成: void Calculator_to_CalcSlave_OutputCallback(void);
+ *
+ *   weak 空壳, 由子 Switch 覆盖强符号实现。
+ *   在 producer 的 user_Process() 中直调, 完成数据对穿 + 子模块执行。
+ * ================================================================ */
+#define MODULE_OUTPUT_CALLBACK(producer, consumer)                         \
+    __attribute__((weak)) void                                            \
+    producer##_to_##consumer##_OutputCallback(void)
+
+/* ================================================================
+ * 8. MODULE_CALL_SIGNAL — 带参数的回调声明 + 调用宏
+ *
+ *    新宏: 专用于 producer→consumer 的管道回调,
+ *    与 MODULE_OUTPUT_CALLBACK 的区别是回调带 Para_Grp_t* 参数。
+ *
+ *    声明(放在 .h 或 .c 顶部):
+ *      MODULE_CALL_SIGNAL(Calculator, CalcSlave)
+ *      生成: __weak void Calculator_to_CalcSlave_Signal(Para_Grp_t *pOut);
+ *
+ *    调用(在 user_Process 中):
+ *      MODULE_CALL_TRIGGER(Calculator, CalcSlave)
+ *      展开: Calculator_to_CalcSlave_Signal(&g_output);
+ * ================================================================ */
+#define MODULE_CALL_SIGNAL(producer, consumer)                             \
+    __attribute__((weak)) void                                            \
+    producer##_to_##consumer##_Signal(Para_Grp_t *pOut)
+
+#define MODULE_CALL_TRIGGER(producer, consumer)                            \
+    producer##_to_##consumer##_Signal(&g_output)
+
+/* ================================================================
+ * 9. INPUT_GET_SLOT 辅助宏 — 用于子 Switch 回调中数据对穿
+ *
+ *   将 producer 的 g_output.para 直接指向 consumer 的 g_input.para，
+ *   实现管道连通（指针对穿）。
+ *
+ *   用法: INPUT_GET_SLOT(Calculator, CalcSlave_Half)
+ *   展开: g_calcslave_half_input.para = g_output.para;
+ *         g_calcslave_half_input.info.status |= ST_NEW;
+ *         CalcSlave_Half_InputCallback();
+ * ================================================================ */
+
+/* 注意: INPUT_GET_SLOT 的具体实现取决于 Switcher 的槽位绑定方式。
+ * 这里给出通用指向模式, 实际由 data_switcher 或子 Switch 内部实现。
+ */
+
 #endif /* STD_MODULE_H */

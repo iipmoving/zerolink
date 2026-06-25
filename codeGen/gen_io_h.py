@@ -465,4 +465,10 @@ def generate_io_h(module: dict, pipes: list, project: dict) -> str:
     lines.append(f"#endif /* {guard_name} */")
     lines.append("")
 
-    return "\n".join(lines)
+    content = "\n".join(lines)
+
+    # 包裹在 AI GENERATED 标记中 — 整个文件体都是生成内容
+    from gen_module_c import AI_BLOCK_BEGIN, AI_BLOCK_END
+    content = f"{AI_BLOCK_BEGIN}\n{content}\n{AI_BLOCK_END}\n"
+
+    return content

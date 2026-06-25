@@ -738,11 +738,6 @@
               <FileType>1</FileType>
               <FilePath>..\src\proto\proto_modbus.c</FilePath>
             </File>
-            <File>
-              <FileName>proto_modbus_module.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\proto\proto_modbus_module.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

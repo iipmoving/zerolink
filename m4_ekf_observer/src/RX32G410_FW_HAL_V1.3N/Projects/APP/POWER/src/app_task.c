@@ -337,8 +337,21 @@ void SystemInitial(void)
 
 //	API_HRTIM_SetDmaHandle();
 	API_HRTIM1_Init();
-	API_HRTIM_MasterSync_InitMaster(MAX_FRE_PWM*2);      // Master 周期 = 基频
 	
+#ifdef	HALF	
+	API_HRTIM_MasterSync_InitMaster(MAX_FRE_PWM*2);      // Master 周期 = 基频
+#else
+#include "API_hrtim_fullbridge.h"	
+	// ==================== 全桥1: 调频模式 ====================
+	// 50kHz，90度移相(phaseShift = period/4 = 7680)
+	API_FB_OutputFreqModulation(PotCh1, 50000, 7680);
+
+
+	API_FB_SetFrequency(PotCh1, 60000);       // 改频率到60kHz（自动保持50%占空比）
+	API_FB_SetPhaseShift(PotCh1, 3840);       // 改移相到45度
+
+#endif
+
 #if 0	
 #include "API_hrtim_fullbridge.h"	
 	// ==================== 全桥1: 调频模式 ====================

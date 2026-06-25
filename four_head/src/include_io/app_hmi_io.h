@@ -1,3 +1,4 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    app_hmi_io.h
  * @brief   AppHmi Data Switcher IO interface (v2.3 LINK+PARAMS)
@@ -122,3 +123,6 @@ typedef struct {
 MODULE_IO_H(AppHmi);
 
 #endif /* APPHMI_IO_H */
+
+// ===== [END AI GENERATED] =====
+

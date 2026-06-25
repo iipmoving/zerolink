@@ -1,3 +1,51 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/drv_buzzer_io.h"
+
+static void Init(void);
+MODULE_SKELETON(DrvBuzzer);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t apphmi   : 1;  /* AppHmi 数据就绪 */
+    } bits;
+} DrvBuzzer_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(DrvBuzzer)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(DrvBuzzer)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppHmi = 0xFF;  /* AppHmi→DrvBuzzer */
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(DrvBuzzer) *in, MODULE_OUTPUT(DrvBuzzer) *out, DrvBuzzer_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(DrvBuzzer) *in  = (MODULE_INPUT(DrvBuzzer)*)g_input.para;
+    MODULE_OUTPUT(DrvBuzzer) *out = (MODULE_OUTPUT(DrvBuzzer)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    DrvBuzzer_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppHmi_params->seq;
+        if (cur_seq != s_last_seq_AppHmi) {
+            flags.bits.apphmi = 1;
+            s_last_seq_AppHmi = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(DrvBuzzer);
+
+// ===== [END AI GENERATED] =====
 /**
  * drv_buzzer.c —— 蜂鸣器驱动层实现
  *
@@ -21,11 +69,12 @@
 #include "../hal/hal_buzzer.h"
 #include <stddef.h>
 
-typedef struct { uint8_t dummy; } InData_t;
-typedef struct { uint8_t dummy; } OutData_t;
-static InData_t  s_in;
-static OutData_t s_out;
-MODULE_SKELETON(DrvBuzzer);
+static void Init(void)
+{
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+}
 
 /* ========== 音阶频率表（PWM中断频率 = 2×输出音频频率） ========== */
 /* 这些PWM值与APB0时钟频率无关，因为TIM_Preload中的分子分母同时缩放 */
@@ -364,7 +413,8 @@ static void Buzz_Dispose(void)
 
 /* ========== 公共接口 ========== */
 
-/* ========== __weak 接收: 由 app_hmi 直调 ========== */
+/* ========== __weak 接收: 已迁移 LINK route, 保留 #if 0 过渡 ========== */
+#if 0  /* DEDUP: DrvBuzzer_OnCtrl — 已迁移 user_Process route */
 void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
 {
     (void)data_ptr;
@@ -374,26 +424,23 @@ void DrvBuzzer_OnCtrl(uint16_t param, void *data_ptr)
         Drv_Buzzer_Select(DRV_BUZZ_OUT_MY, DRV_BUZZ_MY_EER);
     }
 }
+#endif
 
-static void ProcessInput(void) {}
-
-static void Init(void)
+/* ========== user_Process: 从 AppHmi LINK 读取蜂鸣命令 ========== */
+static void user_Process(MODULE_INPUT(DrvBuzzer) *in, MODULE_OUTPUT(DrvBuzzer) *out, DrvBuzzer_PipeFlags_t flags)
 {
-    s_tick_10ms    = 0u;
-    s_my_time_on   = 0u;
-    s_my_time_off  = 0u;
-    s_my_step      = 0u;
-    s_my_step_init = 0u;
-    s_my_mode      = 0u;
-    s_count        = 0u;
-    s_jiange       = 0u;
-    s_hz_timer_hc  = 0u;
-    s_jiange_hc    = 0u;
-    s_on_delay     = 0u;
-    s_off_flag     = 0u;
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    if (flags.bits.apphmi) {
+        MODULE_INPUT_PARAMS(AppHmi, DrvBuzzer) *p = in->AppHmi_params->params;
+        if (p->sound_type != 0u) {
+            Drv_Buzzer_Select(DRV_BUZZ_OUT_MY, DRV_BUZZ_MY_KEY);
+        } else {
+            Drv_Buzzer_Select(DRV_BUZZ_OUT_MY, DRV_BUZZ_MY_EER);
+        }
+    }
+    (void)out;
 }
+/* ---- 模块特有初始化 (Init 中由 Constructor 调用) ---- */
+/* s_tick_10ms ~ s_off_flag 在 BSS 段自动清零, 此处无需显式初始化 */
 
 void Drv_Buzzer_Select(uint8_t out_sel, uint8_t mode)
 {
@@ -428,6 +475,3 @@ void Drv_Buzzer_Timer_1ms(void)
     /* 美声蜂鸣器: 每1ms处理 */
     Buzz_Dispose_MY();
 }
-
-void Drv_Buzzer_Init(void) { Constructor(); }
-MODULE_EXPORT(DrvBuzzer);

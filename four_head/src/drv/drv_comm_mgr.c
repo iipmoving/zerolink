@@ -1,17 +1,55 @@
-/**
- * drv_comm_mgr.c —— DRV 层通讯消息管理器实现
- *
- * 桥接 APP 层消息与硬件通讯:
- *   MSG_COMM_SEND_REQ  → Drv_Comm_Send()
- *   Drv_Comm_RecvPoll() → MSG_COMM_DATA_UPDATE
- *   Drv_Comm_TxDone()   → MSG_COMM_TX_DONE
- *
- * 独立类型声明 — 与 APP 层的 CommSendReq_t / CommDataUpdate_t 布局一致。
- * 映射关系见 core/interface_map.h。
- *
- * 依赖: drv_comm_mgr.h + drv_comm.h + msg_scheduler.h + msg_def.h
- * 层级: DRV
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/drv_comm_mgr_io.h"
+
+static void Init(void);
+MODULE_SKELETON(DrvCommMgr);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+    } bits;
+} DrvCommMgr_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(DrvCommMgr)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(DrvCommMgr)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→DrvCommMgr */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(DrvCommMgr, AppCommMgr)  s_DrvCommMgrToAppCommMgrParams;
+static MODULE_OUTPUT_LINK(DrvCommMgr, AppCommMgr)  s_DrvCommMgrToAppCommMgrLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(DrvCommMgr) *in, MODULE_OUTPUT(DrvCommMgr) *out, DrvCommMgr_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(DrvCommMgr) *in  = (MODULE_INPUT(DrvCommMgr)*)g_input.para;
+    MODULE_OUTPUT(DrvCommMgr) *out = (MODULE_OUTPUT(DrvCommMgr)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    DrvCommMgr_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(DrvCommMgr);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/drv_comm_mgr_io.h"
 #include "drv_comm_mgr.h"
@@ -19,15 +57,20 @@
 #include <string.h>
 #include <stddef.h>
 
-/* APP 层强符号声明 */
+static void Init(void)
+{
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_DrvCommMgrToAppCommMgrLink.params = &s_DrvCommMgrToAppCommMgrParams;
+    s_outPara.AppCommMgr_params         = &s_DrvCommMgrToAppCommMgrLink;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+}
+
+/* APP 层强符号声明 — 已迁移 LINK route, 保留 #if 0 过渡 */
+#if 0  /* DEDUP: AppCommMgr_OnTxDone/OnDataUpdate — 已迁移 LINK route */
 void AppCommMgr_OnTxDone(uint16_t param, void *data_ptr);
 void AppCommMgr_OnDataUpdate(uint16_t param, void *data_ptr);
-
-typedef struct { uint8_t dummy; } InData_t;
-typedef struct { uint8_t dummy; } OutData_t;
-static InData_t  s_in;
-static OutData_t s_out;
-MODULE_SKELETON(DrvCommMgr);
+#endif
 
 /* ---- 独立声明: 与 APP 层 CommSendReq_t 布局一致 ---- */
 #define DRV_COMM_SEND_BUF_SIZE  64u
@@ -49,7 +92,8 @@ static uint8_t             s_pending_valid;
 static DrvCommDataUpdate_t s_rx_data;
 static uint8_t             s_tx_done_flag;
 
-/* ---- __weak 接收: 由 app_comm_mgr 直调 ---- */
+/* ---- __weak 接收: 已迁移 LINK route, 保留 #if 0 过渡 ---- */
+#if 0  /* DEDUP: DrvCommMgr_OnSendReq — 已迁移 LINK route */
 void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
 {
     DrvCommSendReq_t *req;
@@ -69,21 +113,7 @@ void DrvCommMgr_OnSendReq(uint16_t param, void *data_ptr)
 
     Drv_Comm_Send(req->data, req->len);
 }
-
-static void ProcessInput(void) {}
-
-/* ---- 初始化 ---- */
-static void Init(void)
-{
-    s_pending_valid = 0u;
-    s_tx_done_flag  = 0u;
-    memset(&s_pending_req, 0, sizeof(s_pending_req));
-    memset(&s_rx_data,     0, sizeof(s_rx_data));
-
-    Drv_Comm_Init();
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
-}
+#endif
 
 /* ---- 每10ms槽位调用 ---- */
 void Drv_CommMgr_Update(void)
@@ -94,7 +124,8 @@ void Drv_CommMgr_Update(void)
     if (Drv_Comm_TxDone() != 0u) {
         if (s_tx_done_flag == 0u) {
             s_tx_done_flag = 1u;
-            AppCommMgr_OnTxDone(0u, NULL);
+            s_DrvCommMgrToAppCommMgrParams.event = 1u;
+            s_DrvCommMgrToAppCommMgrLink.seq++;
         }
         /* 有待发送帧则立即发送 */
         if (s_pending_valid) {
@@ -113,10 +144,29 @@ void Drv_CommMgr_Update(void)
                                        DRV_COMM_RX_BUF_SIZE);
         Drv_Comm_Flush();
         if (s_rx_data.len > 0u) {
-            AppCommMgr_OnDataUpdate(0u, &s_rx_data);
+            s_DrvCommMgrToAppCommMgrParams.event = 2u;
+            memcpy(s_DrvCommMgrToAppCommMgrParams.rx_data, s_rx_data.data, s_rx_data.len);
+            s_DrvCommMgrToAppCommMgrParams.rx_len = s_rx_data.len;
+            s_DrvCommMgrToAppCommMgrLink.seq++;
         }
     }
 }
 
-void Drv_CommMgr_Init(void) { Constructor(); }
-MODULE_EXPORT(DrvCommMgr);
+/* ---- user_Process: 从 AppCommMgr LINK 读取发送请求 ---- */
+static void user_Process(MODULE_INPUT(DrvCommMgr) *in, MODULE_OUTPUT(DrvCommMgr) *out, DrvCommMgr_PipeFlags_t flags)
+{
+    if (flags.bits.appcommmgr) {
+        MODULE_INPUT_PARAMS(AppCommMgr, DrvCommMgr) *p = in->AppCommMgr_params->params;
+        if (p != NULL && p->tx_len > 0u) {
+            if (Drv_Comm_TxDone() != 0u) {
+                Drv_Comm_Send(p->tx_data, p->tx_len);
+            } else {
+                s_pending_req.len = (p->tx_len <= DRV_COMM_SEND_BUF_SIZE)
+                                  ? p->tx_len : DRV_COMM_SEND_BUF_SIZE;
+                memcpy(s_pending_req.data, p->tx_data, s_pending_req.len);
+                s_pending_valid = 1u;
+            }
+        }
+    }
+    (void)out;
+}

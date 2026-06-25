@@ -62,6 +62,7 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
     lines.append(AI_BLOCK_BEGIN)
     lines.append(include_line)
     lines.append("")
+    lines.append(f"static void Init(void);")
     lines.append(f"MODULE_SKELETON({mod_name});")
     lines.append("")
 
@@ -93,35 +94,24 @@ def _generate_ai_block(mod_name: str, in_pipes: list, out_pipes: list,
             lines.append(f"static uint8_t s_last_seq_{p_name};  /* {p_name}→{mod_name} */")
         lines.append("")
 
-    # ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ----
+    # ---- 内部 OUTPUT_LINK + PARAMS 实例 ----
     if out_pipes:
-        lines.append("/* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */")
+        lines.append("/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */")
         for pipe in out_pipes:
             c_name = pipe["to"]
+            lines.append(f"static MODULE_OUTPUT_PARAMS({mod_name}, {c_name})  s_{mod_name}To{c_name}Params;")
             lines.append(f"static MODULE_OUTPUT_LINK({mod_name}, {c_name})  s_{mod_name}To{c_name}Link;")
         lines.append("")
 
-    # Init — 绑定指钺
-    lines.append("/* ---- 初始化 ---- */")
-    lines.append("static void Init(void)")
-    lines.append("{")
-    lines.append(f"    memset(&s_outPara, 0, sizeof(s_outPara));")
-    if out_pipes:
-        lines.append("")
-        lines.append("    /* 绑定 OUTPUT_LINK 指钺 */")
-        for pipe in out_pipes:
-            c_name = pipe["to"]
-            lines.append(f"    s_outPara.{c_name}_params = &s_{mod_name}To{c_name}Link;")
-    lines.append("")
-    lines.append(f"    g_input.para  = &s_inPara;")
-    lines.append(f"    g_output.para = &s_outPara;")
-    lines.append("}")
     lines.append("")
 
-    # user_Process 前向声明 — 统一签名, NULL 由用户内部处理
+    # user_Process 默认空壳 — 用户在 END AI GENERATED 后重写即可 (dedup 会包掉旧版本)
     lines.append(f"/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)")
     lines.append(f" * 输出段请对产出数据的 LINK 执行 seq++: out->{'' if not out_pipes else out_pipes[0]['to']}_params->seq++; */")
-    lines.append(f"static void user_Process(MODULE_INPUT({mod_name}) *in, MODULE_OUTPUT({mod_name}) *out, {mod_name}_PipeFlags_t flags);")
+    lines.append(f"static void user_Process(MODULE_INPUT({mod_name}) *in, MODULE_OUTPUT({mod_name}) *out, {mod_name}_PipeFlags_t flags)")
+    lines.append(f"{{")
+    lines.append(f"    (void)in; (void)out; (void)flags;")
+    lines.append(f"}}")
     lines.append("")
 
     # ProcessInput
@@ -196,7 +186,8 @@ def replace_ai_block(content: str, new_block: str) -> str:
     """替换文件中已有的 AI 块为新块; 无 AI 块时插入到文件头部"""
     start, end = find_ai_block(content)
     if start >= 0:
-        return content[:start] + new_block + content[end:]
+        after = content[end:].lstrip("\n")
+        return content[:start] + new_block + ("\n" + after if after else "\n")
     else:
         return new_block + "\n" + content
 
@@ -217,13 +208,12 @@ def _strip_file_header(content: str) -> str:
 
 
 def generate_module_c(module: dict, pipes: list, project: dict, existing_file: str = "") -> str:
-    """生成模块 .c 文件内容
+    """生成模块 .c 的纯 AI 块内容 (不含用户代码)
 
     原则:
-      - AI 块始终在文件最前端
-      - 有文件: 剥离旧 AI 块 + 旧文件头 → 新 AI 块 + 保留原用户代码
-      - 有文件但无范式段: 在文件最前插入新 AI 块, 保留原内容
-      - 无文件: 新 AI 块 + 占位注释
+      - 只生成 AI 块, 不含用户代码
+      - 用户代码保留由 save_gen_file + replace_ai_block 负责
+      - 无文件: save_gen_file 写入 AI 块 + 占位注释
     """
     mod_name = module["name"]
     out_pipes = [p for p in pipes if p["from"] == mod_name]
@@ -231,29 +221,7 @@ def generate_module_c(module: dict, pipes: list, project: dict, existing_file: s
 
     io_dir = project.get("paths", {}).get("io_dir", "include")
 
-    # 读取已有文件
-    original_content = ""
-    if existing_file and os.path.isfile(existing_file):
-        try:
-            with open(existing_file, "r", encoding="utf-8") as f:
-                original_content = f.read()
-        except (IOError, UnicodeDecodeError):
-            original_content = ""
-
-    # 剥离旧 AI 块 + 旧文件头 → 得到纯用户代码
-    clean = _strip_ai_blocks(original_content)
-    clean = _strip_file_header(clean).strip("\n")
-
-    # 组装: 新 AI 块 (文件头部) + 用户代码
-    parts = []
-    parts.append(_generate_ai_block(mod_name, in_pipes, out_pipes, io_dir, module.get("source_file", "")))
-
-    if clean:
-        parts.append(clean)
-    else:
-        parts.append("// (新模块 — 在此插入业务代码)")
-
-    return "\n\n".join(parts) + "\n"
+    return _generate_ai_block(mod_name, in_pipes, out_pipes, io_dir, module.get("source_file", ""))
 
 
 def generate_module_c_refactored(

@@ -1,11 +1,64 @@
-/**
- * @file    app_cooking.c
- * @brief   4炉头烹饪状态机
- * @layer   APP
- *
- * 输入: Key(按键→事件驱动), RegData(温度→遥测), Timer1s(秒脉冲→计时)
- * 输出: PowerCtrl(→app_power), DisplayCmd(→drv_display)
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/app_cooking_io.h"
+
+static void Init(void);
+MODULE_SKELETON(AppCooking);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t drvkey   : 1;  /* DrvKey 数据就绪 */
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+    } bits;
+} AppCooking_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppCooking)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppCooking)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_DrvKey = 0xFF;  /* DrvKey→AppCooking */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→AppCooking */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(AppCooking, AppPower)  s_AppCookingToAppPowerParams;
+static MODULE_OUTPUT_LINK(AppCooking, AppPower)  s_AppCookingToAppPowerLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(AppCooking) *in, MODULE_OUTPUT(AppCooking) *out, AppCooking_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppCooking) *in  = (MODULE_INPUT(AppCooking)*)g_input.para;
+    MODULE_OUTPUT(AppCooking) *out = (MODULE_OUTPUT(AppCooking)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    AppCooking_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->DrvKey_params->seq;
+        if (cur_seq != s_last_seq_DrvKey) {
+            flags.bits.drvkey = 1;
+            s_last_seq_DrvKey = cur_seq;
+        }
+    }
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppCooking);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/app_cooking_io.h"
 #include "app_cooking.h"
@@ -38,6 +91,7 @@ typedef struct {
     uint8_t  disp_cmd;
 } OutData_t;
 
+
 /* 炉头上下文 */
 typedef struct {
     uint8_t  state;       /* CookState_t */
@@ -53,9 +107,6 @@ typedef struct {
 /* =================================================================
  * 静态存储
  * ================================================================= */
-
-static InData_t  s_in;
-static OutData_t s_out;
 static CookCtx_t        s_ctx[COOK_HEAD_COUNT];
 static uint8_t          s_selected_head;
 static uint16_t         s_power_table[] = {
@@ -72,7 +123,11 @@ static const CookMenu_t s_menus[COOK_MENU_MAX] = {
  * 骨架
  * ================================================================= */
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_SKELETON(AppCooking);
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 
 /* =================================================================
  * 内部函数
@@ -197,36 +252,24 @@ static void cook_tick(void)
     }
 }
 
-/* =================================================================
- * ProcessInput — 每帧调用
- * ================================================================= */
-
-static void ProcessInput(void)
+/* ========== route 分发: 替代 V1 OnKey/OnRegData/OnTimer1s 回调 ========== */
+static void user_Process(MODULE_INPUT(AppCooking) *in, MODULE_OUTPUT(AppCooking) *out, AppCooking_PipeFlags_t flags)
 {
-    InData_t *in = (InData_t *)g_input.para;
-
-    /* ====== 输入段 ====== */
-    if (g_input.info.status & ST_NEW) {
-        if (in->key_valid) {
-            /* 按键直接触发命令（旧 AppCooking_OnKey 的逻辑）*/
-            uint8_t kc = in->key_code, ks = in->key_state;
-            if (kc == 1 && ks == 1) s_selected_head = (s_selected_head + 1) % COOK_HEAD_COUNT;
-            if (kc == 2 && ks == 1) on_cmd(s_selected_head, 2, 0);
-            if (kc == 4 && ks == 1) on_cmd(s_selected_head, 1, 1);
-            if (kc >= 0x10 && kc <= 0x19 && ks == 1) on_cmd(s_selected_head, 5, kc - 0x10);
-            in->key_valid = 0;
-        }
-        if (in->reg_valid) {
-            uint8_t idx = in->reg_head;
-            if (idx < COOK_HEAD_COUNT) s_ctx[idx].current_temp = in->reg_temp;
-            in->reg_valid = 0;
-        }
-        if (in->timer_valid) {
-            cook_tick();
-            in->timer_valid = 0;
-        }
-        g_input.info.status &= ~ST_NEW;
+    if (flags.bits.drvkey) {
+        MODULE_INPUT_PARAMS(DrvKey, AppCooking) *p = in->DrvKey_params->params;
+        uint8_t kc = p->key_code, ks = p->key_state;
+        if (kc == 1u && ks == 1u) s_selected_head = (s_selected_head + 1u) % COOK_HEAD_COUNT;
+        if (kc == 2u && ks == 1u) on_cmd(s_selected_head, 2u, 0u);
+        if (kc == 4u && ks == 1u) on_cmd(s_selected_head, 1u, 1u);
+        if (kc >= 0x10u && kc <= 0x19u && ks == 1u) on_cmd(s_selected_head, 5u, kc - 0x10u);
     }
+    if (flags.bits.appcommmgr) {
+        MODULE_INPUT_PARAMS(AppCommMgr, AppCooking) *p = in->AppCommMgr_params->params;
+        if (p->head_index < COOK_HEAD_COUNT) {
+            s_ctx[p->head_index].current_temp = (uint8_t)(p->regs[3] & 0xFFu);
+        }
+    }
+    (void)out;
 }
 
 /* =================================================================
@@ -238,46 +281,21 @@ static void Init(void)
     memset(s_ctx, 0, sizeof(s_ctx));
     for (uint8_t i = 0; i < COOK_HEAD_COUNT; i++) s_ctx[i].current_temp = 25;
     s_selected_head = 0;
-    memset(&s_in, 0, sizeof(s_in));
-    memset(&s_out, 0, sizeof(s_out));
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_AppCookingToAppPowerLink.params = &s_AppCookingToAppPowerParams;
+    s_outPara.AppPower_params         = &s_AppCookingToAppPowerLink;
 }
 
 /* =================================================================
  * 导出
  * ================================================================= */
 
+#if 0  /* DEDUP */
+#if 0  /* DEDUP */
 MODULE_EXPORT(AppCooking);
+#endif  /* DEDUP */
+#endif  /* DEDUP */
 
-/* =================================================================
- * 强符号桥接: 旧调用方 → 写入 g_input
- * ================================================================= */
 
-void AppCooking_OnKey(uint16_t param, void *data_ptr)
-{
-    (void)data_ptr;
-    InData_t *in = (InData_t *)g_input.para;
-    in->key_code  = (uint8_t)(param & 0xFF);
-    in->key_state = (uint8_t)((param >> 8) & 0xFF);
-    in->key_valid = 1;
-    g_input.info.status |= ST_NEW;
-}
-
-void AppCooking_OnRegData(uint16_t param, void *data_ptr)
-{
-    if (!data_ptr) return;
-    InData_t *in = (InData_t *)g_input.para;
-    in->reg_head = (uint8_t)(param & 0xFF);
-    in->reg_temp = ((uint8_t *)data_ptr)[10];  /* regs[3] low byte */
-    in->reg_valid = 1;
-    g_input.info.status |= ST_NEW;
-}
-
-void AppCooking_OnTimer1s(uint16_t param, void *data_ptr)
-{
-    (void)param; (void)data_ptr;
-    InData_t *in = (InData_t *)g_input.para;
-    in->timer_valid = 1;
-    g_input.info.status |= ST_NEW;
-}

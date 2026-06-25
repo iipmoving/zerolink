@@ -154,8 +154,8 @@ void EKF_Regs_Update(unsigned char slave_idx)
     /* 0x1025: 谐振频率 — f_res_Hz 直接存 uint16 (Hz×100 → ÷100 得 Hz) */
     ekf->f_res_hz = (uint16_t)(p[5] );
 
-    /* 0x1026: 母线电压 — Vdc_mean ÷10 → 0.1V */
-    ekf->vdc_mean_v_x10 = (uint16_t)((int32_t)p[1] / 10);
+    /* 0x1026: 母线电压有效值 — Vdc_mean × 1.11 → 0.1V (平均值→有效值) */
+    ekf->vdc_mean_v_x10 = (uint16_t)((int32_t)p[1] * 111 / 1000);
 
     /* 0x1027: 有功功率 — P_W ÷10 → 0.1W */
     ekf->p_w_x10 = (uint16_t)((int32_t)p[9] / 10);

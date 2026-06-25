@@ -19,7 +19,7 @@ code_gen.py — v2.3 LINK+PARAMS 框架代码自动生成器 主入口
   (无选项)        全部生成
   --only-io       仅 io.h
   --only-switcher 仅 data_switcher.c
-  --only-modules  仅模块 .c/.h (已有 .c 只替换 AI 块, 保留用户代码)
+  --only-modules  仅模块 .c (已有 .c 只替换 AI 块, 保留用户代码; 不动 .h)
   --only-pipes    仅管道相关 (io.h + data_switcher.c, 不动模块 .c/.h)
 
 使用:
@@ -67,13 +67,44 @@ def save_json(path: str, data: dict):
     print(f"  [SAVE] {path}")
 
 
-def save_file(path: str, content: str):
-    """保存生成文件（先备份）"""
+def save_gen_file(path: str, content: str, full_replace: bool = False):
+    """保存生成文件 — 替换范式段模式 (不直接覆盖)
+
+    full_replace=False (模块 .c, 保留用户代码):
+      有文件+有范式段: 替换范式段, 保留用户代码
+      有文件+无范式段: 在文件最前插入范式段, 保留原内容
+      无文件: 写入完整内容
+
+    full_replace=True (io.h, data_switcher.c, 全权文件):
+      有文件+有范式段: 替换范式段, 保留用户代码 (如果有)
+      有文件+无范式段: 新内容整体替换 (这些文件无用户代码区)
+      无文件: 写入完整内容
+    """
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    _backup(path)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-    print(f"  [GEN] {path}")
+    if os.path.isfile(path):
+        _backup(path)
+        with open(path, "r", encoding="utf-8") as f:
+            original = f.read()
+        start, end = find_ai_block(original)
+        if start >= 0:
+            after = original[end:].lstrip("\n")
+            new_content = original[:start] + content + ("\n" + after if after else "\n")
+        elif full_replace:
+            # 无范式段 + 全权文件: 整体替换
+            new_content = content
+        else:
+            # 无范式段 + 普通文件: 插入范式段到文件头部
+            new_content = content + "\n" + original
+        if new_content == original:
+            print(f"  [SKIP] {path} (no change)")
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        print(f"  [GEN] {path} (replaced AI block)")
+    else:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"  [GEN] {path} (new file)")
 
 
 def cmd_init(args):
@@ -144,7 +175,7 @@ def cmd_gen(args):
         for mod in modules:
             content = generate_io_h(mod, pipes, project)
             fname = f"{_pascal_to_snake(mod['name'])}_io.h"
-            save_file(os.path.join(io_out, fname), content)
+            save_gen_file(os.path.join(io_out, fname), content)
 
     # ---- 2. 生成 data_switcher.c ----
     gen_switcher = not args.only_io and not args.only_modules
@@ -154,7 +185,7 @@ def cmd_gen(args):
         print("\n--- data_switcher.c ---")
         core_out = os.path.join(output_root, core_dir)
         content = generate_switcher(modules, pipes, slot_order, project, slot_chains)
-        save_file(os.path.join(core_out, "data_switcher.c"), content)
+        save_gen_file(os.path.join(core_out, "data_switcher.c"), content)
 
     # ---- 3. 生成模块 .c + .h ----
     gen_modules = not args.only_io and not args.only_switcher and not args.only_pipes
@@ -171,10 +202,7 @@ def cmd_gen(args):
             mod_out = os.path.dirname(c_path)
 
             content_c = generate_module_c(mod, pipes, project, c_path)
-            save_file(c_path, content_c)
-
-            content_h = generate_module_h(mod)
-            save_file(os.path.join(mod_out, f"{_pascal_to_snake(mod['name'])}.h"), content_h)
+            save_gen_file(c_path, content_c)
 
     print(f"\n[DONE] 生成完成!")
 

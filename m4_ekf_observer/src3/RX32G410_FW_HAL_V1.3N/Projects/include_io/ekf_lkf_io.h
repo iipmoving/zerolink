@@ -46,8 +46,8 @@ typedef struct {
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_OUTPUT_PARAMS(EKF_LKF, AppPower) params[4];
 } MODULE_OUTPUT_LINK(EKF_LKF, AppPower);
@@ -83,8 +83,8 @@ typedef struct {
 
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_INPUT_PARAMS(ElecParams, EKF_LKF) params[4];
 } MODULE_INPUT_LINK(ElecParams, EKF_LKF);

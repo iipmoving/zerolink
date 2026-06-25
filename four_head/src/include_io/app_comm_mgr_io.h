@@ -1,3 +1,4 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    app_comm_mgr_io.h
  * @brief   AppCommMgr Data Switcher IO interface (v2.3 LINK+PARAMS)
@@ -8,6 +9,7 @@
  * 输入源:
  *   ProtoModbus → AppCommMgr  (协议响应 → AppCommMgr (编码帧/解析结果, 2tick响应))
  *   DrvCommMgr → AppCommMgr  (TX完成/RX数据事件 → AppCommMgr (替代上行回调 OnTxDone/OnDataUpdate))
+ *   AppPower → AppCommMgr  (功率命令 → AppCommMgr (MODBUS帧构建后发 DrvCommMgr))
  *
  * 输出目标:
  *   AppCommMgr → AppPower  (Modbus 寄存器数据 → Power)
@@ -178,10 +180,28 @@ typedef struct {
     MODULE_INPUT_PARAMS(DrvCommMgr, AppCommMgr) *params;
 } MODULE_INPUT_LINK(DrvCommMgr, AppCommMgr);
 
+/* ------------------------------------------------------------------
+ * AppPower → AppCommMgr  输入参数  (功率命令 → AppCommMgr (MODBUS帧构建后发 DrvCommMgr))
+ * ------------------------------------------------------------------ */
+typedef struct {
+    uint8_t head_idx;     /* 炉头索引 0-3 */
+    uint8_t power_on;     /* 功率开关 0/1 */
+    uint16_t target_power;     /* 目标功率 W */
+} MODULE_INPUT_PARAMS(AppPower, AppCommMgr);
+
+typedef struct {
+    uint8_t  status;           /* ST_NEW / ST_OUT */
+    uint8_t  max_count;        /* 最大数量 */
+    uint8_t  seq;              /* 有效性索引号 — 生产者 seq++, 消费者比对 last_seq */
+    uint8_t  res[1];
+    MODULE_INPUT_PARAMS(AppPower, AppCommMgr) *params;
+} MODULE_INPUT_LINK(AppPower, AppCommMgr);
+
 /* AppCommMgr_Input — 输入聚合 (对称命名: 成员 = {Producer}_params) */
 typedef struct {
     MODULE_INPUT_LINK(ProtoModbus, AppCommMgr) *ProtoModbus_params;  /* 指向 ProtoModbus 输出的 LINK 列 */
     MODULE_INPUT_LINK(DrvCommMgr, AppCommMgr) *DrvCommMgr_params;  /* 指向 DrvCommMgr 输出的 LINK 列 */
+    MODULE_INPUT_LINK(AppPower, AppCommMgr) *AppPower_params;  /* 指向 AppPower 输出的 LINK 列 */
 } MODULE_INPUT(AppCommMgr);
 
 #pragma pack()
@@ -190,3 +210,6 @@ typedef struct {
 MODULE_IO_H(AppCommMgr);
 
 #endif /* APPCOMMMGR_IO_H */
+
+// ===== [END AI GENERATED] =====
+

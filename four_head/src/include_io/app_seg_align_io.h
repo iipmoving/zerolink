@@ -1,3 +1,4 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    app_seg_align_io.h
  * @brief   AppSegAlign Data Switcher IO interface (v2.3 LINK+PARAMS)
@@ -78,3 +79,6 @@ typedef struct {
 MODULE_IO_H(AppSegAlign);
 
 #endif /* APPSEGALIGN_IO_H */
+
+// ===== [END AI GENERATED] =====
+

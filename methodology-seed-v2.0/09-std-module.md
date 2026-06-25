@@ -1,4 +1,7 @@
-# 09 — std_module.h：统一模块骨架宏
+# 09 — std_module.h：统一模块骨架宏 (v2.3 route+Switcher_RunNow)
+
+> **`res[1]` → `route`**: LINK 结构体的保留字段改为 `route`, 与 PARAMS union 配合实现多入口分流。
+> **`Switcher_RunNow(slot)`**: 输出段写管道后立即调 consumer DoWork, 见 `08-data-switcher.md §5.6`。
 
 ---
 
@@ -70,9 +73,11 @@ typedef struct {
 
 > **🚫 头文件自治规则**: 任何模块的 `.h`（包括 `_io.h` 和普通 `.h`）**不得 `#include` 其他模块的 `.h`**。需要引用其他模块的数据类型时，在 `_io.h` 中自包含定义自己的输入结构体，布局与生产者输出兼容。InputCallback 通过指针直穿访问数据，不依赖对方类型定义。
 
-### 3.1 I/O 结构体 — 三层定义 (v2.3 LINK+PARAMS)
+### 3.1 I/O 结构体 — 三层定义 (v2.3 LINK+PARAMS + route)
 
 **管道配对模式**: Consumer 定义自己的 INPUT 类型 (自包含, 不引用 Producer), 布局与 Producer OUTPUT 一致。中间层用 `(void*)` 连接。
+
+**v2.3 route 机制**: LINK 的 `res[1]` 字段改为 `route`, 用于区分同一管道的不同子功能入口。与 `Info_Header.route` 配合, producer 设 route, consumer 在 ProcessInput 中 switch 分流。PARAMS 用 union 容纳多个 route 的 req/resp 结构, 实现"一次 DoWork + route 分流"的即时调用模式。
 
 ```c
 /* ===== {module}_io.h ===== */
@@ -90,7 +95,9 @@ typedef struct {
 /* 输入管道: 与 MODULE_OUTPUT_LINK(Producer, {Module}) 配对 */
 typedef struct {
     uint8_t  status;
-    uint8_t  res[3];
+    uint8_t  max_count;
+    uint8_t  seq;            /* 更新有效性 — 消费者比对 last_seq 判断新数据 */
+    uint8_t  route;          /* 路由标识 — 区分同一 LINK 的不同子功能入口 */
     MODULE_INPUT_PARAMS(Producer, {Module}) params[POT_MAX];
 } MODULE_INPUT_LINK(Producer, {Module});
 
@@ -101,18 +108,28 @@ typedef struct {
 
 /* --- 输出: 发给 Consumer --- */
 
-/* 数据参数 */
+/* 数据参数 — 多 route 用 union 区分 req/resp 结构 */
 typedef struct {
-    uint16_t result;
-    uint8_t  valid;
-    uint8_t  res[5];
+    uint8_t  route;           /* 0=功能A, 1=功能B ... 与 LINK.route 一致 */
+    union {
+        struct {              /* route=0: req+resp 成对定义 */
+            uint16_t param;   /* → 请求参数 */
+            uint8_t  result;  /* ← 回传结果 (Switcher_RunNow 后 producer 读) */
+        } func_a;
+        struct {              /* route=1 */
+            uint8_t  cmd;
+            uint8_t  ack;
+        } func_b;
+    };
 } MODULE_OUTPUT_PARAMS({Module}, Consumer);
 
-/* 输出管道: 与 MODULE_INPUT_LINK({Module}, Consumer) 配对 */
+/* 输出管道 */
 typedef struct {
     uint8_t  status;
-    uint8_t  res[3];
-    MODULE_OUTPUT_PARAMS({Module}, Consumer) params[POT_MAX];
+    uint8_t  max_count;
+    uint8_t  seq;
+    uint8_t  route;           /* 替代 res[1], 语义明确 — AI 看见即理解 */
+    MODULE_OUTPUT_PARAMS({Module}, Consumer) *params;  /* 指针指向 PARAMS */
 } MODULE_OUTPUT_LINK({Module}, Consumer);
 
 /* 输出聚合 */
@@ -120,6 +137,14 @@ typedef struct {
     MODULE_OUTPUT_LINK({Module}, Consumer) *{Consumer}_params;   // ← 以消费者命名 (指针)
 } MODULE_OUTPUT({Module});
 ```
+
+**AI 自理解要点**:
+
+| 命名 | 含义 | AI 推理 |
+|------|------|---------|
+| `route` | 路由选择 | AI 见到 `route` → 在 consumer 端找 switch(route) |
+| `seq` | 更新序列号 | AI 见到 `seq++` → 在 consumer 端找 `cur_seq != last_seq` |
+| `union { func_a, func_b }` | 多入口 | AI 见到 union → 每种 route 有自己的参数字段 |
 
 ### 3.2 源文件骨架
 #include "std_module.h"
@@ -176,6 +201,13 @@ static void ProcessInput(void)
     /* ====== 输出段 ====== */
     /* v2.3: 置输出 LINK 的 status, 由 Switcher 或下游模块读取 */
     out->{Consumer}_params->status |= ST_NEW;
+
+    /* v2.3 route + Switcher_RunNow: 写管道, 设 route, 即刻调消费者 */
+    out->{Consumer}_params->seq++;
+    out->{Consumer}_params->route = 0;  /* 标识子功能入口 */
+    g_output.info.status |= ST_OUT;
+    Switcher_RunNow(SLOT_Consumer);     /* 即刻执行消费者 DoWork */
+    uint8_t result = out->{Consumer}_params->params->result;  /* 读回传 */
 }
 
 /* ---- 导出: GetIO ---- */

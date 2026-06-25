@@ -46,8 +46,8 @@ typedef struct {
 /* 输入管道: 布局与 MODULE_OUTPUT_LINK(Calculator, Telemetry) 一致 */
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_INPUT_PARAMS(Calculator, Telemetry) params[4][20];
 } MODULE_INPUT_LINK(Calculator, Telemetry);
@@ -77,8 +77,8 @@ typedef struct {
 /* 输入管道: 布局与 MODULE_OUTPUT_LINK(ElecParams, EKF_LKF) 一致 */
 typedef struct {
     uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* seq */
-    uint8_t  seq;            /* 周期索引 */
+    uint8_t  count;            /* count */
+    uint8_t  seq;              /* seq */
     uint8_t  res[1];
     MODULE_INPUT_PARAMS(ElecParams, Telemetry) params[4];
 } MODULE_INPUT_LINK(ElecParams, Telemetry);

@@ -1,7 +1,7 @@
 # RESTART.md — M4 半桥 IH 驱动 · AI 重启入口
 
 > **用途**: 新 AI 会话或接管工程师的第一个文件。读完本文件 ≈ 继承全部项目记忆。
-> **最后更新**: 2026-06-09
+> **最后更新**: 2026-06-20
 > **工作目录**: `D:\OBSIDIAN\MOVING IH\低耦合程序架构`
 
 ---
@@ -108,6 +108,7 @@ HAL (RX32G410 FW HAL V1.3N)            ← 原厂固件库 (只读不写)
 
 | 里程碑 | 完成日期 | 文档 |
 |--------|---------|------|
+| **ElecParams 电参数修正 (P_W/Vdc/L)** | **2026-06-20** | **`RESTART.md §十一`** |
 | **Phase 2 婴儿模块重构** | **2026-06-09** | `RESTART.md §十` |
 | EKF 物理模型验证 | 2026-05-30 | `docs/EKF-PHASE-CLOSURE-2026-05-30.md` |
 | f0 估计三方法实现 | 2026-05-30 | `tools/ekf_tuner/ekf_q_model.py` + `memory/project_m4-f0-estimation-methods.md` |
@@ -127,9 +128,19 @@ HAL (RX32G410 FW HAL V1.3N)            ← 原厂固件库 (只读不写)
 | **P1** | EKF 补丁 5 处集成 (FIRMWARE_PATCH.md)         | 需完整源文件   | `app/ekf/FIRMWARE_PATCH.md`                          |
 | **P2** | HRTIM MASTER 同步简化 (hrtim-master-sync)    | EKF 完成后  | `memory/project_m4-hrtim-master-sync-simplify.md`    |
 | **P3** | 半桥→全桥迁移 (migrate-full-bridge)            | HRTIM完成后 | `memory/project_m4-half-to-full-bridge-migration.md` |
+| **P3** | elec_params 电压滤谷 + cycles[0] 修正精细化    | —          | —                                                    |
 | **P4** | APP 层逐步解耦 (__weak回调化)                    | 不紧急      | `memory/m4-architecture-analysis.md`                 |
 
-### 4.3 已知固件问题
+### 4.3 已修复固件问题
+
+| 问题 | MODBUS地址 | 修复说明 |
+|------|-----------|---------|
+| ~~P_W 大幅波动~~ | 0x1027 | 原中值滤波+漏I_SCALE→uint16溢出。改为20ms平均+cycles[10]补偿+低通滤波 §十一 |
+| ~~L_uH 值偏小~~ | 0x1023 | ekf_lkf.c 多乘了 0.01f（ElecParams 输出已是 float µH） |
+| ~~Vdc_mean 偏低~~ | 0x1026 | 改为全周期参与（去掉 voltage_count≥4 限制）+ 寄存器输出乘1.11转为有效值 |
+| ~~GUI 断线卡死~~ | — | MODBUS 读取移到后台线程，主线程不再阻塞 |
+
+### 4.4 已知固件问题
 
 | 问题 | MODBUS地址 | 说明 |
 |------|-----------|------|
@@ -296,7 +307,7 @@ python m4_modbus_tool.py COM3 --wave --head 0
 ---
 
 *本文件是 m4_ekf_observer 项目的唯一重启入口。新 AI 会话从此文件开始。*
-*当前进行中: WaveCapture 模块 — T001→T005 逐任务推进*
+*当前状态: ElecParams 电参数修正完成 — P_W/Vdc/L_uH 均已修复，待烧录验证。下一阶段: WaveCapture 模块 (P0)*
 
 ---
 
@@ -370,3 +381,42 @@ Switcher_Run_Slot1 (20ms周期):
 | P2 | 运行 `check_weak_pairs.py` | 验证 weak/strong 配对 |
 | P3 | 全桥策略 | `app/power_calc_full.c` (双 HRTIM 对角管窗口积分) |
 | P3 | 运行时分发 | `bridge_type` 字节在 DoWork 中 switch 策略 |
+
+---
+
+## 十一、ElecParams 电参数修正 (2026-06-20)
+
+### 11.1 问题清单
+
+| 参数 | 症状 | 根因 | 修复 |
+|------|------|------|------|
+| **P_W (0x1027)** | 4-5kW ↔ 400-500W 剧烈跳动 | ① 漏 `IH_I_SCALE` 导致值大几十倍 → uint16_t 溢出截断 ② 原用中值滤波，零值污染导致中值位置跳动 | ① 加上 I_SCALE ② 改为20ms平均: 逐周期累加 `i_total × p_avg`，÷20 ③ cycles[10] 加倍补偿缺失的 cycles[0] ④ 帧间一阶低通 α=0.3 |
+| **L_uH (0x1023)** | 显示6µH，实为60-70µH | `ekf_lkf.c` 多乘 `×0.01f`，把 float µH 当 int32_t×100 处理 | 移除 `ekf_init`/`ekf_update` 中的 `* 0.01f` |
+| **Vdc_mean (0x1026)** | 偏小 ~200V (实际220V) | ① `voltage_count ≥ 4` 过滤导致电压低时丢弃 ② 平均值非有效值 | ① 全周期参与（`> 0` 即可）② MODBUS输出 ×1.11 转为有效值 |
+| **GUI 断线卡死** | 拔串口后界面无响应 | MODBUS 读取在主线程阻塞 tkinter | 读取移入后台线程 + `after()` 回调主线程更新 UI |
+
+### 11.2 P_W 新算法 (`CalcPw` in `elec_params.c`)
+
+```
+for i=1..19:                                    ← 全部19周期参与
+    i_total = i_high + i_low                    ← 周期平均电流 (ADC原始值)
+    p_avg   = voltage_sum / voltage_count       ← 周期平均电压 (ADC原始值)
+    i_sum  += i_total
+    v_sum  += p_avg
+    p_sum  += i_total × p_avg                   ← 逐周期即时功率 (ADC²)
+
+多加一次 cycles[10]                             ← 补偿缺失的 cycles[0] (50Hz半周期对称)
+
+pw.avg_avg  = (i_sum/20) × I_SCALE × (v_sum/20) × VDC_SCALE    ← 平均×平均
+pw.inst_avg = (p_sum/20) × I_SCALE × VDC_SCALE                  ← 逐周期功率平均(当前在用)
+→ 一阶低通: pw_filt = pw_filt×0.7 + pw_raw×0.3
+```
+
+### 11.3 修改文件清单
+
+| 文件 | 修改内容 |
+|------|---------|
+| `BaseClass/src/elec_params.c` | 新增 `CalcPw()` 函数；Vdc_mean 全周期参与；P_W 低通滤波；f_sw 中值→平均 |
+| `BaseClass/src/ekf_lkf.c` | 移除 L_uH 多余的 `* 0.01f`（ekf_init + ekf_update 两处） |
+| `Projects/modbus/src/modbus_ekf_regs.c` | 0x1026 输出 V_rms = Vdc_mean × 1.11 |
+| `tools/ekf_tuner/m4_gui.py` | MODBUS 读取移入后台线程，修复断线卡死 |

@@ -1,4 +1,8 @@
-# 01 — AI 零耦合嵌入式架构 v2.1
+# 01 — AI 零耦合嵌入式架构 v2.4
+
+> **最新版本**: v2.4 (2026-06, OUTPUT_LINK 指针化)
+> **演进**: v1.0 MsgScheduler → v2.0 __weak 直调 → v2.2 PULL 范式 → v2.3 codeGen 驱动 → v2.4 OUTPUT_LINK
+> **版本历史**: 参见 `archive/methodology-history/_INDEX.md`
 
 ---
 

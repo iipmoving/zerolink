@@ -333,4 +333,27 @@ typedef struct {
 #define MODULE_ISR_IO_H(module_name)
 #endif /* STD_MODULE_ENABLE_ISR */
 
+/* ================================================================
+ * 7. Switcher 路由宏 — data_switcher.c 专用
+ *
+ *   SLOT_GETIO(Name)       — Switcher_Init 中注册模块
+ *   INPUT_CALLBACK(Name)   — 定义强符号覆盖 MODULE_SKELETON 的 weak 空壳
+ *   INPUT_GET_SLOT(Prod, Cons) — 从 Prod 槽拉数据到 Cons 槽 (PULL)
+ * ================================================================ */
+
+#define SLOT_GETIO(name)                                                 \
+    name##_GetIO(&s_slot[SLOT_##name].pIn,                               \
+                 &s_slot[SLOT_##name].pOut,                              \
+                 &s_slot[SLOT_##name].pDoWork)
+
+#define INPUT_CALLBACK(name)                                             \
+    void name##_InputCallback(void)
+
+#define INPUT_GET_SLOT(producer, consumer)                               \
+    do {                                                                 \
+        if (s_slot[SLOT_##producer].pOut) {                              \
+            s_slot[SLOT_##consumer].pIn = s_slot[SLOT_##producer].pOut;  \
+        }                                                                \
+    } while(0)
+
 #endif /* STD_MODULE_H */

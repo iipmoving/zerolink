@@ -1,3 +1,4 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
 /**
  * @file    proto_modbus_io.h
  * @brief   ProtoModbus Data Switcher IO interface (v2.3 LINK+PARAMS)
@@ -89,3 +90,6 @@ typedef struct {
 MODULE_IO_H(ProtoModbus);
 
 #endif /* PROTOMODBUS_IO_H */
+
+// ===== [END AI GENERATED] =====
+

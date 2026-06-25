@@ -19,6 +19,11 @@ static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
 static MODULE_OUTPUT_LINK(Calculator, ElecParams)  s_calcToElecLink;
 static MODULE_OUTPUT_LINK(Calculator, AppAdc)      s_calcToAppAdcLink;
 
+/* ---- 子 Switch 访问器 — 暴露 g_input/g_output 地址 ---- */
+
+/* ---- 子模块回调声明 ---- */
+MODULE_CALL_SIGNAL(Calculator, CalcSlave);
+
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags);
 
 static void ProcessInput(void)
@@ -48,6 +53,9 @@ MODULE_EXPORT(Calculator);
 
 #include <string.h>
 #include <math.h>
+
+#define	ROUTE_HALF	0
+#define	ROUTE_FULL	1
 
 #define	CALC_POTMAX 4
 
@@ -98,34 +106,27 @@ static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uin
 /* ---- 处理逻辑入口（每帧被调）---- */
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags)
 {
-	out->ElecParams_params->status &= ~ST_NEW;
-//    MODULE_INPUT(Calculator)*   pIn = g_input.para;
-//    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
+    out->ElecParams_params->status &= ~ST_NEW;
 
     if (in->AppAdc_params->status & ST_NEW)
     {
-				if(in->AppAdc_params->count)
-				{	
-					ProcessAllHead(in, out);			//对每1ms数据进行计算
+        if (in->AppAdc_params->count)
+        {
+            /* 1ms 周期: 通过子 Switch 路由到 CalcSlave 执行 */
+            g_output.info.route = ROUTE_HALF;
+            MODULE_CALL_TRIGGER(Calculator, CalcSlave);
 
-					in->AppAdc_params->status &= ~ST_NEW;
-
-				}
-				else
-				{
-						// 完成 Calculator→PowerBase 直接参数平均值 // 每20ms计算一次
-					
-					if((out->AppAdc_params->status&ST_NEW)==0)			//以经执行就不再执行这个时间片，等ADC把数据取走
-					{		
-						
-
-						out->ElecParams_params->status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
-						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
-						
-						out->AppAdc_params->status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
-					}
-				}
-				
+            in->AppAdc_params->status &= ~ST_NEW;
+        }
+        else
+        {
+            if ((out->AppAdc_params->status & ST_NEW) == 0)
+            {
+                out->ElecParams_params->status |= ST_NEW;
+                out->Telemetry_params = out->ElecParams_params;
+                out->AppAdc_params->status |= ST_NEW;
+            }
+        }
     }
 }
 

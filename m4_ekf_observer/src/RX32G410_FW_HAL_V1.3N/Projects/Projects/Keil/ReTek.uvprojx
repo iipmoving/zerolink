@@ -336,7 +336,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>RX32G410,DEBUG_POWER_OUTx,SimZerox,I2C2_PORT,PrintMessage,Fmac9,CurrentFromTxa,COMM_UART,TxaFmac,DEBUG_POWER_OUT_CONSTx</Define>
+              <Define>RX32G410,DEBUG_POWER_OUT,SimZero,I2C2_PORT,PrintMessage,Fmac9,CurrentFromTxa,COMM_UART,TxaFmac,DEBUG_POWER_OUT_CONSTx,HALFX</Define>
               <Undefine></Undefine>
               <IncludePath>..\..\..\..\..\include;..\..\..\..\..\app;..\..\..\Drivers\CMSIS\CM4\CoreSupport;..\..\..\Drivers\CMSIS\CM4\DeviceSupport\inc;..\..\..\Drivers\RX32G4xx_HAL_Driver\Inc;..\..\..\Middlewares\System\inc;..\..\API\inc;..\..\APP\POWER\inc;..\..\APP\sys\inc;..\..\BaseClass\inc;..\..\DRV\INC;..\..\INTERFACE\inc;..\..\Users\inc;..\..\modbus\inc;..\..\BaseClass\inc\IH_ElecParams;..\..\core;..\..\..\..\..\base_class\inc</IncludePath>
             </VariousControls>
@@ -1068,6 +1068,16 @@
               <FileType>1</FileType>
               <FilePath>..\..\BaseClass\src\telemetry.c</FilePath>
             </File>
+            <File>
+              <FileName>calc_full.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\calc_full.c</FilePath>
+            </File>
+            <File>
+              <FileName>calc_half.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\calc_half.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1751,6 +1761,11 @@
               <FileName>data_switcher.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\core\data_switcher.c</FilePath>
+            </File>
+            <File>
+              <FileName>calculator_switch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\BaseClass\src\calculator_switch.c</FilePath>
             </File>
           </Files>
         </Group>

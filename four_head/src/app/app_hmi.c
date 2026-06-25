@@ -1,13 +1,66 @@
-/**
- * app_hmi.c — HMI JSON 驱动引擎实现
- *
- * 从 hmi_cfg 配置表读取路由/超时/规则，驱动状态机。
- * 所有业务规则在 JSON→hmi_data.c 中声明，引擎只做解释。
- *
- * 依赖: app_hmi.h, msg_scheduler.h, drv_key.h, drv_buzzer.h
- * 层级: APP — 通过消息调度器收发
- */
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/app_hmi_io.h"
 
+static void Init(void);
+MODULE_SKELETON(AppHmi);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t drvkey   : 1;  /* DrvKey 数据就绪 */
+        uint8_t apppower   : 1;  /* AppPower 数据就绪 */
+    } bits;
+} AppHmi_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(AppHmi)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(AppHmi)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_DrvKey = 0xFF;  /* DrvKey→AppHmi */
+static uint8_t s_last_seq_AppPower = 0xFF;  /* AppPower→AppHmi */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(AppHmi, DrvDisplay)  s_AppHmiToDrvDisplayParams;
+static MODULE_OUTPUT_LINK(AppHmi, DrvDisplay)  s_AppHmiToDrvDisplayLink;
+static MODULE_OUTPUT_PARAMS(AppHmi, DrvBuzzer)  s_AppHmiToDrvBuzzerParams;
+static MODULE_OUTPUT_LINK(AppHmi, DrvBuzzer)  s_AppHmiToDrvBuzzerLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 实际定义在用户代码区 (可引用用户变量/函数) */
+static void user_Process(MODULE_INPUT(AppHmi) *in, MODULE_OUTPUT(AppHmi) *out, AppHmi_PipeFlags_t flags);
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(AppHmi) *in  = (MODULE_INPUT(AppHmi)*)g_input.para;
+    MODULE_OUTPUT(AppHmi) *out = (MODULE_OUTPUT(AppHmi)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    AppHmi_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->DrvKey_params->seq;
+        if (cur_seq != s_last_seq_DrvKey) {
+            flags.bits.drvkey = 1;
+            s_last_seq_DrvKey = cur_seq;
+        }
+    }
+    {
+        uint8_t cur_seq = in->AppPower_params->seq;
+        if (cur_seq != s_last_seq_AppPower) {
+            flags.bits.apppower = 1;
+            s_last_seq_AppPower = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(AppHmi);
+
+// ===== [END AI GENERATED] =====
 #include "core/std_module.h"
 #include "../include_io/app_hmi_io.h"
 #include "app_hmi.h"
@@ -51,13 +104,9 @@ typedef struct {
     uint8_t  leds_power_level[10];
 } OutData_t;
 
-static InData_t  s_in;
-static OutData_t s_out;
 
-MODULE_SKELETON(AppHmi);
 
-/* DRV 强符号声明（Switcher 路由调用，APP 不定义 __weak 桩）*/
-void DrvDisplay_OnRefresh(uint16_t param, void *data_ptr);
+
 
 /* ===== 调试模式: 定义后屏蔽所有HMI逻辑, 仅显示键码+状态 ===== */
 /* ================================================================
@@ -73,6 +122,8 @@ static uint8_t          s_stack_count;
 static uint32_t         s_tick_100ms;      /* 100ms 计数器 */
 static uint32_t         s_idle_ticks;      /* 空闲起始 tick */
 static uint32_t         s_off_ticks;       /* 关机起始 tick */
+static uint8_t          s_tick_11ms;       /* 11ms→100ms 分频 */
+static uint8_t          s_tick_100ms_cnt;  /* 100ms→1s 分频 */
 
 /* 头键 → 炉头索引 (HMI_KEY_LEFT_P_SET→0, HMI_KEY_RIGHT_P_SET→1, etc.) */
 static int8_t head_key_to_index(uint8_t key);
@@ -86,11 +137,6 @@ static uint8_t is_head_key(uint8_t key);
 /* ================================================================
  * 二、前向声明
  * ================================================================ */
-
-/* 强符号回调: 由 drv_key / main 直调, 链接器自动接线 */
-void AppHmi_OnKey(uint16_t param, void *data_ptr);
-void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr);
-void AppHmi_OnTimer1s(uint16_t param, void *data_ptr);
 
 /* 路由 */
 static const HmiRoute_t *hmi_find_route(const HmiRoute_t *table,
@@ -196,27 +242,38 @@ static void Init(void)
 #ifdef HMI_DEBUG_KEYS
     s_global.in_power_on_seq = 0;
     show_all_off();
-    DrvDisplay_OnRefresh(0, &s_display);
 #else
     run_power_on_seq_step();
 #endif
 
-    g_input.para  = &s_in;
-    g_output.para = &s_out;
-}
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_AppHmiToDrvDisplayLink.params = &s_AppHmiToDrvDisplayParams;
+    s_outPara.DrvDisplay_params     = &s_AppHmiToDrvDisplayLink;
+    s_AppHmiToDrvBuzzerLink.params  = &s_AppHmiToDrvBuzzerParams;
+    s_outPara.DrvBuzzer_params      = &s_AppHmiToDrvBuzzerLink;
 
-static void ProcessInput(void)
-{
-    /* 当前所有逻辑在回调中处理。ProcessInput 保留供后续 route 分流 */
+    /* 初始显示数据写入 LINK params */
+    {
+        MODULE_OUTPUT_PARAMS(AppHmi, DrvDisplay) *dp = &s_AppHmiToDrvDisplayParams;
+        dp->hot_head_idx      = s_display.hot_head_idx;
+        dp->seg_mode          = s_display.seg_mode;
+        dp->leds_power        = s_display.leds_power;
+        dp->leds_timer        = s_display.leds_timer;
+        dp->leds_pause        = s_display.leds_pause;
+        dp->leds_child_lock   = s_display.leds_child_lock;
+        memcpy(dp->seg_chars, s_display.seg_chars, 8);
+        memcpy(dp->seg_blink, s_display.seg_blink, 4);
+        memcpy(dp->leds_head_select, s_display.leds_head_select, 4);
+        memcpy(dp->leds_power_level, s_display.leds_power_level, 10);
+        s_AppHmiToDrvDisplayLink.seq++;
+    }
 }
 
 void App_Hmi_Run(void) { /* 保留，main.c 调用 */ }
 
-/* v2.0 桥接: 保留旧入口名 */
-void App_Hmi_Init(void) { Constructor(); }
-
 /* ---- 导出 ---- */
-MODULE_EXPORT(AppHmi);
 
 /* ================================================================
  * 四、按键 → 路由 → 动作 主流程
@@ -327,26 +384,16 @@ static void debug_show_key_event(uint8_t key, uint8_t evt)
     }
     s_display.seg_chars[7] = ' ';
 
-    s_display.seg_blink[0] = 0;
-    s_display.seg_blink[1] = 0;
+    s_display.seg_blink[0] = 0;    s_display.seg_blink[1] = 0;
     s_display.seg_blink[2] = 0;
     s_display.seg_blink[3] = 0;
 
-    DrvDisplay_OnRefresh(0, &s_display);
 }
 #endif /* HMI_DEBUG_KEYS */
 
-void AppHmi_OnKey(uint16_t param, void *data_ptr)
+static void hmi_process_key(uint8_t key, uint8_t evt)
 {
-    uint8_t          key;
-    uint8_t          evt;
 #ifdef HMI_DEBUG_KEYS
-    (void)data_ptr;
-
-    key = (uint8_t)(param & 0xFFu);
-    evt = (uint8_t)((param >> 8) & 0xFFu);
-
-    /* ---- LED 测试模式 ---- */
     if (s_led_test_active) {
         if (key == HMI_KEY_ONOFF && evt == HMI_KEY_STATE_LONG) {
             s_led_test_active = 0;
@@ -373,7 +420,6 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
         return;
     }
 
-    /* 长按开关 → 进入 LED 测试模式 */
     if (key == HMI_KEY_ONOFF && evt == HMI_KEY_STATE_LONG) {
         s_led_test_active = 1;
         s_led_test_index = 0;
@@ -381,7 +427,6 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
         return;
     }
 
-    /* 正常调试: 显示键码+状态 */
     debug_show_key_event(key, evt);
     return;
 #else
@@ -395,24 +440,16 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
     uint8_t          i;
     uint8_t          matched;
 
-    (void)data_ptr;
-
-    key = (uint8_t)(param & 0xFFu);
-    evt = (uint8_t)((param >> 8) & 0xFFu);
-
-    /* ---- 上电序列中忽略所有按键 ---- */
     if (s_global.in_power_on_seq) {
         post_buzzer(0);
         return;
     }
 
-    /* 只处理 TAP 和 LONG */
     if (evt != HMI_KEY_STATE_TAP && evt != HMI_KEY_STATE_LONG) {
         return;
     }
     event_type = (evt == HMI_KEY_STATE_TAP) ? HMI_EVT_TAP : HMI_EVT_LONG;
 
-    /* ---- 1. 全局路由 ---- */
     if (s_global.mode < HMI_NODE_COUNT) {
         global_cfg = &hmi_cfg.global_nodes[s_global.mode];
         route = hmi_find_route(global_cfg->routes,
@@ -427,19 +464,16 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
         }
     }
 
-    /* ---- 2. 休眠态拒绝 ---- */
     if (s_global.mode == HMI_NODE_DEEP_SLEEP) {
         post_buzzer(0);
         return;
     }
 
-    /* ---- 3. 关机态拒绝 ---- */
     if (s_global.mode == HMI_NODE_POWERED_OFF) {
         post_buzzer(0);
         return;
     }
 
-    /* ---- 4. 童锁拦截 ---- */
     if (s_global.child_lock) {
         matched = 0;
         for (i = 0; i < hmi_cfg.child_lock_whitelist_len; i++) {
@@ -455,23 +489,18 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
         }
     }
 
-    /* ---- 5. 暂停态拒绝 ---- */
     if (s_global.paused) {
         post_buzzer(0);
         return;
     }
 
-    /* 有效按键 → 重置空闲计时 */
     reset_idle_timer();
 
-    /* ---- 6. 确定目标炉头 ---- */
     target = resolve_target();
 
-    /* ---- 7. 进程路由 ---- */
     if (target >= 0) {
         h = &s_heads[target];
 
-        /* 按活跃进程优先级查找 */
         if (h->timer_setting) {
             proc_cfg = &hmi_cfg.process_nodes[HMI_PROC_TIMER_SETTING];
             route = hmi_find_route(proc_cfg->routes,
@@ -503,25 +532,20 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
             }
         }
 
-        /* 进程拥有按键则不放行到 Zone 路由 */
         if (h->timer_setting || h->timer_active || h->boost_active) {
             if (is_head_key(key) || digit_key_to_level(key) >= 0) {
-                /* 头键/数字键: 进程不拥有, 放行到 Zone */
             } else {
-                /* TIMER/PLUS/MINUS 等: 进程已拥有, 有效但无匹配则吞掉 */
                 post_buzzer(1);
                 return;
             }
         }
     }
 
-    /* ---- 8. Zone 路由 ---- */
     if (target >= 0) {
         h = &s_heads[target];
         if (h->node < HMI_ZONE_COUNT) {
             zone_cfg = &hmi_cfg.zone_nodes[h->node];
 
-            /* 线性扫描, 检查动态键 */
             for (i = 0; i < zone_cfg->route_count; i++) {
                 route = &zone_cfg->routes[i];
                 if (hmi_match_dynamic_route(route, key, event_type)) {
@@ -533,7 +557,6 @@ void AppHmi_OnKey(uint16_t param, void *data_ptr)
         }
     }
 
-    /* ---- 9. 未匹配 ---- */
     post_buzzer(0);
 #endif /* HMI_DEBUG_KEYS */
 }
@@ -1270,21 +1293,19 @@ static void post_display(void)
     }
 
     /* v2.0: 写 g_output — 完整复制显示缓存 */
-    s_out.has_display   = 1;
-    s_out.hot_head_idx  = s_display.hot_head_idx;
-    s_out.seg_mode      = s_display.seg_mode;
-    s_out.leds_power    = s_display.leds_power;
-    s_out.leds_timer    = s_display.leds_timer;
-    s_out.leds_pause    = s_display.leds_pause;
-    s_out.leds_child_lock = s_display.leds_child_lock;
-    memcpy(s_out.seg_chars, s_display.seg_chars, 8);
-    memcpy(s_out.seg_blink, s_display.seg_blink, 4);
-    memcpy(s_out.leds_head_select, s_display.leds_head_select, 4);
-    memcpy(s_out.leds_power_level, s_display.leds_power_level, 10);
+    MODULE_OUTPUT_PARAMS(AppHmi, DrvDisplay) *dp = &s_AppHmiToDrvDisplayParams;
+    dp->hot_head_idx      = s_display.hot_head_idx;
+    dp->seg_mode          = s_display.seg_mode;
+    dp->leds_power        = s_display.leds_power;
+    dp->leds_timer        = s_display.leds_timer;
+    dp->leds_pause        = s_display.leds_pause;
+    dp->leds_child_lock   = s_display.leds_child_lock;
+    memcpy(dp->seg_chars, s_display.seg_chars, 8);
+    memcpy(dp->seg_blink, s_display.seg_blink, 4);
+    memcpy(dp->leds_head_select, s_display.leds_head_select, 4);
+    memcpy(dp->leds_power_level, s_display.leds_power_level, 10);
+    s_AppHmiToDrvDisplayLink.seq++;
     g_output.info.route = 1;
-
-    /* v1.0 向后兼容 */
-    DrvDisplay_OnRefresh(0, &s_display);
 }
 
 static void derive_seg_mode(void)
@@ -1517,11 +1538,9 @@ static void sync_leds(void)
  * 十四、超时管理（每 100ms）
  * ================================================================ */
 
-void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
+static void hmi_tick_100ms(void)
 {
 #ifdef HMI_DEBUG_KEYS
-    (void)param;
-    (void)data_ptr;
     return;
 #else
     uint8_t          i;
@@ -1532,18 +1551,13 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
     const HmiGuard_t *guard;
     uint8_t          g;
 
-    (void)param;
-    (void)data_ptr;
-
     s_tick_100ms++;
 
-    /* 上电序列中: 推进步骤 */
     if (s_global.in_power_on_seq) {
         run_power_on_seq_step();
         return;
     }
 
-    /* Zone 超时: selecting → confirm_select */
     for (i = 0; i < 4; i++) {
         h = &s_heads[i];
         if (h->node == HMI_ZONE_SELECTING && h->select_ticks > 0) {
@@ -1555,7 +1569,6 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
         }
     }
 
-    /* 进程超时: timer_setting → confirm_timer */
     for (i = 0; i < 4; i++) {
         h = &s_heads[i];
         if (h->timer_setting && h->timer_set_ticks > 0) {
@@ -1567,7 +1580,6 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
         }
     }
 
-    /* 进程超时: boost_active 倒计时 */
     for (i = 0; i < 4; i++) {
         h = &s_heads[i];
         if (h->boost_active && h->boost_remaining_ms > 0) {
@@ -1578,7 +1590,6 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
         }
     }
 
-    /* Guard 检查: 遍历当前全局模式的 guards */
     if (s_global.mode < HMI_NODE_COUNT) {
         global_cfg = &hmi_cfg.global_nodes[s_global.mode];
         for (g = 0; g < global_cfg->guard_count; g++) {
@@ -1591,7 +1602,7 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
                         hmi_execute_action(
                             (HmiAction_t)guard->action,
                             guard->param, 0, 1);
-                        s_off_ticks = 0; /* 单次触发 */
+                        s_off_ticks = 0;
                     }
                 }
             } else if (guard->check == HMI_GUARD_ALL_IDLE) {
@@ -1601,7 +1612,7 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
                         hmi_execute_action(
                             (HmiAction_t)guard->action,
                             guard->param, 0, 1);
-                        s_idle_ticks = 0; /* 单次触发 */
+                        s_idle_ticks = 0;
                     }
                 }
             }
@@ -1614,18 +1625,13 @@ void AppHmi_OnTimer100ms(uint16_t param, void *data_ptr)
  * 十五、定时倒计时（每 1s）
  * ================================================================ */
 
-void AppHmi_OnTimer1s(uint16_t param, void *data_ptr)
+static void hmi_tick_1s(void)
 {
 #ifdef HMI_DEBUG_KEYS
-    (void)param;
-    (void)data_ptr;
     return;
 #else
     HmiHead_t *h;
     uint8_t   i;
-
-    (void)param;
-    (void)data_ptr;
 
     if (s_global.in_power_on_seq) return;
 
@@ -1784,10 +1790,10 @@ enum {
 /* @OUTPUT_CALLBACK: buzzer real-time feedback — user confirmed */
 static void post_buzzer(uint8_t sound)
 {
-    s_out.has_buzzer = 1;
-    s_out.buzzer_on  = sound;
+    s_AppHmiToDrvBuzzerParams.sound_type = sound;
+    s_AppHmiToDrvBuzzerLink.seq++;
     g_output.info.route = 2;
-    g_output.info.status |= ST_OUT;  /* 触发 _onOutput → 即时路由 */
+    g_output.info.status |= ST_OUT;
 }
 
 /* ================================================================
@@ -1836,6 +1842,41 @@ static uint8_t is_head_key(uint8_t key)
 uint8_t AppSegAlign_CanEnter(void)
 {
     return (s_global.mode == HMI_NODE_POWERED_OFF) ? 1u : 0u;
+}
+
+/* ========== user_Process: HMI 管道驱动 (当前由回调驱动, 暂为空) ========== */
+static void user_Process(MODULE_INPUT(AppHmi) *in, MODULE_OUTPUT(AppHmi) *out, AppHmi_PipeFlags_t flags)
+{
+    /* === 按键处理: DrvKey → LINK params === */
+    if (flags.bits.drvkey) {
+        MODULE_INPUT_PARAMS(DrvKey, AppHmi) *p = in->DrvKey_params->params;
+        hmi_process_key(p->key_code, p->key_state);
+    }
+
+    /* === 功率状态: AppPower → LINK params (更新显示) === */
+    if (flags.bits.apppower) {
+        MODULE_INPUT_PARAMS(AppPower, AppHmi) *p = in->AppPower_params->params;
+        if (p->head_index < 4u) {
+            sync_leds();
+            update_all_displays();
+            post_display();
+        }
+    }
+
+    /* === 定时分频: 11ms → 100ms → 1s === */
+    s_tick_11ms++;
+    if (s_tick_11ms >= 9u) {
+        s_tick_11ms = 0u;
+        hmi_tick_100ms();
+
+        s_tick_100ms_cnt++;
+        if (s_tick_100ms_cnt >= 10u) {
+            s_tick_100ms_cnt = 0u;
+            hmi_tick_1s();
+        }
+    }
+
+    (void)out;
 }
 
 /* =================================================================

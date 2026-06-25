@@ -302,6 +302,44 @@ typedef struct {
  *    X_C = 1 / (ω_sw × C)  // 容抗
  *    Z = √(R² + (X_L - X_C)²)  // 总阻抗模
  */
+
+/* ---- P_W 两种算法: avg_avg = 平均电流×平均电压, inst_avg = 逐周期即时功率平均 ---- */
+typedef struct {
+    float avg_avg;    /* 平均电流×平均电压 */
+    float inst_avg;   /* 逐周期即时功率平均 */
+} PwResult_t;
+
+static void CalcPw(const MODULE_INPUT_PARAMS(Calculator, ElecParams) *cycles, PwResult_t *pw)
+{
+    float i_sum = 0.0f, v_sum = 0.0f, p_sum = 0.0f;
+
+    for (uint8_t i = 1; i < PERIO_CNT; i++) {
+        float loff = (float)cycles[i].hrtim_lowOff;
+        float i_high = (loff > 0.0f) ? ((float)cycles[i].active_current_sum_high / loff) : 0.0f;
+        float i_low  = (loff > 0.0f) ? ((float)cycles[i].active_current_sum_low  / loff) : 0.0f;
+        float p_avg = (cycles[i].voltage_count > 0)
+            ? (float)cycles[i].voltage_sum / (float)cycles[i].voltage_count : 0.0f;
+        float i_total = i_high + i_low;
+
+        i_sum += i_total;
+        v_sum += p_avg;
+        p_sum += i_total * p_avg;
+    }
+
+    /* 多加一次 cycles[10] 补偿缺失的 cycles[0]（50Hz 半周期对称，参考 APP_ADC_TxaAvgSum） */
+    {
+        float loff = (float)cycles[10].hrtim_lowOff;
+        float i_total = ((float)cycles[10].active_current_sum_high + (float)cycles[10].active_current_sum_low) / loff;
+        float p_avg = (cycles[10].voltage_count > 0)
+            ? (float)cycles[10].voltage_sum / (float)cycles[10].voltage_count : 0.0f;
+        i_sum += i_total;
+        v_sum += p_avg;
+        p_sum += i_total * p_avg;
+    }
+
+    pw->avg_avg  = (i_sum / 20.0f) * IH_I_SCALE * (v_sum / 20.0f) * IH_VDC_SCALE;
+    pw->inst_avg = (p_sum / 20.0f) * IH_I_SCALE * IH_VDC_SCALE;
+}
  
 
  
@@ -315,15 +353,15 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     // ---- 单循环：逐周期提取 + 累加（i=1..19, 高压段平均替代中值）----
     uint8_t valid_cnt = 0;
     float I_sum = 0.0f, L_sum = 0.0f, Vdc_sum = 0.0f;
-    float phi_sum = 0.0f, p_sum = 0.0f;
-    uint8_t phi_n = 0, vn = 0, pn = 0;
+    float phi_sum = 0.0f;
+    uint8_t phi_n = 0, vn = 0;
 
     for (uint8_t i = 1; i < PERIO_CNT; i++) {
         const MODULE_INPUT_PARAMS(Calculator, ElecParams) *c = &cycles[i];
 
         // ADC 值 → 实际物理量转换
         float I_pk = (float)c->peak_current  * IH_I_SCALE;
-        float v_avg = (c->voltage_count >= IH_HV_WIN_CNT_MIN)
+        float v_avg = (c->voltage_count > 0)
             ? (float)c->voltage_sum / (float)c->voltage_count : 0.0f;
         float Vdc = v_avg * IH_VDC_SCALE;
 
@@ -350,11 +388,9 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
             }
         }
 
-        // ---- Vdc_mean: 高电压段累加求平均 ----
-        if (c->voltage_count >= IH_HV_WIN_CNT_MIN) {
-            Vdc_sum += Vdc;
-            vn++;
-        }
+        // ---- Vdc_mean: 全周期参与（电压低时自然贡献小）----
+        Vdc_sum += Vdc;
+        vn++;
 
         // ---- φ: 只取高电压段平均 ----
         if (c->voltage_count >= IH_HV_WIN_CNT_MIN) {
@@ -362,14 +398,6 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
             phi_n++;
         }
 
-        // ---- P_W: 20ms周期平均（跳过电压无效周期）----
-        float i_high = (loff > 0.0f) ? ((float)c->active_current_sum_high / loff) : 0.0f;
-        float i_low  = (loff > 0.0f) ? ((float)c->active_current_sum_low  / loff) : 0.0f;
-        if (c->voltage_count >= IH_HV_WIN_CNT_MIN) {
-            float p_avg = (float)c->voltage_sum / (float)c->voltage_count;
-            p_sum += (i_high + i_low) * p_avg * IH_VDC_SCALE;
-            pn++;
-        }
     }
     if (valid_cnt < 1) return 0;  // 无有效数据
 
@@ -379,7 +407,11 @@ static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result
     result->f_sw_Hz  = (ws->f_sw[1] + ws->f_sw[2] + ws->f_sw[3] + ws->f_sw[4] + ws->f_sw[5] + ws->f_sw[6] + ws->f_sw[7] + ws->f_sw[8] + ws->f_sw[9] + ws->f_sw[10] + ws->f_sw[11] + ws->f_sw[12] + ws->f_sw[13] + ws->f_sw[14] + ws->f_sw[15] + ws->f_sw[16] + ws->f_sw[17] + ws->f_sw[18] + ws->f_sw[19]) / 19.0f;
     result->L_uH     = L_sum / (float)valid_cnt;
     result->phi_deg  = (phi_n > 0) ? (phi_sum / (float)phi_n) : 0.0f;
-    result->P_W      = (pn > 0) ? (p_sum / (float)pn) : 0.0f;
+    {
+        PwResult_t pw;
+        CalcPw(cycles, &pw);
+        result->P_W = pw.inst_avg;  /* 逐周期即时功率平均 */
+    }
     // ---- 谐振参数计算 -------------------------------------------------
     // f_res = 1/(2π√(LC)) — 谐振频率
     float LC = (result->L_uH * 1e-6f) * IH_C_FARAD;  // L(μH→H) × C(F)
