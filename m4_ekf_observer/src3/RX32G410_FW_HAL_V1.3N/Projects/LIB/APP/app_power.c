@@ -77,7 +77,7 @@ MODULE_EXPORT(AppPower);
 
 #ifndef HALF
 #include	"API_hrtim_fullbridge.h"
-#include	"wave_capture.h"
+#include	"../BaseClass/inc/wave_capture.h"
 #endif
 //#include "../include/app_power_io.h"
 
