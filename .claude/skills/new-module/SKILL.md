@@ -139,7 +139,9 @@ typedef struct {
 /* 输入管道: 与 MODULE_OUTPUT_LINK(ProducerA, {Module}) 配对 */
 typedef struct {
     uint8_t  status;
-    uint8_t  res[3];
+    uint8_t  max_count;
+    uint8_t  seq;              /* 更新有效性 */
+    uint8_t  route;            /* 路由标识 — 多入口分流 */
     MODULE_INPUT_PARAMS(ProducerA, {Module}) params[{MODULE}_POTMAX];
 } MODULE_INPUT_LINK(ProducerA, {Module});
 
@@ -160,8 +162,10 @@ typedef struct {
 /* 输出管道: 与 MODULE_INPUT_LINK({Module}, ConsumerB) 配对 */
 typedef struct {
     uint8_t  status;
-    uint8_t  res[3];
-    MODULE_OUTPUT_PARAMS({Module}, ConsumerB) params[{MODULE}_POTMAX];
+    uint8_t  max_count;
+    uint8_t  seq;              /* 更新有效性 */
+    uint8_t  route;            /* 路由标识 — 多入口分流 */
+    MODULE_OUTPUT_PARAMS({Module}, ConsumerB) *params;  /* 指针 */
 } MODULE_OUTPUT_LINK({Module}, ConsumerB);
 
 /* 输出聚合 */
@@ -285,6 +289,68 @@ static void ProcessInput(void)
 ```
 
 正常 PULL 路由无需 route，producer 不设 route = 0 即可。`@OUTPUT_CALLBACK` 例外场景下，producer 设 route 值指定 consumer 执行路径。
+
+---
+
+### route + union PARAMS + Switcher_RunNow 扩展 (可选)
+
+当模块需要在同一 LINK 中提供多个子功能入口（如写段码 + 阻塞 HMI）, 且需要即时执行消费者时：
+
+**io.h 模式** — `seq` + `route` + union:
+
+```c
+/* 每个 route 定义自己的 req/resp 结构 */
+typedef struct { uint8_t com; uint8_t seg_mask; uint8_t result; } Write_Params;     /* route=0 */
+typedef struct { uint8_t block; uint8_t ack; }       Block_Params;    /* route=1 */
+
+/* 统一 PARAMS: union 容纳所有 route */
+typedef struct {
+    uint8_t route;
+    union {
+        Write_Params write;
+        Block_Params block;
+    };
+} MODULE_OUTPUT_PARAMS({Module}, DrvDisplay);
+
+/* LINK: route 替代 res[1] */
+typedef struct {
+    uint8_t  status;
+    uint8_t  max_count;
+    uint8_t  seq;
+    uint8_t  route;
+    MODULE_OUTPUT_PARAMS({Module}, DrvDisplay) *params;
+} MODULE_OUTPUT_LINK({Module}, DrvDisplay);
+```
+
+**producer 用法** — 输出段末尾调 `Switcher_RunNow(slot)`:
+
+```c
+/* ====== 输出段 ====== */
+s_link->params->write.com = com;
+s_link->params->write.seg_mask = mask;
+s_link->seq++;
+s_link->route = 0;                         /* write */
+g_output.info.status |= ST_OUT;
+Switcher_RunNow(SLOT_DrvDisplay);          /* 即刻执行 */
+uint8_t result = s_link->params->write.result;  /* 读回传 */
+```
+
+> ⚠️ **Switcher_RunNow 不支持重入，仅单向固定调用**。producer 调 consumer 后，consumer 不得反向调回 producer。深度保护最多 3 级，但实际不应超过 1 级。详见 `08-data-switcher.md §5.6.3`。
+
+**consumer 用法** — ProcessInput 内按 route switch:
+
+```c
+static void ProcessInput(void) {
+    if (flags.bits.{module}) {
+        switch (in->{Module}_params->route) {
+        case 0: /* write: 读 params->write.com/mask, 写 result */ break;
+        case 1: /* block: 读 params->block.block, 写 ack */     break;
+        }
+    }
+}
+```
+
+**AI 自理解**: `route` + `union { write, block }` — AI 看见这两个结构就理解多入口。详见 `08-data-switcher.md §5.6`。
 
 ---
 
