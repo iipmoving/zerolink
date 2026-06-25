@@ -363,10 +363,17 @@ class M4ModbusClient:
         return result
 
     def read_telemetry_pipe(self) -> dict | None:
-        """读取 Telemetry 0x7000 区: Calculator 输入副本 + ElecParams 输出"""
-        raw = self.read_registers(TELEM_START_ADDR, TELEM_TOTAL_WORDS)
-        if raw is None:
-            return None
+        """读取 Telemetry 0x7000 区: Calculator 输入副本 + ElecParams 输出
+           分包: FC03 最大 125 寄存器/次, 330 拆 3 包 (125+125+80)
+        """
+        MAX_PKT = 125
+        raw = []
+        for offset in range(0, TELEM_TOTAL_WORDS, MAX_PKT):
+            count = min(MAX_PKT, TELEM_TOTAL_WORDS - offset)
+            chunk = self.read_registers(TELEM_START_ADDR + offset, count)
+            if chunk is None:
+                return None
+            raw.extend(chunk)
 
         result = {"timestamp": datetime.now().isoformat(timespec='milliseconds')}
 
