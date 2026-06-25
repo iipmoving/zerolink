@@ -104,7 +104,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 
     if (in->AppAdc_params->status & ST_NEW)
     {
-				if(in->AppAdc_params->count)
+				if(in->AppAdc_params->seq)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
 
@@ -120,7 +120,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 						
 
 						out->ElecParams_params->status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
-t					out->ElecParams_params->seq++;
+					    out->ElecParams_params->seq++;
 						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
 						out->AppAdc_params->status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
@@ -133,7 +133,7 @@ t					out->ElecParams_params->seq++;
 /* ---- 处理单个通道数据 ---- */
 static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out)
 {
-    uint8_t cycle_idx = head_in->AppAdc_params->count;  // 当前周期索引 1..19
+    uint8_t cycle_idx = head_in->AppAdc_params->seq;  // 当前周期索引 1..19
 
     /* 输入有效性检查 */
     // if (!head_in->resonant_current || 
