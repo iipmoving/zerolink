@@ -340,20 +340,22 @@ void		AppAdc_getCaculatorValue(MODULE_INPUT(AppAdc) *in)
 static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out)
 {
 
-    out->AppPower_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
-    out->Calculator_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
+    // out->AppPower_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
+    // out->Calculator_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
 	
-			if(in->Calculator_params->seq != s_last_seq_Calculator) { s_last_seq_Calculator = in->Calculator_params->seq;
-		{
-			
-				AppAdc_getCaculatorValue(in);							//得到CACLULATOR的计算结果，用于和原程序一致，后面可取消				
-		
-		}	
+	if(in->Calculator_params->seq != s_last_seq_Calculator)
+    {
+        s_last_seq_Calculator = in->Calculator_params->seq;
+		AppAdc_getCaculatorValue(in);							//得到CACLULATOR的计算结果，用于和原程序一致，后面可取消				
+	}	
 	
 	
-    uint8_t new_data = AdcValueFun();
-    if (!new_data)
-        return;
+    uint8_t new_data = AdcValueFun();       //它里有一个ICVCOC标志和有效标志是同样的功能
+    if (new_data)
+    {
+		out->AppPower_params->seq++;				//输出数据有效
+    }
+
 }
 
 /* ================================================================
@@ -1627,7 +1629,7 @@ void APP_ADC_CalculatePower(void)
 
 				s_outPara.Calculator_params->count=count;
 				
-
+                s_outPara.Calculator_params->seq++;     //新数据产生
 				
 				s_outPara.Calculator_params->params->hrtim_values=TxaHrtimBuff;
 				s_outPara.Calculator_params->params->resonant_current=TxaFmacBuff;

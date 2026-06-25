@@ -23,6 +23,13 @@ static void ProcessInput(void)
     MODULE_OUTPUT(Calculator) *out = (MODULE_OUTPUT(Calculator)*)g_output.para;
 
     /* === 用户业务 (内部自行做 seq 有效性检测) === */
+
+    if (in->AppAdc_params->seq == s_last_seq_AppAdc)
+    { 
+       return;
+    }
+    s_last_seq_AppAdc = in->AppAdc_params->seq; 
+
     user_Process(in, out);
 }
 
@@ -93,9 +100,8 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 //    MODULE_INPUT(Calculator)*   pIn = g_input.para;
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
-    if (in->AppAdc_params->seq != s_last_seq_AppAdc) { s_last_seq_AppAdc = in->AppAdc_params->seq; }
-    else { return; }
-    if(in->AppAdc_params->count)
+
+                if(in->AppAdc_params->count)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
 
@@ -117,7 +123,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 					}
 				}
 				
-    }
+
 }
 
 /* ---- 处理单个通道数据 ---- */

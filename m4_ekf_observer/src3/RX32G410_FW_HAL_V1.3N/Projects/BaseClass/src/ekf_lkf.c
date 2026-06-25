@@ -14,7 +14,7 @@ static MODULE_OUTPUT(EKF_LKF)  s_outPara;   // 输出参数缓冲区
 MODULE_OUTPUT_LINK(EKF_LKF, AppPower)   ekfToPower_outPut; 		//输出管道实例
 
 
-static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out, EKF_LKF_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out);
 
 static void ProcessInput(void)
 {
@@ -333,7 +333,7 @@ void				ekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)
 
 /* ========== 主处理 ====================================================== */
 
-static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out, EKF_LKF_PipeFlags_t flags)
+static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out)
 
 {
 
@@ -342,7 +342,7 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out,
 
     /* ====== 输入段 ====== */
     /* v2.3: 检查数据层 LINK status (ElecParams 输出 LINK 置 ST_OUT 表示新数据就绪) */
-    if (in->ElecParams_params->seq == s_last_seq_ElecParams) return;
+    if (in->ElecParams_params->seq == s_last_seq_ElecParams) { return; }
     s_last_seq_ElecParams = in->ElecParams_params->seq;
 	
 //		in->ElecParams_params->status &=~ ST_NEW;

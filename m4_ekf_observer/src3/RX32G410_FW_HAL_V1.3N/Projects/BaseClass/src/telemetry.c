@@ -68,21 +68,19 @@ static void ProcessInput(void)
     TelemetryData_t *td = &s_telem_data;
 
     /* ---- 复制 Calculator 输入副本 (seq 检测, 不使用 ST_NEW) ---- */
-    if (in->Calculator_params && in->Calculator_params->seq == s_last_seq_calc) { /* skip */ }
-    else {
+    if (in->Calculator_params && in->Calculator_params->seq != s_last_seq_calc) {
         s_last_seq_calc = in->Calculator_params->seq;
         for (uint8_t c = 0; c < TELE_CALC_PERIODS; c++) {
             td->calc[c] = in->Calculator_params->params[TELE_POTCH][c];
         }
-        td->ctrl.status |= 0x02;  /* calc_ready */
+        td->ctrl.status |= 0x02;
     }
 
     /* ---- 复制 ElecParams 输出 (seq 检测) ---- */
-    if (in->ElecParams_params && in->ElecParams_params->seq == s_last_seq_elec) { /* skip */ }
-    else {
+    if (in->ElecParams_params && in->ElecParams_params->seq != s_last_seq_elec) {
         s_last_seq_elec = in->ElecParams_params->seq;
         memcpy(&td->elec, &in->ElecParams_params->params[TELE_POTCH], sizeof(td->elec));
-        td->ctrl.status |= 0x04;  /* elec_ready */
+        td->ctrl.status |= 0x04;
     }
 
     td->ctrl.status |= 0x01;  /* running */
