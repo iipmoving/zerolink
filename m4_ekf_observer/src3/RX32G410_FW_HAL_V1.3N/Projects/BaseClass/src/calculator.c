@@ -104,7 +104,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 
     if (in->AppAdc_params->status & ST_NEW)
     {
-				if(in->AppAdc_params->seq)
+				if(in->AppAdc_params->count)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
 
@@ -133,7 +133,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 /* ---- 处理单个通道数据 ---- */
 static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out)
 {
-    uint8_t cycle_idx = head_in->AppAdc_params->seq;  // 当前周期索引 1..19
+    uint8_t cycle_idx = head_in->AppAdc_params->count;  // 当前周期索引 1..19
 
     /* 输入有效性检查 */
     // if (!head_in->resonant_current || 
