@@ -120,7 +120,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 						
 
 						out->ElecParams_params->status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
-					    out->ElecParams_params->seq++;
+					    out->ElecParams_params->count++;
 						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
 						out->AppAdc_params->status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
