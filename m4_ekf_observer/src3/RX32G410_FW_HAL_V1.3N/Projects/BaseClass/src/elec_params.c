@@ -3,13 +3,6 @@
 
 MODULE_SKELETON(ElecParams);
 
-/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
-typedef union {
-    uint8_t all;
-    struct {
-        uint8_t calculator   : 1;  /* Calculator 数据就绪 */
-    } bits;
-} ElecParams_PipeFlags_t;
 
 /* ---- 管道 SEQ 有效性跟踪 ---- */
 static uint8_t s_last_seq_Calculator;  /* Calculator → ElecParams */
@@ -22,19 +15,15 @@ static MODULE_OUTPUT(ElecParams)  	s_outPara;   // 输出参数缓冲区实体
 static MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)   s_elecToEkfLink;
 static MODULE_OUTPUT_LINK(ElecParams, AppPower)   s_elecToAppPowerLink;
 
-static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out);
 
 static void ProcessInput(void)
 {
     MODULE_INPUT(ElecParams) *in  = (MODULE_INPUT(ElecParams)*)g_input.para;
     MODULE_OUTPUT(ElecParams) *out = (MODULE_OUTPUT(ElecParams)*)g_output.para;
 
-    /* === 输入段: 数据有效检查 === */
-    ElecParams_PipeFlags_t flags = {0};
-    { uint8_t s = in->Calculator_params->seq; if (s != s_last_seq_Calculator) { flags.bits.calculator = 1; s_last_seq_Calculator = s; } }
-
-    /* === 计算段: 用户业务 === */
-    user_Process(in, out, flags);
+    /* === 用户业务 (seq 有效性检测在内部) === */
+    user_Process(in, out);
 }
 
 MODULE_EXPORT(ElecParams);
@@ -490,13 +479,14 @@ static float s_pw_filt[ELEC_POTMAX];
 static uint8_t s_pw_init[ELEC_POTMAX];
 static	ElecParams_Ws		new;
 #include	"API_gpio.h"
-static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_PipeFlags_t flags)
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out)
  {
 
 
     /* ====== 输入段 ====== */
     // 检查是否有新的输入数据（数据层 status）
-    //if (!(in->Calculator_params->status & ST_NEW)) return;
+    if (in->Calculator_params->seq == s_last_seq_Calculator) return;
+    s_last_seq_Calculator = in->Calculator_params->seq;
 
     API_GPIO_WritePin(DebugB_pin, 1);
     // 从输入 LINK 获取共享工作区

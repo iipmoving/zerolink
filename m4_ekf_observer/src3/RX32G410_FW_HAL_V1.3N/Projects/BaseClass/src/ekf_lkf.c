@@ -3,13 +3,6 @@
 
 MODULE_SKELETON(EKF_LKF);
 
-/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
-typedef union {
-    uint8_t all;
-    struct {
-        uint8_t elecparams   : 1;  /* ElecParams 数据就绪 */
-    } bits;
-} EKF_LKF_PipeFlags_t;
 
 /* ---- 管道 SEQ 有效性跟踪 ---- */
 static uint8_t s_last_seq_ElecParams;  /* ElecParams → EKF_LKF */
@@ -28,12 +21,8 @@ static void ProcessInput(void)
     MODULE_INPUT(EKF_LKF) *in  = (MODULE_INPUT(EKF_LKF)*)g_input.para;
     MODULE_OUTPUT(EKF_LKF) *out = (MODULE_OUTPUT(EKF_LKF)*)g_output.para;
 
-    /* === 输入段: 数据有效检查 === */
-    EKF_LKF_PipeFlags_t flags = {0};
-    { uint8_t s = in->ElecParams_params->seq; if (s != s_last_seq_ElecParams) { flags.bits.elecparams = 1; s_last_seq_ElecParams = s; } }
-
-    /* === 计算段: 用户业务 === */
-    user_Process(in, out, flags);
+    /* === 用户业务 === */
+    user_Process(in, out);
 }
 
 MODULE_EXPORT(EKF_LKF);
@@ -353,7 +342,8 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out,
 
     /* ====== 输入段 ====== */
     /* v2.3: 检查数据层 LINK status (ElecParams 输出 LINK 置 ST_OUT 表示新数据就绪) */
-    if (!flags.bits.elecparams) return;
+    if (in->ElecParams_params->seq == s_last_seq_ElecParams) return;
+    s_last_seq_ElecParams = in->ElecParams_params->seq;
 	
 //		in->ElecParams_params->status &=~ ST_NEW;
 	

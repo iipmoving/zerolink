@@ -3,13 +3,6 @@
 
 MODULE_SKELETON(Calculator);
 
-/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
-typedef union {
-    uint8_t all;
-    struct {
-        uint8_t appadc   : 1;  /* AppAdc 数据就绪 */
-    } bits;
-} Calculator_PipeFlags_t;
 
 /* ---- 管道 SEQ 有效性跟踪 (替代 ST_NEW) ---- */
 static uint8_t s_last_seq_AppAdc;  /* AppAdc → Calculator */
@@ -22,19 +15,15 @@ static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
 static MODULE_OUTPUT_LINK(Calculator, ElecParams)  s_calcToElecLink;
 static MODULE_OUTPUT_LINK(Calculator, AppAdc)      s_calcToAppAdcLink;
 
-static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out);
 
 static void ProcessInput(void)
 {
     MODULE_INPUT(Calculator) *in  = (MODULE_INPUT(Calculator)*)g_input.para;
     MODULE_OUTPUT(Calculator) *out = (MODULE_OUTPUT(Calculator)*)g_output.para;
 
-    /* === 输入段: 数据有效检查 === */
-    Calculator_PipeFlags_t flags = {0};
-    { uint8_t s = in->AppAdc_params->seq; if (s != s_last_seq_AppAdc) { flags.bits.appadc = 1; s_last_seq_AppAdc = s; } }
-
-    /* === 计算段: 用户业务 === */
-    user_Process(in, out, flags);
+    /* === 用户业务 (内部自行做 seq 有效性检测) === */
+    user_Process(in, out);
 }
 
 MODULE_EXPORT(Calculator);
@@ -99,14 +88,14 @@ static CalculatorResultDef CalculateAuctalCurrent(uint16_t* resonant_current,
 static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out);
 static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uint16_t* voltage_data,Calculator_InputParams_t* input,MODULE_OUTPUT_PARAMS(Calculator, ElecParams) *outPut);
 /* ---- 处理逻辑入口（每帧被调）---- */
-static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags)
+static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out)
 {
 //    MODULE_INPUT(Calculator)*   pIn = g_input.para;
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
-    if (flags.bits.appadc)
-    {
-				if(in->AppAdc_params->count)
+    if (in->AppAdc_params->seq != s_last_seq_AppAdc) { s_last_seq_AppAdc = in->AppAdc_params->seq; }
+    else { return; }
+    if(in->AppAdc_params->count)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
 

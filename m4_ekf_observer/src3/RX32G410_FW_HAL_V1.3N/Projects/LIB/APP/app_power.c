@@ -14,6 +14,10 @@ typedef union {
     } bits;
 } AppPower_PipeFlags_t;
 
+/* ---- 管道 SEQ 有效性跟踪 ---- */
+static uint8_t s_last_seq_AppAdc;   /* AppAdc → AppPower */
+static uint8_t s_last_seq_EKF_LKF;  /* EKF_LKF → AppPower */
+
 /* ---- 数据实体（模块私有）---- */
 static MODULE_INPUT(AppPower)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(AppPower)  s_outPara;   // 输出参数缓冲区
@@ -22,7 +26,7 @@ static MODULE_OUTPUT(AppPower)  s_outPara;   // 输出参数缓冲区
 
 
 
-static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out);
 
 static void ProcessInput(void)
 {
@@ -30,12 +34,8 @@ static void ProcessInput(void)
     MODULE_OUTPUT(AppPower) *out = (MODULE_OUTPUT(AppPower)*)g_output.para;
 
     /* === 输入段: 数据有效检查 === */
-    AppPower_PipeFlags_t flags = {0};
-    flags.bits.appadc = (in->AppAdc_params->status & ST_NEW) ? 1 : 0;
-    flags.bits.ekf_lkf = (in->EKF_LKF_params->status & ST_NEW) ? 1 : 0;
-
-    /* === 计算段: 用户业务 === */
-    user_Process(in, out, flags);
+    /* === 用户业务 === */
+    user_Process(in, out);
 }
 
 MODULE_EXPORT(AppPower);
@@ -6461,9 +6461,8 @@ void		API_POWER_PanCheckPluse(void)
 }	
 void	Power_EKF_Input(MODULE_INPUT(AppPower) *in)
 {
-		if(in->EKF_LKF_params->status&ST_NEW)				//adc输入有效
+		if (in->EKF_LKF_params->seq != s_last_seq_EKF_LKF) { s_last_seq_EKF_LKF = in->EKF_LKF_params->seq; }
 		{
-			in->EKF_LKF_params->status&=ST_NEW;
 
 			MODULE_INPUT_PARAMS(EKF_LKF, AppPower)  elecOut[4];	
 //	    /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
@@ -6478,9 +6477,8 @@ void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 {
 	
 
-		if(in->AppAdc_params->status&ST_NEW)				//adc输入有效
+		if (in->AppAdc_params->seq != s_last_seq_AppAdc) { s_last_seq_AppAdc = in->AppAdc_params->seq; }
 		{
-			in->AppAdc_params->status&=ST_NEW;
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
     for (uint8_t ch = 0; ch < POTNUM; ch++) {
 
@@ -6571,7 +6569,7 @@ static void Init(void)
 
 }
 
-static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlags_t flags)
+static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out)
 {
     uint8_t ch;
 

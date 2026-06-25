@@ -11,6 +11,9 @@ typedef union {
     } bits;
 } AppAdc_PipeFlags_t;
 
+/* ---- 管道 SEQ 有效性跟踪 ---- */
+static uint8_t s_last_seq_Calculator;  /* Calculator → AppAdc */
+
 /* ---- 数据实体（模块私有）---- */
 static MODULE_INPUT(AppAdc)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(AppAdc)   s_outPara;   // 输出参数缓冲区
@@ -19,18 +22,15 @@ static MODULE_OUTPUT(AppAdc)   s_outPara;   // 输出参数缓冲区
 static MODULE_OUTPUT_LINK(AppAdc, AppPower)     s_appPowerLink;
 static MODULE_OUTPUT_LINK(AppAdc, Calculator)   s_calcLink;
 
-static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t flags);
+static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out);
 
 static void ProcessInput(void)
 {
     MODULE_INPUT(AppAdc) *in  = (MODULE_INPUT(AppAdc)*)g_input.para;
     MODULE_OUTPUT(AppAdc) *out = (MODULE_OUTPUT(AppAdc)*)g_output.para;
 
-    /* === 输入段: 数据有效检查 === */
-    AppAdc_PipeFlags_t flags = {0};
-
-    /* === 计算段: 用户业务 === */
-    user_Process(in, out, flags);
+    /* === 用户业务 === */
+    user_Process(in, out);
 }
 
 MODULE_EXPORT(AppAdc);
@@ -337,15 +337,14 @@ void		AppAdc_getCaculatorValue(MODULE_INPUT(AppAdc) *in)
 /* ================================================================
  * ProcessInput — 输入处理主函数
  * ============================================================== */
-static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t flags)
+static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out)
 {
 
     out->AppPower_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
     out->Calculator_params->status &= ~ST_NEW;        //每次 都需要清除输出标志位
 	
-			if(in->Calculator_params->status&ST_NEW)
+			if(in->Calculator_params->seq != s_last_seq_Calculator) { s_last_seq_Calculator = in->Calculator_params->seq;
 		{
-				in->Calculator_params->status&=~ST_NEW;
 			
 				AppAdc_getCaculatorValue(in);							//得到CACLULATOR的计算结果，用于和原程序一致，后面可取消				
 		
@@ -355,7 +354,6 @@ static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, A
     uint8_t new_data = AdcValueFun();
     if (!new_data)
         return;
-		out->AppPower_params->status |= ST_NEW;				//输出数据有效
 }
 
 /* ================================================================
@@ -1629,7 +1627,7 @@ void APP_ADC_CalculatePower(void)
 
 				s_outPara.Calculator_params->count=count;
 				
-				s_outPara.Calculator_params->status=ST_NEW;
+
 				
 				s_outPara.Calculator_params->params->hrtim_values=TxaHrtimBuff;
 				s_outPara.Calculator_params->params->resonant_current=TxaFmacBuff;
