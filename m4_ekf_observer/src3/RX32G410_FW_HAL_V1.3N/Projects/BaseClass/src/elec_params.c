@@ -6,7 +6,6 @@ MODULE_SKELETON(ElecParams);
 /* ---- 管道 SEQ 有效性跟踪 ---- */
 
 
-/* ---- 管道 SEQ 有效性跟踪 ---- */
 static uint8_t s_last_seq_Calculator;  /* Calculator → ElecParams */
 
 /* ---- 数据实体（模块私有）---- */
@@ -18,6 +17,7 @@ static MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)   s_elecToEkfLink;
 static MODULE_OUTPUT_LINK(ElecParams, AppPower)   s_elecToAppPowerLink;
 
 
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out);
 static void ProcessInput(void)
 {
     MODULE_INPUT(ElecParams) *in  = (MODULE_INPUT(ElecParams)*)g_input.para;
@@ -483,9 +483,9 @@ static float s_pw_filt[ELEC_POTMAX];
 static uint8_t s_pw_init[ELEC_POTMAX];
 static	ElecParams_Ws		new;
 #include	"API_gpio.h"
- {
 
-
+static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out)
+{
     /* ====== 输入段 ====== */
     if (in->Calculator_params->seq == s_last_seq_Calculator) { return; }
     s_last_seq_Calculator = in->Calculator_params->seq;
