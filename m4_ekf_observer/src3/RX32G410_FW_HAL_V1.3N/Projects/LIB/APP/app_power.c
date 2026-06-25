@@ -6461,7 +6461,8 @@ void		API_POWER_PanCheckPluse(void)
 }	
 void	Power_EKF_Input(MODULE_INPUT(AppPower) *in)
 {
-		if (in->EKF_LKF_params->seq != s_last_seq_EKF_LKF) { s_last_seq_EKF_LKF = in->EKF_LKF_params->seq; }
+		if (in->EKF_LKF_params->seq == s_last_seq_EKF_LKF) return;
+		s_last_seq_EKF_LKF = in->EKF_LKF_params->seq;
 		{
 
 			MODULE_INPUT_PARAMS(EKF_LKF, AppPower)  elecOut[4];	
@@ -6477,7 +6478,8 @@ void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 {
 	
 
-		if (in->AppAdc_params->seq != s_last_seq_AppAdc) { s_last_seq_AppAdc = in->AppAdc_params->seq; }
+		if (in->AppAdc_params->seq == s_last_seq_AppAdc) return;
+		s_last_seq_AppAdc = in->AppAdc_params->seq;
 		{
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
     for (uint8_t ch = 0; ch < POTNUM; ch++) {
