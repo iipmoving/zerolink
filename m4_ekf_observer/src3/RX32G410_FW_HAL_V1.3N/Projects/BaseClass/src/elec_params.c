@@ -11,6 +11,9 @@ typedef union {
     } bits;
 } ElecParams_PipeFlags_t;
 
+/* ---- 管道 SEQ 有效性跟踪 ---- */
+static uint8_t s_last_seq_Calculator;  /* Calculator → ElecParams */
+
 /* ---- 数据实体（模块私有）---- */
 static MODULE_INPUT(ElecParams)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(ElecParams)  	s_outPara;   // 输出参数缓冲区实体
@@ -28,7 +31,7 @@ static void ProcessInput(void)
 
     /* === 输入段: 数据有效检查 === */
     ElecParams_PipeFlags_t flags = {0};
-    flags.bits.calculator = (in->Calculator_params->status & ST_NEW) ? 1 : 0;
+    { uint8_t s = in->Calculator_params->seq; if (s != s_last_seq_Calculator) { flags.bits.calculator = 1; s_last_seq_Calculator = s; } }
 
     /* === 计算段: 用户业务 === */
     user_Process(in, out, flags);
@@ -493,10 +496,9 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 
     /* ====== 输入段 ====== */
     // 检查是否有新的输入数据（数据层 status）
-    if (!(in->Calculator_params->status & ST_NEW)) return;
+    //if (!(in->Calculator_params->status & ST_NEW)) return;
 
     API_GPIO_WritePin(DebugB_pin, 1);
-    in->Calculator_params->status &= ~ST_NEW;
     // 从输入 LINK 获取共享工作区
 	
 
@@ -537,7 +539,7 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
     API_GPIO_WritePin(DebugB_pin, 0);
     // 更新状态 — 写输出 LINK status + 清除输入 LINK status
 //    out->AppPower_params->status |= ST_NEW;
-		out->EKF_LKF_params->status |= ST_NEW;
+
     	out->EKF_LKF_params->seq++;
 
     /* ---- 设置 Telemetry 输出管道指针 ---- */

@@ -11,6 +11,9 @@ typedef union {
     } bits;
 } Calculator_PipeFlags_t;
 
+/* ---- 管道 SEQ 有效性跟踪 (替代 ST_NEW) ---- */
+static uint8_t s_last_seq_AppAdc;  /* AppAdc → Calculator */
+
 /* ---- 数据实体（模块私有）---- */
 static MODULE_INPUT(Calculator)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
 static MODULE_OUTPUT(Calculator)  s_outPara;   // 输出参数缓冲区
@@ -28,7 +31,7 @@ static void ProcessInput(void)
 
     /* === 输入段: 数据有效检查 === */
     Calculator_PipeFlags_t flags = {0};
-    flags.bits.appadc = (in->AppAdc_params->status & ST_NEW) ? 1 : 0;
+    { uint8_t s = in->AppAdc_params->seq; if (s != s_last_seq_AppAdc) { flags.bits.appadc = 1; s_last_seq_AppAdc = s; } }
 
     /* === 计算段: 用户业务 === */
     user_Process(in, out, flags);
@@ -98,17 +101,15 @@ static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uin
 /* ---- 处理逻辑入口（每帧被调）---- */
 static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_PipeFlags_t flags)
 {
-	out->ElecParams_params->status &= ~ST_NEW;
 //    MODULE_INPUT(Calculator)*   pIn = g_input.para;
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
-    if (in->AppAdc_params->status & ST_NEW)
+    if (flags.bits.appadc)
     {
 				if(in->AppAdc_params->count)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
 
-					in->AppAdc_params->status &= ~ST_NEW;
 
 				}
 				else
@@ -119,11 +120,11 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 					{		
 						
 
-						out->ElecParams_params->status |= ST_NEW;		//ELEC 模块数据有效，这里可能不需要了
+			//ELEC 模块数据有效，这里可能不需要了
 					    out->ElecParams_params->seq++;
 						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
-						out->AppAdc_params->status |= ST_NEW;		//power 模块数据有效，这里可能不需要了
+			//power 模块数据有效，这里可能不需要了
 					}
 				}
 				
