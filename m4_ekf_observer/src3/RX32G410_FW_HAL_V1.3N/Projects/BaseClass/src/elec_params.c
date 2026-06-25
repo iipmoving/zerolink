@@ -14,7 +14,7 @@ static MODULE_OUTPUT(ElecParams)  	s_outPara;   // 输出参数缓冲区实体
 
 /* ---- 内部 OUTPUT_LINK 实例 (指针直穿目标) ---- */
 static MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)   s_elecToEkfLink;
-static MODULE_OUTPUT_LINK(ElecParams, AppPower)   s_elecToAppPowerLink;
+// static MODULE_OUTPUT_LINK(ElecParams, AppPower)   s_elecToAppPowerLink;
 
 
 static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out);
@@ -457,10 +457,10 @@ static void Init(void) {
 
 	/* 绑定 OUTPUT_LINK 指钺 */
 	s_outPara.EKF_LKF_params   = &s_elecToEkfLink;
-	s_outPara.AppPower_params  = &s_elecToAppPowerLink;
+	// s_outPara.AppPower_params  = &s_elecToAppPowerLink;
 
 //		s_outPara.AppPower_params->res[0]=4;				//CONSET_OUT :ELC_TO_APPPOWER
-			s_outPara.EKF_LKF_params->res[0]=5;			//CONSET_OUT :ELC_TO_EKF
+	s_outPara.EKF_LKF_params->res[0]=5;			//CONSET_OUT :ELC_TO_EKF
 
     g_input.para  = &s_inPara;
     g_output.para = &s_outPara;
@@ -534,7 +534,7 @@ static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams)
 //    out->AppPower_params->status |= ST_NEW;
 
     	out->EKF_LKF_params->seq++;
-
+        // out->AppPower_params->seq++;        //测试用
     /* ---- 设置 Telemetry 输出管道指针 ---- */
 
         out->Telemetry_params=out->EKF_LKF_params;

@@ -6461,15 +6461,16 @@ void		API_POWER_PanCheckPluse(void)
 }	
 void	Power_EKF_Input(MODULE_INPUT(AppPower) *in)
 {
-		if (in->EKF_LKF_params->seq == s_last_seq_EKF_LKF) { return; }
+		if (in->EKF_LKF_params->seq == s_last_seq_EKF_LKF)
+		 { return; }
 		s_last_seq_EKF_LKF = in->EKF_LKF_params->seq;
-		{
+		
 
-			MODULE_INPUT_PARAMS(EKF_LKF, AppPower)  elecOut[4];	
+		MODULE_INPUT_PARAMS(EKF_LKF, AppPower)  elecOut[4];	
 //	    /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
-			memcpy(elecOut,	&in->EKF_LKF_params->params[0], sizeof(MODULE_INPUT_PARAMS(EKF_LKF, AppPower) )*4);
+		memcpy(elecOut,	&in->EKF_LKF_params->params[0], sizeof(MODULE_INPUT_PARAMS(EKF_LKF, AppPower) )*4);
 //	
-		}
+		
 }	
 
 
@@ -6478,28 +6479,25 @@ void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 {
 	
 
-		if (in->AppAdc_params->seq == s_last_seq_AppAdc) { return; }
-		s_last_seq_AppAdc = in->AppAdc_params->seq;
-		{
+	if (in->AppAdc_params->seq == s_last_seq_AppAdc)
+	 { return; }
+	s_last_seq_AppAdc = in->AppAdc_params->seq;
+		
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
     for (uint8_t ch = 0; ch < POTNUM; ch++) {
 
 
-				PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
+		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
         PowerMem[ch].staticReg->current16 =in->AppAdc_params->params[ch].current;// 		s_AdcLink->params->txa[ch];
-				PowerMem[ch].input->status.currentAd = PowerMem[ch].staticReg->current16 >> 2;		//为了通讯显示
-
-
+		PowerMem[ch].input->status.currentAd = PowerMem[ch].staticReg->current16 >> 2;		//为了通讯显示
         PowerMem[ch].input->status.voltageAd = in->AppAdc_params->params[ch].voltage>> 4;
-
         PowerMem[ch].staticReg->phaseValue = in->AppAdc_params->params[ch].phase;
-				PowerMem[ch].input->status.bottomAd = in->AppAdc_params->params[ch].bottom>> 4;
-				PowerMem[ch].input->status.igbtAd = in->AppAdc_params->params[ch].igbt>> 4;
-
-				PowerMem[ch].input->status.equivalentResistance=powerPhase/10;			//度数
+		PowerMem[ch].input->status.bottomAd = in->AppAdc_params->params[ch].bottom>> 4;
+		PowerMem[ch].input->status.igbtAd = in->AppAdc_params->params[ch].igbt>> 4;
+		PowerMem[ch].input->status.equivalentResistance=powerPhase/10;			//度数
     }
 
-	}	
+	
 }
 
 #if 0
@@ -6561,12 +6559,7 @@ void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
 static void Init(void)
 {
     g_input.para  = &s_inPara;				//它的实际初始化在输入回调里
-		g_input.info.inMax=3;
-		g_output.info.outMax=2;
-	
-		s_outPara.res[0]=1;
-
-	
+	s_outPara.res[0]=1;
     g_output.para = &s_outPara;
 
 }
@@ -6576,17 +6569,8 @@ static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *ou
     uint8_t ch;
 
     /* ---- 输入段: 检查新数据 ---- */
-
-
-
-
-
-			Power_Adc_Input(in);					//从缓存区获得ADC输入值
-
-
-			Power_EKF_Input(in);
-		
-
+	Power_Adc_Input(in);					//从缓存区获得ADC输入值
+	Power_EKF_Input(in);
     /* ---- 计算段 + 输出段 ---- */
     PowerTypeFun();
 

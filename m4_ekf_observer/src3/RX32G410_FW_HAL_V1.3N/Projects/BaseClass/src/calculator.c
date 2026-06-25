@@ -101,6 +101,7 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 //    MODULE_OUTPUT(Calculator)*  pOut = g_output.para;
 
 
+
                 if(in->AppAdc_params->count)
 				{	
 					ProcessAllHead(in, out);			//对每1ms数据进行计算
@@ -111,15 +112,17 @@ static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator)
 				{
 						// 完成 Calculator→PowerBase 直接参数平均值 // 每20ms计算一次
 					
-					if((out->AppAdc_params->status&ST_NEW)==0)			//以经执行就不再执行这个时间片，等ADC把数据取走
+					// if((out->AppAdc_params->status&ST_NEW)==0)			//以经执行就不再执行这个时间片，等ADC把数据取走
 					{		
 						
 
 			//ELEC 模块数据有效，这里可能不需要了
-					    out->ElecParams_params->seq++;
+					    out->ElecParams_params->seq++;  //elec 模块数据有效
 						out->Telemetry_params=out->ElecParams_params;	//数据指向向ELEC输出的缓存
 						
 			//power 模块数据有效，这里可能不需要了
+                         out->AppAdc_params->seq++;      // 输出有效
+				
 					}
 				}
 				
@@ -192,7 +195,7 @@ static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calc
 
 
     }
-	}
+}
 //----------------------------------------------------------------			
 
 			

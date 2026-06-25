@@ -66,35 +66,35 @@ typedef MODULE_OUTPUT_LINK(ElecParams, EKF_LKF) MODULE_OUTPUT_LINK(ElecParams, T
 /* ------------------------------------------------------------------
  * ElecParams → AppPower  输出参数  (ElecParams → AppPower: 电参数计算结果 (含阻抗/有效值))
  * ------------------------------------------------------------------ */
-typedef struct {
-    uint8_t valid;     /* 数据有效性 */
-    int32_t I_peak_A;     /* 峰值电流 (0.01A) */
-    int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
-    int32_t phi_deg;     /* 相位角 (0.01°) */
-    int32_t L_uH;     /* 等效电感 (0.01μH) */
-    int32_t f_res_Hz;      /* 谐振频率 (0.01Hz) */
-    int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
-    int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
-    int32_t P_W;     /* 有功功率 (0.01W) */
-    int32_t Q_factor;     /* 品质因数 (0.01) */
-    int32_t I_rms;     /* 电流有效值 (A) — I_rms = I_peak × √2/2 */
-    int32_t Z_mag_ohm;     /* 阻抗模 (Ω) — Z = √(R² + X²) */
-    int32_t X_ohm;     /* 净电抗 (Ω) — X = X_L - X_C */
-} MODULE_OUTPUT_PARAMS(ElecParams, AppPower);
+// typedef struct {
+//     uint8_t valid;     /* 数据有效性 */
+//     int32_t I_peak_A;     /* 峰值电流 (0.01A) */
+//     int32_t Vdc_mean;     /* 母线电压均值 (0.01V) */
+//     int32_t phi_deg;     /* 相位角 (0.01°) */
+//     int32_t L_uH;     /* 等效电感 (0.01μH) */
+//     int32_t f_res_Hz;      /* 谐振频率 (0.01Hz) */
+//     int32_t R_ohm;     /* 等效电阻 (0.01Ω) */
+//     int32_t f_sw_Hz;     /* 开关频率 (0.01Hz) */
+//     int32_t P_W;     /* 有功功率 (0.01W) */
+//     int32_t Q_factor;     /* 品质因数 (0.01) */
+//     int32_t I_rms;     /* 电流有效值 (A) — I_rms = I_peak × √2/2 */
+//     int32_t Z_mag_ohm;     /* 阻抗模 (Ω) — Z = √(R² + X²) */
+//     int32_t X_ohm;     /* 净电抗 (Ω) — X = X_L - X_C */
+// } MODULE_OUTPUT_PARAMS(ElecParams, AppPower);
 
-typedef struct {
-    uint8_t  status;           /* ST_NEW / ST_OUT */
-    uint8_t  count;            /* count */
-    uint8_t  seq;              /* seq */
-    uint8_t  res[1];
-    MODULE_OUTPUT_PARAMS(ElecParams, AppPower) params[4];
-} MODULE_OUTPUT_LINK(ElecParams, AppPower);
+// typedef struct {
+//     uint8_t  status;           /* ST_NEW / ST_OUT */
+//     uint8_t  count;            /* count */
+//     uint8_t  seq;              /* seq */
+//     uint8_t  res[1];
+//     MODULE_OUTPUT_PARAMS(ElecParams, AppPower) params[4];
+// } MODULE_OUTPUT_LINK(ElecParams, AppPower);
 
 /* ElecParams_Output — 输出聚合 */
 typedef struct {
     MODULE_OUTPUT_LINK(ElecParams, EKF_LKF)         *EKF_LKF_params;
     MODULE_OUTPUT_LINK(ElecParams, Telemetry)      *Telemetry_params;
-    MODULE_OUTPUT_LINK(ElecParams, AppPower)        *AppPower_params;
+    // MODULE_OUTPUT_LINK(ElecParams, AppPower)        *AppPower_params;
 } MODULE_OUTPUT(ElecParams);
 
 /* ==========================================================================

@@ -342,7 +342,9 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out)
 
     /* ====== 输入段 ====== */
     /* v2.3: 检查数据层 LINK status (ElecParams 输出 LINK 置 ST_OUT 表示新数据就绪) */
-    if (in->ElecParams_params->seq == s_last_seq_ElecParams) { return; }
+    if (in->ElecParams_params->seq == s_last_seq_ElecParams)
+     { return; }
+
     s_last_seq_ElecParams = in->ElecParams_params->seq;
 	
 //		in->ElecParams_params->status &=~ ST_NEW;
@@ -373,7 +375,7 @@ static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out)
         }
 
     }
-		ekf_outPut(in,out);				//数据输出
-    out->AppPower_params->status |= ST_NEW;
+	ekf_outPut(in,out);				//数据输出
+    out->AppPower_params->seq++;
 }
 
