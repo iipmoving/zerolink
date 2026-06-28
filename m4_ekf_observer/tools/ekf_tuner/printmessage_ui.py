@@ -177,7 +177,7 @@ class PrintMessageTab:
     def _update_log_display(self):
         """在主线程中更新日志显示"""
         with self._lock:
-            if lines_to_add == 0:
+            if not self._log:
                 return
             self.log_text.config(state=tk.NORMAL)
             for _, line in self._log:
