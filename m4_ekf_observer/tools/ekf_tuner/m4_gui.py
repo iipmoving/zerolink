@@ -1283,12 +1283,13 @@ class M4DebugApp:
 
         def hooked_recv(size):
             data = orig_recv(size)
+            # PM 数据比 MODBUS 响应晚到几 ms, 等一会再捞
+            time.sleep(0.005)
             try:
-                while ser and ser.in_waiting:
-                    extra = ser.read(ser.in_waiting)
-                    for raw in extra.split(b"\n"):
+                if ser and ser.in_waiting:
+                    for raw in ser.read(ser.in_waiting).split(b"\n"):
                         line = raw.decode("utf-8", errors="replace").strip("\r").strip()
-                        if line and _is_pm_line(line):
+                        if line.startswith("#PM"):
                             if hasattr(self, '_pm_ui') and self._pm_ui:
                                 self._pm_ui.feed_line(line)
             except Exception:
