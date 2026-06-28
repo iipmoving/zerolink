@@ -20,8 +20,6 @@ UART 输出格式 (来自 PrintMessageOut + PrintMessageFun):
 """
 
 import re
-import csv
-import io
 from typing import Optional
 
 
