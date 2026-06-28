@@ -1268,12 +1268,12 @@ class M4DebugApp:
 
     def _start_pm_reader(self):
         """连接成功后启动 PM reader 线程 (从 raw serial 读文本行)"""
-        if not self.client or not hasattr(self.client.client, 'serial'):
+        if not self.client or not hasattr(self.client.client, 'socket'):
             return
         self._pm_running = True
 
         def _reader():
-            ser = self.client.client.serial
+            ser = self.client.client.socket  # pymodbus 3.13 .socket
             buf = b""
             while self._pm_running and ser and ser.is_open:
                 try:

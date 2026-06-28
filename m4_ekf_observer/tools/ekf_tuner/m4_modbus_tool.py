@@ -175,7 +175,7 @@ class M4ModbusClient:
     HEARTBEAT_INTERVAL = 0.5  # 心跳间隔秒
 
     def __init__(self, port: str, baudrate: int = 115200,
-                 slave_addr: int = 5, timeout: float = 0.5):
+                 slave_addr: int = 5, timeout: float = 0.05):
         self.port = port
         self.baudrate = baudrate
         self.slave_addr = slave_addr
@@ -281,26 +281,27 @@ class M4ModbusClient:
         framer_cls._crc_patched = True
 
     def disconnect(self):
-        self.stop_heartbeat()
+        """断开串口，其他不管"""
         if self.client:
-            self.client.close()
-            print("[OK] 已断开连接")
+            try:
+                self.client.close()
+            except Exception:
+                pass
+            self.client = None
+        print("[OK] 已断开")
 
     def read_registers(self, start_addr: int, count: int) -> list | None:
         """读取保持寄存器 (功能码 0x03)"""
         if not self.client:
-            print("[错误] 未连接")
             return None
         try:
             rr = self.client.read_holding_registers(
                 start_addr, count=count, device_id=self.slave_addr
             )
             if rr.isError():
-                print(f"[MODBUS错误] 读寄存器 0x{start_addr:04X}: {rr}")
                 return None
             return list(rr.registers)
-        except Exception as e:
-            print(f"[通信错误] 读寄存器: {e}")
+        except Exception:
             return None
 
     def write_register(self, addr: int, value: int) -> bool:
@@ -620,7 +621,7 @@ class M4ModbusClient:
         if self._heartbeat_stop:
             self._heartbeat_stop.set()
         if self._heartbeat_thread:
-            self._heartbeat_thread.join(timeout=2)
+            self._heartbeat_thread.join(timeout=0.5)
             self._heartbeat_thread = None
             self._heartbeat_stop = None
 

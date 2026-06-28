@@ -35,7 +35,7 @@ BORDER = "#2d2d2d"
 class PrintMessageTab:
     """PrintMessage 串口上报 UI — 可作为 Toplevel 或 Frame 嵌入"""
 
-    def __init__(self, parent, sendline_cb=None):
+    def __init__(self, parent, sendline_cb=None, **kwargs):
         """
         Args:
             parent: tkinter parent widget (Toplevel 或 Frame)
