@@ -7,7 +7,6 @@ pan_analyzer.py — PAN 数据处理: CSV 导出 + f_res 计算
 """
 
 import os
-import csv
 import numpy as np
 
 
