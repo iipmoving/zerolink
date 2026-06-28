@@ -323,6 +323,10 @@ class M4DebugApp:
         # 数据记录
         self._recording = False
         self._records = []   # 内存记录, 停止时批量写 CSV
+
+        # PrintMessage 后台读取
+        self._pm_thread = None
+        self._pm_running = False
         self._csv_fields = ["timestamp", "freq_hz", "phase_deg",
                            "delta_ppg_signed", "power_actual", "power_target"]
 
@@ -1164,6 +1168,8 @@ class M4DebugApp:
 
         if ok:
             self.client = c
+            # 启动 PrintMessage 后台读取 (转发到 PM 窗口)
+            self._start_pm_reader()
             self._set_connected_state(True)
             self._set_status(f"已连接 {c.port} @ {c.baudrate} baud, 从站={c.slave_addr}")
             # 协议初始化: 检查 SYS_STA bit 7, 按需触发初始化
@@ -1186,6 +1192,7 @@ class M4DebugApp:
             self._set_status(f"连接失败: {port}")
 
     def _disconnect(self):
+        self._stop_pm_reader()
         self._stop_monitor()
         self._stop_recording()
         if self.plotter:
@@ -1256,6 +1263,39 @@ class M4DebugApp:
 
         self._pm_ui = PrintMessageTab(self._pm_window)
         self._pm_ui._start_capture()
+
+    # ---- PrintMessage 数据转发 ----------------------------------
+
+    def _start_pm_reader(self):
+        """连接成功后启动 PM reader 线程 (从 raw serial 读文本行)"""
+        if not self.client or not hasattr(self.client.client, 'serial'):
+            return
+        self._pm_running = True
+
+        def _reader():
+            ser = self.client.client.serial
+            buf = b""
+            while self._pm_running and ser and ser.is_open:
+                try:
+                    if ser.in_waiting:
+                        buf += ser.read(ser.in_waiting)
+                        while b"\n" in buf:
+                            line, buf = buf.split(b"\n", 1)
+                            text = line.decode("utf-8", errors="ignore").strip()
+                            if text and hasattr(self, '_pm_ui') and self._pm_ui:
+                                self._pm_ui.feed_line(text)
+                    else:
+                        import time
+                        time.sleep(0.01)
+                except Exception:
+                    break
+            self._pm_running = False
+
+        self._pm_thread = threading.Thread(target=_reader, daemon=True)
+        self._pm_thread.start()
+
+    def _stop_pm_reader(self):
+        self._pm_running = False
 
     # ---- 数据读取 ----------------------------------------------
 
