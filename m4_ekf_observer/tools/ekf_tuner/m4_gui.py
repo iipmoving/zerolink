@@ -37,6 +37,12 @@ try:
 except ImportError:
     HAS_PLOT = False
 
+try:
+    from printmessage_ui import PrintMessageTab
+    HAS_PM = True
+except ImportError:
+    HAS_PM = False
+
 # ============================================================
 # 初始化 / 控制寄存器 (0x2000-0x2014)
 # 与 M4 固件 IH_STA_READ_WRITE 结构体对齐
@@ -461,6 +467,12 @@ class M4DebugApp:
                                   activebackground=BORDER, relief=tk.FLAT,
                                   cursor="hand2", state=tk.DISABLED, width=7)
         self.rec_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
+        self.pm_btn = tk.Button(bar, text="📡 PM", command=self._toggle_pm_window,
+                                bg=BORDER, fg=FG, font=("Consolas", 9),
+                                activebackground=BORDER, relief=tk.FLAT,
+                                cursor="hand2", state=tk.DISABLED, width=7)
+        self.pm_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
         # 遥测选择 checkboxes
         sep2 = tk.Frame(bar, width=2, bg=BORDER)
@@ -1119,6 +1131,7 @@ class M4DebugApp:
     def _connect(self):
         if self.client:
             self._disconnect()
+            return  # 断开后保持断开
 
         port = self._get_port_device()
         if not port:
@@ -1136,7 +1149,7 @@ class M4DebugApp:
         self.root.update()  # 刷新UI
 
         try:
-            c = M4ModbusClient(port, baud, slave, timeout=1.0)
+            c = M4ModbusClient(port, baud, slave, timeout=0.05)
             ok = c.connect()
         except Exception as e:
             import traceback
@@ -1212,6 +1225,7 @@ class M4DebugApp:
         self.cap_btn.configure(state=state)
         self.telem_btn.configure(state=state)
         self.telem_read_btn.configure(state=state)
+        self.pm_btn.configure(state=state)
         for btn in getattr(self, '_quick_btns', []):
             btn.configure(state=state)
 
@@ -1222,6 +1236,26 @@ class M4DebugApp:
         entry_state = tk.NORMAL if connected else tk.DISABLED
         for info in self._init_entries.values():
             info["entry"].configure(state=entry_state)
+
+    def _toggle_pm_window(self):
+        """打开/关闭 PrintMessage 监控窗口"""
+        if hasattr(self, '_pm_window') and self._pm_window and self._pm_window.winfo_exists():
+            self._pm_window.destroy()
+            self._pm_window = None
+            self._pm_ui = None
+            return
+
+        if not HAS_PM:
+            messagebox.showinfo("提示", "printmessage_ui.py 未找到 — 无法打开 PrintMessage 窗口")
+            return
+
+        self._pm_window = tk.Toplevel(self.root)
+        self._pm_window.title("PrintMessage 串口上报")
+        self._pm_window.geometry("800x600")
+        self._pm_window.configure(bg=BG)
+
+        self._pm_ui = PrintMessageTab(self._pm_window)
+        self._pm_ui._start_capture()
 
     # ---- 数据读取 ----------------------------------------------
 
@@ -1781,9 +1815,6 @@ class M4DebugApp:
             self.plotter.close()
         if self.client:
             try:
-                self.client.stop_heartbeat()
-                self.client.set_work_sta(False)
-                self.client.set_power(0)
                 self.client.disconnect()
             except Exception:
                 pass
