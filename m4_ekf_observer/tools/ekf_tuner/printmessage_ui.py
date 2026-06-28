@@ -16,9 +16,11 @@ import os
 
 # Support both standalone and package import
 try:
-    from .printmessage_decoder import PrintMessageDecoder
+    from .printmessage_decoder import PrintMessageDecoder, extract_pan_adc_data
+    from .pan_analyzer import PanAnalyzer
 except ImportError:
-    from printmessage_decoder import PrintMessageDecoder
+    from printmessage_decoder import PrintMessageDecoder, extract_pan_adc_data
+    from pan_analyzer import PanAnalyzer
 
 # 配色 (与 m4_gui.py 一致)
 BG2 = "#1e1e1e"
@@ -42,6 +44,8 @@ class PrintMessageTab:
         self.parent = parent
         self.sendline_cb = sendline_cb
         self.decoder = PrintMessageDecoder()
+        self.analyzer = PanAnalyzer()
+        self.sample_rate = 1000000  # 1MHz ADC sampling
         self._running = False
         self._lock = threading.Lock()
         self._log = deque(maxlen=1000)
@@ -100,13 +104,14 @@ class PrintMessageTab:
         tk.Label(hist_frame, text="历史记录", bg=BG2, fg=YELLOW,
                  font=("Consolas", 8, "bold")).pack(anchor=tk.W)
 
-        columns = ("#", "time", "type", "pulse", "rows", "summary")
+        columns = ("#", "time", "type", "pulse", "f_res", "rows", "summary")
         self.tree = ttk.Treeview(hist_frame, columns=columns,
                                   show="headings", height=8)
         self.tree.heading("#", text="#")
         self.tree.heading("time", text="时间")
         self.tree.heading("type", text="消息类型")
         self.tree.heading("pulse", text="脉冲数")
+        self.tree.heading("f_res", text="f_res(Hz)")
         self.tree.heading("rows", text="数据行")
         self.tree.heading("summary", text="摘要")
 
@@ -114,6 +119,7 @@ class PrintMessageTab:
         self.tree.column("time", width=80, anchor=tk.CENTER)
         self.tree.column("type", width=100, anchor=tk.CENTER)
         self.tree.column("pulse", width=60, anchor=tk.CENTER)
+        self.tree.column("f_res", width=80, anchor=tk.CENTER)
         self.tree.column("rows", width=60, anchor=tk.CENTER)
         self.tree.column("summary", width=200)
 
@@ -190,6 +196,15 @@ class PrintMessageTab:
         pulse = summary.get("pulse", "-")
         rows = summary.get("rows", 0)
 
+        # PAN: 计算 f_res
+        f_res = "-"
+        if summary.get("msg_type") == 0:  # PAN
+            adc = extract_pan_adc_data(result)
+            if adc and len(adc) > 10:
+                f_res = self.analyzer.estimate_freq(adc, self.sample_rate)
+                summary["f_res"] = round(f_res, 1)
+                f_res = f"{f_res:.1f}"
+
         # 摘要文本
         extra = ""
         if summary.get("msg_type") == 0:  # PAN
@@ -203,7 +218,7 @@ class PrintMessageTab:
 
         def _update():
             self.tree.insert("", 0, values=(
-                self._record_id, now, msg_type_name, pulse, rows, extra
+                self._record_id, now, msg_type_name, pulse, f_res, rows, extra
             ))
 
         if self.tree.winfo_exists():
