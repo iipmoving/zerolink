@@ -15,6 +15,7 @@ import sys
 import os
 import csv
 import json
+import re
 import time
 import threading
 import tkinter as tk
@@ -1267,35 +1268,46 @@ class M4DebugApp:
     # ---- PrintMessage 数据转发 ----------------------------------
 
     def _start_pm_reader(self):
-        """连接成功后启动 PM reader 线程 (从 raw serial 读文本行)"""
+        """Hook pymodbus recv: 每次 MODBUS 收完响应后, 检查缓冲区剩余 PrintMessage 文本"""
         if not self.client or not hasattr(self.client.client, 'socket'):
             return
-        self._pm_running = True
+        # 避免重复 hook
+        if hasattr(self.client.client, '_pm_hooked'):
+            return
+        ser = self.client.client.socket
+        orig_recv = self.client.client.recv
 
-        def _reader():
-            ser = self.client.client.socket  # pymodbus 3.13 .socket
-            buf = b""
-            while self._pm_running and ser and ser.is_open:
-                try:
-                    if ser.in_waiting:
-                        buf += ser.read(ser.in_waiting)
-                        while b"\n" in buf:
-                            line, buf = buf.split(b"\n", 1)
-                            text = line.decode("utf-8", errors="ignore").strip()
-                            if text and hasattr(self, '_pm_ui') and self._pm_ui:
-                                self._pm_ui.feed_line(text)
-                    else:
-                        import time
-                        time.sleep(0.01)
-                except Exception:
-                    break
-            self._pm_running = False
+        def _is_pm_line(line: str) -> bool:
+            """按报头判断: #PM0=PAN, #PM1=TXA, #PM2=CURRENT"""
+            return re.match(r'^#PM[012]\b', line)
 
-        self._pm_thread = threading.Thread(target=_reader, daemon=True)
-        self._pm_thread.start()
+        def hooked_recv(size):
+            data = orig_recv(size)
+            try:
+                while ser and ser.in_waiting:
+                    extra = ser.read(ser.in_waiting)
+                    for raw in extra.split(b"\n"):
+                        line = raw.decode("utf-8", errors="replace").strip("\r").strip()
+                        if line and _is_pm_line(line):
+                            if hasattr(self, '_pm_ui') and self._pm_ui:
+                                self._pm_ui.feed_line(line)
+            except Exception:
+                pass
+            return data
+
+        self.client.client.recv = hooked_recv
+        self.client.client._pm_hooked = True
 
     def _stop_pm_reader(self):
-        self._pm_running = False
+        """恢复 pymodbus 原始 recv"""
+        if hasattr(self, 'client') and self.client and hasattr(self.client.client, 'recv'):
+            try:
+                del self.client.client._pm_hooked
+            except AttributeError:
+                pass
+                del self.client.client.recv
+            except AttributeError:
+                pass
 
     # ---- 数据读取 ----------------------------------------------
 

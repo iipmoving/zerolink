@@ -145,7 +145,8 @@ uint8_t     PrintMessageOut(void)
 		if(messageLock==0)
 		{
 			return 0;
-		}	
+		}
+		printf("#PM%d\n",message.num);        // 固定报头+消息序号: PM0=PAN, PM1=TXA, PM2=CURRENT	
 	
 		if(message.num==PAN_MESSAGE)
 		{

@@ -63,8 +63,14 @@ class PrintMessageDecoder:
         return None
 
     def _on_idle(self, line: str) -> Optional[dict]:
-        """检测消息头"""
-        # PAN_MESSAGE: "pan pluse is N."
+        """检测消息头: #PM0=PAN, #PM1=TXA, #PM2=CURRENT"""
+        m = re.match(r'^#PM(\d+)', line)
+        if m:
+            self._msg_type = int(m.group(1))
+            self._state = "CSV_HEADER"
+            return None
+
+        # 旧格式兼容 (无报头时用内容判断)
         m = re.match(r'pan pluse is (\d+)', line)
         if m:
             self._msg_type = self.MSG_PAN
