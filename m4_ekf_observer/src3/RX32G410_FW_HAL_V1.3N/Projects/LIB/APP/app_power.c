@@ -3,16 +3,8 @@
 
 MODULE_SKELETON(AppPower);
 
-/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
-typedef union {
-    uint8_t all;
-    struct {
-        uint8_t appadc   : 1;  /* AppAdc 数据就绪 */
-        uint8_t calculator   : 1;  /* Calculator 数据就绪 */
-        uint8_t elecparams   : 1;  /* ElecParams 数据就绪 */
-        uint8_t ekf_lkf   : 1;  /* EKF_LKF 数据就绪 */
-    } bits;
-} AppPower_PipeFlags_t;
+
+
 
 /* ---- 管道 SEQ 有效性跟踪 ---- */
 static uint8_t s_last_seq_AppAdc;   /* AppAdc → AppPower */
@@ -373,13 +365,13 @@ typedef	struct
 //	void			(*_PPGcenOnoff)(uint8_t onOff);				//开停记数器，为了同步
 	
 	void			(*_PPGdeadTime)(uint8_t downDts,uint8_t upDts);			//PPG死区时间
-	void			(*_PPGsetDuty)(uint16_t input);											//立即设置PPG大小，不经过渐变	
+	// void			(*_PPGsetDuty)(uint16_t input);											//立即设置PPG大小，不经过渐变	
 
-	PPGvalueDef		(*_PPGgetValue)(void);
+	// PPGvalueDef		(*_PPGgetValue)(void);
 
 	void				(*_PPGonOff)(uint8_t onOff);
 	
-	void				(*_PPGgetAdcValue)(void);						//得到对应的ADC值 						
+	// void				(*_PPGgetAdcValue)(void);						//得到对应的ADC值 						
 	
 	void				(*_PanCountInit)(void);							//检锅脉冲计数初始化
 	uint8_t 		(*_PanCountGetValue)(void);					//得到检锅数
@@ -388,7 +380,6 @@ typedef	struct
 
 	uint8_t			(*_TimBkFlag)(void);								//BK标志检查
 }AppPowerFunDef	__attribute__((aligned(32)));									//方法定义
-
 
 
 
@@ -458,6 +449,25 @@ typedef struct {
 
 
 
+#ifdef HALF
+PPGvalueDef	const APP_POWER_PPG[MAX_PPG_NUM]={
+
+	{START_FRE_PWM,START_FRE_PWM},	//START preiod, duty
+	{PAN_FRE_PWM,PAN_FRE_PWM},		//PAN	
+	{0,1},
+
+};	
+#else 
+PPGvalueDef	const APP_POWER_PPG[MAX_PPG_NUM]={
+
+	{FRE_25K_PWM,200},	//START preiod, Shift
+	{FRE_25K_PWM,200},	//PAN
+	{FRE_25K_PWM,0},	//OFF
+	{FRE_25K_PWM,100},	//MIN
+	{FRE_25K_PWM,1600},	//MAX
+};	
+
+#endif
 
 RealTimePulseDetector		PanPluse;
 
@@ -468,10 +478,10 @@ uint16_t 	PotcheckFre[4]={START_FRE_PWM*2,(POTTYPE2_FRE_PWM+1)*2,MIN_FRE_PWM*2,F
 #define		IRON_POWER_L		600/25
 
 
-void	PPGgetAdcValueCh1(void);
-void	PPGgetAdcValueCh2(void);
-void	PPGgetAdcValueCh3(void);
-void	PPGgetAdcValueCh4(void);
+// void	PPGgetAdcValueCh1(void);
+// void	PPGgetAdcValueCh2(void);
+// void	PPGgetAdcValueCh3(void);
+// void	PPGgetAdcValueCh4(void);
 //void	PPGcenOnoff_ch1(uint8_t onOff);;
 //void	PPGcenOnoff_ch2(uint8_t onOff);;
 void	PPGinit(void);							//void			(*PPGinit)(void);																	//初始化
@@ -532,6 +542,11 @@ void pulse_detector_reset(RealTimePulseDetector* detector);		//脉冲检测初�
 int Pulse_detector_process(RealTimePulseDetector* detector);	//脉冲检测
 
 void	APP_POWER_PotTypeCheck_FRE(uint8_t ch);			//ch 0:  40K下判断锅具	ch 1: 30k 下判断锅具
+void	APP_POWER_ppgActual(uint8_t ch,uint8_t value);		//实际把数据保存
+
+void	APP_POWER_dutyTarget(uint8_t ch,uint8_t value);
+void	APP_POWER_periodTarget(uint8_t ch,uint8_t value);
+uint16_t 	APP_POWER_dutyShiftToHrtim(uint8_t ch,uint8_t value);		//將表格里的相位角轉換為HRTIM值
 
 AppPowerFunDef	const 	Power1FunTable=
 {
@@ -539,12 +554,12 @@ AppPowerFunDef	const 	Power1FunTable=
 
 //	PPGcenOnoff,
 	PPGdeadTimeCh1,					//void			(*PPGdeadTime)(uint8_t downDts,uint8_t upDts);			//PPG死区时间
-	PPGsetDutyCh1,						//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
-	PPGgetValueCh1,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
+	// PPGsetDutyCh1,						//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
+	// PPGgetValueCh1,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
 
 	PPGonOffCh1,							//void			(*PPGonOff)(uint8_t onOff);			PPG开关
 
-	PPGgetAdcValueCh1,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
+	// PPGgetAdcValueCh1,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
 
 	
 	APP_POWER_PanCountInitCh1,					//void			(*PanCountInit)(void);							//检锅脉冲计数初始化
@@ -560,11 +575,11 @@ AppPowerFunDef	const 	Power2FunTable=
 	PPGinit,							//void			(*PPGinit)(void);																	//初始化
 	// PPGcenOnoffCh2,
 	PPGdeadTimeCh2,					//void			(*PPGdeadTime)(uint8_t downDts,uint8_t upDts);			//PPG死区时间
-	PPGsetDutyCh2,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
-	PPGgetValueCh2,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
+	// PPGsetDutyCh2,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
+	// PPGgetValueCh2,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
 	PPGonOffCh2,							//void			(*PPGonOff)(uint8_t onOff);			PPG开关
 	
-	PPGgetAdcValueCh2,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
+	// PPGgetAdcValueCh2,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
 
 	
 	APP_POWER_PanCountInitCh2,					//void			(*PanCountInit)(void);							//检锅脉冲计数初始化
@@ -579,11 +594,11 @@ AppPowerFunDef	const 	Power3FunTable=
 	PPGinit,							//void			(*PPGinit)(void);																	//初始化
 	// PPGcenOnoffCh2,
 	PPGdeadTimeCh3,					//void			(*PPGdeadTime)(uint8_t downDts,uint8_t upDts);			//PPG死区时间
-	PPGsetDutyCh3,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
-	PPGgetValueCh3,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
+	// PPGsetDutyCh3,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
+	// PPGgetValueCh3,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
 	PPGonOffCh3,							//void			(*PPGonOff)(uint8_t onOff);			PPG开关
 	
-	PPGgetAdcValueCh3,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
+	// PPGgetAdcValueCh3,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
 
 	
 	APP_POWER_PanCountInitCh3,					//void			(*PanCountInit)(void);							//检锅脉冲计数初始化
@@ -599,11 +614,11 @@ AppPowerFunDef	const 	Power4FunTable=
 	PPGinit,							//void			(*PPGinit)(void);																	//初始化
 	// PPGcenOnoffCh2,
 	PPGdeadTimeCh4,					//void			(*PPGdeadTime)(uint8_t downDts,uint8_t upDts);			//PPG死区时间
-	PPGsetDutyCh4,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
-	PPGgetValueCh4,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
+	// PPGsetDutyCh4,					//void			(*PPGsetValue)(uint32_t pwm);											//立即设置PPG大小，不经过渐变	
+	// PPGgetValueCh4,					//uint32_t	(*PPGgetValue)(void);															//得到当前PPG大小
 	PPGonOffCh4,							//void			(*PPGonOff)(uint8_t onOff);			PPG开关
 	
-	PPGgetAdcValueCh4,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
+	// PPGgetAdcValueCh4,				//	void			(*_PPGgetAdcValue)(void);						//得到对应的ADC值 				
 
 	
 	APP_POWER_PanCountInitCh4,					//void			(*PanCountInit)(void);							//检锅脉冲计数初始化
@@ -654,7 +669,8 @@ typedef	struct
 
 	uint16_t minFre;
 	uint16_t pCycle;
-	
+	uint16_t maxFre;
+	uint16_t res;
 	uint32_t    ovp;
 	StackStructDef		stack;
 	
@@ -681,7 +697,7 @@ typedef	struct
 
 
 
-#define		POTNUM		4				//炉头数
+
 
 #define		MasterCh	0			//主炉头序号
 #define		SlaveCh		1				//从炉头序号
@@ -710,17 +726,17 @@ enum
 //    uint8_t res[3];
 //} Power_Output_t;
 
-AppPowerDef						PowerMem[POTNUM];						//炉头2
+#define POT_GROUP_NUM 4
 
-
-PowerInputDef					PowerInput[POTNUM];					//输入变量(通讯输入）
-AppPowerStaticDef			PowerStaticReg[POTNUM];			//定义两个炉寄存器空间
-AppPowerKeepDef				PowerKeepReg[POTNUM];			//定义两个炉寄存器空间(不清零）
-
+AppPowerDef						PowerMem[POT_GROUP_NUM];						//炉头2
+PowerInputDef					PowerInput[POT_GROUP_NUM];					//输入变量(通讯输入）
+AppPowerStaticDef			PowerStaticReg[POT_GROUP_NUM];			//定义两个炉寄存器空间
+AppPowerKeepDef				PowerKeepReg[POT_GROUP_NUM];			//定义两个炉寄存器空间(不清零）
+static int	PidReturn[POT_GROUP_NUM];
 AppPowerDef*					PowerControl;							//当前处理炉头指针	
 
 
-int	PidReturn[4];
+
 
 
 // APP_POWER_PAN_DEF				PanRes;
@@ -742,7 +758,8 @@ static	AppPowerAllDef     PowerAll;			//炉头需要重置频率
 #define		PowerChangeStatus	PowerAll.changeStatus
 #define		PowerScrCnt			PowerAll.scrCnt
 #define		PowerPotNum			PowerAll.PotNum	
-#define		PowerMinFre			PowerAll.minFre
+#define		PowerMinFre			PowerAll.minFre	//最低频率限制（相位角）
+#define		PowerMaxFre			PowerAll.maxFre	//最高频率限制（相位角）
 #define		PowerCycle			PowerAll.pCycle
 #define		PowerStack			PowerAll.stack
 
@@ -856,8 +873,8 @@ static	AppPowerAllDef     PowerAll;			//炉头需要重置频率
 
 //#define	FunPPGcenOnoff					PowerControl->funAdr->_PPGcenOnoff	
 
-#define	FunPPGsetDuty					PowerControl->funAdr->_PPGsetDuty	
-#define	FunPPGgetValue					PowerControl->funAdr->_PPGgetValue	
+// #define	FunPPGsetDuty					PowerControl->funAdr->_PPGsetDuty	
+// #define	FunPPGgetValue					PowerControl->funAdr->_PPGgetValue	
 
 
 #define	FunDeadTimeSetValue			PowerControl->funAdr->_PPGdeadTime	
@@ -869,7 +886,7 @@ static	AppPowerAllDef     PowerAll;			//炉头需要重置频率
 #define	FunPanCountSetValue			PowerControl->funAdr->_PanCountSetValue
 
 
-#define	FunPPGgetAdcValue				PowerControl->funAdr->_PPGgetAdcValue
+// #define	FunPPGgetAdcValue				PowerControl->funAdr->_PPGgetAdcValue
 
 #define	FunTimBkFlag						PowerControl->funAdr->_TimBkFlag
 
@@ -985,7 +1002,7 @@ void	s_pwm_off(INT8U	off_num);
 void	s_pwm_on(void);
 void	i_ppg_set_limit(INT16U	t_corrent_ppg);
 
-void	reset_ppg_limit(void);
+void	reset_ppg_limit_off(void);
 void	reset_ppg_limit_ch(uint8_t	i);
 
 
@@ -1004,9 +1021,6 @@ void surge_Processing(void);
 void			PPGadcInput_ch1(void);							//每个加热通道的ADC值输入
 void			PPGadcInput_ch1(void);							//每个加热通道的ADC值输入
 
-void	PotPPGtotalFun(void);
-
-
 AppPowerDef*		getPowerCHN(uint8_t chn);
 
 
@@ -1018,8 +1032,8 @@ uint8_t	APP_POWER_GetResumeFlag(void);		//得到功率切换标志
 
 
 
-uint16_t 		Pan_ADC_AdcDmaBuff[Pan_ADC_DMA_BUFF_NUM];
-uint16_t*			Pan_ADC_AdcFmacBuff;
+//uint16_t 		Pan_ADC_AdcDmaBuff[Pan_ADC_DMA_BUFF_NUM];
+//uint16_t*			Pan_ADC_AdcFmacBuff;
 
 /* ===================================================================
  *  SECTION 1: API调用 (API/Hardware Calls)
@@ -1027,129 +1041,28 @@ uint16_t*			Pan_ADC_AdcFmacBuff;
  *  待用户剥离到独立 API 层模块
  * =================================================================== */
 
-int16_t* 	APP_POWER_GetPanDmaBuffAddress(void)
+uint16_t* 	APP_POWER_GetPanDmaBuffAddress(void)
 {
-		{
+
 		/* 检锅高速采样: 返回 wave_capture.data[] (2000点 @ ~0.25us) */
 		WaveCaptureFrame *wf = (WaveCaptureFrame*)WaveCapture_GetFramePtr();
-		if (wf) return (int16_t*)wf->data;
-		return (int16_t*)Pan_ADC_AdcDmaBuff;
-	}
-}	
-
-int16_t* 	APP_POWER_GetPanFmacBuffAddress(void)
-{
-
-		return	(int16_t*)Pan_ADC_AdcFmacBuff;
+		return (uint16_t*)wf->data;
 }	
 
 
 
 
-#if 0
 
 
-uint8_t   AdcCnt=0xff;
-CurAdcDef		AdcGroup[100];
-
-
-void		AdcGroupValueFun(void)
-{
-		uint8_t	adcGroupCnt=0;
-		
-		if(AdcCnt==0xff)
-		{
-			do
-			{	
-		
-				getAdcGroupValue(&AdcGroup[adcGroupCnt]);
-				
-	
-				adcGroupCnt++;
-			
-				if(adcGroupCnt>100)
-				{	
-					AdcCnt=0;
-					break;	
-				}
-			}while(1);
-		}
-		else
-			{									//采集一次ADC后 发送串口数据
-		#ifdef	DebugOutPc		
-		uint8_t	i=0;
-			
-		setDebugOutBuff(AdcGroup[AdcCnt].adcT1A,i++);
-		setDebugOutBuff(AdcGroup[AdcCnt].adcT2A,i++);
-		setDebugOutBuff(AdcGroup[AdcCnt].timT1A,i++);
-		setDebugOutBuff(AdcGroup[AdcCnt].timT2A,i++);
-			
-		UARTx_SendValueClass(Debug_OutToPc());
-	
-		AdcCnt++;
-
-		if(AdcCnt>100)
-		{
-				AdcCnt=0xff;			//下一次采集ADC
-
-		}		
-			
-		#endif	
-		
-		}
-		
-}	
-
-#endif
-
-
-
-// uint16_t 	app_power_txaBuff[2000];	//諧振電流緩存	
-
-#if 0
-	static uint16_t	app_power_txaCount=0;	
-
-void	APP_POWER_TxaStrart(void)				//20次输出一次TXA的值
-{
-
-
-	if(Time_GetSecFlg())
-	{
-
-		app_power_txaCount++;
-		
-		if(app_power_txaCount>=TxaCount)	
-		{
-				
-			if(PowerMem[PotChWork].staticReg->flag.bit.ppgOn)	
-			{
-
-
-
-
-
-				// #if PrintMessage
-
-				// API_UART_ExportToCsv32(getAdcBuffAddress(0),getAdcBuffAddress(1),getAdcBuffAddress(2),getAdcBuffSize());	
-				// printf("txa size is %d,txa is %d,sumdup is %d,sumphase is %d,sumpdown is %d/r/n", getAdcBuffSize(),getAdcBuffSum(0),getAdcBuffSum(1),getAdcBuffSum(2),getAdcBuffSum(3));
-		
-				// #endif
-			}
-			app_power_txaCount=0;
-
-		}
-	
-	}	
-}
-
-#endif
 
 void	APP_PPG_SetIcVcOk(void)
 {
-			PowerMem[0].staticReg->flag.bit.IcVcAdcOk=1;		//标志在后续执行才会清除m_ic_vc_adc_ok_flag
-			PowerMem[1].staticReg->flag.bit.IcVcAdcOk=1;
-			PowerMem[2].staticReg->flag.bit.IcVcAdcOk=1;		//标志在后续执行才会清除m_ic_vc_adc_ok_flag
-			PowerMem[3].staticReg->flag.bit.IcVcAdcOk=1;
+	for(uint8_t i=0;i<PotNum;i++)
+	{ 
+		PowerMem[i].staticReg->flag.bit.IcVcAdcOk=1;		//标志在后续执行才会清除m_ic_vc_adc_ok_flag
+	}
+
+
 }
 
 
@@ -1161,7 +1074,7 @@ void	APP_POWER_CompSetValue(void)
 
 	uint8_t  nowPowerOn=0;					//有炉头在工作
 	
-	for(uint8_t i=0;i<POTNUM;i++)
+	for(uint8_t i=0;i<PotNum;i++)
 	{
 		ovpValue=PowerMem[i].input->init.ovpShort;
 #ifdef		DEBUG_POWER_OUT		//屏蔽短路保护
@@ -1236,7 +1149,7 @@ void			PowerTypeFun(void)
 			AdcIrqHandleWatchDogLock();			//关闭所有炉头功率			
 	}	
 	
-	for(uint8_t i=0;i<POTNUM;i++)
+	for(uint8_t i=0;i<PotNum;i++)
 	{	
 		
 
@@ -1267,44 +1180,7 @@ void			PowerTypeFun(void)
 
 #endif
 
-#ifdef	DebugOutPc		
 
-		
-static 	uint32_t  delayCount;		
-		
-		
-		delayCount++;
-		
-		
-		
-			#include	"simulative_uart.h"
-	if(delayCount>100)								//串口有没有发送完
-	{	
-		
-		delayCount=0;
-		
-		uint8_t i=0;
-
-		setDebugOutBuff(PowerMem[0].input->status.voltageAd,i++);
-
-		setDebugOutBuff(PowerMem[0].input->status.currentAd,i++);
-		setDebugOutBuff(PowerMem[0].input->status.topAd,i++);
-		setDebugOutBuff(PowerMem[0].input->status.actualPowerDiv25,i++);
-		setDebugOutBuff(PowerMem[0].input->status.targetPowerDiv25,i++);
-		setDebugOutBuff(PowerMem[0].input->status.powerStatus,i++);
-		setDebugOutBuff(PowerMem[0].input->status.equivalentResistance,i++);	 
-
-		setDebugOutBuff(0x2,i++);
-		setDebugOutBuff(PowerMem[1].input->status.currentAd,i++);
-		setDebugOutBuff(PowerMem[1].input->status.topAd,i++);
-		setDebugOutBuff(PowerMem[1].input->status.actualPowerDiv25,i++);
-		setDebugOutBuff(PowerMem[1].input->status.targetPowerDiv25,i++);
-		setDebugOutBuff(PowerMem[1].input->status.powerStatus,i++);
-		setDebugOutBuff(PowerMem[1].input->status.equivalentResistance,i++);	 		
-		
-		UARTx_SendValueClass(Debug_OutToPc());
-	}
-#endif	
 
 	
 }
@@ -1363,34 +1239,7 @@ void	getOvpValueAdj(void)
 	uint16_t valueVc=VC_LIMIT_MAX;
 	PowerOvpValue=valueVc;								//adc看门狗阀值 	
 	
-#if 0
-	uint8_t vcMax=0xF0;
-	if(VC_LIMIT_MAX>VcLimitMin)
-	{
-			vcMax=VC_LIMIT_MAX;
-	}		
-	
-	if(TargetPower>LoadLeave)
-	{	
-		valueVc=(vcMax-VcLimitMin);
-		valueVc*=MaxPowerM-TargetPower;
-	//		valueVc=ME_UDIV(valueVc,(MaxPowerM-LoadLeave));
-		
-		valueVc/=(MaxPowerM-LoadLeave);
-		valueVc=vcMax-valueVc;
-	}
-#endif	
-	
 
-
-	
-//	TOPValue=valueVc;
-	
-//	API_DAC_COMP_SetValue(Power_channel,OvpShort);
-	//设置CMPCRV值
-	
-		
-//	API_DAC_COMP_SetValueAll(OvpShort);
 
 }
 
@@ -1407,25 +1256,6 @@ void	getOvpValueAdj(void)
 //*****************************************************************
 
 
-//void	getMaxOvpValueAdj(void)
-//{
-//		uint16_t xRetrun=PowerMem[0].staticReg->OvpValue;			//在多个电流限制里取最大值 
-
-//		for(uint8_t i=1;i<POTNUM;i++)
-//		{
-//			if(xRetrun<PowerMem[i].staticReg->OvpValue)
-//			{
-//				xRetrun=PowerMem[i].staticReg->OvpValue;
-//			}
-//		}
-
-//		PowerOvpValueAll=xRetrun<<4;
-//#ifdef		DEBUG_POWER_OUT	
-////		PowerOvpValueAll=0xfff;
-//#endif		
-//		API_ADC_TxaAwdValue(PowerOvpValueAll);		
-
-//}	
 
 void	APP_POWER_SetTxaAwdValue(void)		//watchDOG 值会变化，需要人为更新
 {
@@ -1455,10 +1285,6 @@ void	getMemSetValue(void)
 			g_p25_ad=CURRENT_OFFSET*2;
 		
 	}	
-//	if(g_p25_ad==0)
-//	{
-//			g_p25_ad=0x7d*2;				//默认值 
-//	}		
 
 }
 	
@@ -1512,7 +1338,7 @@ void	APP_POWER_PanStartPluse(void)		//产生起振脉冲，和功率控制分离
 {
 
 //	APP_ADC_WaitTxaCalOver();		//
-	for(uint8_t chn=0;chn<POTNUM;chn++)
+	for(uint8_t chn=0;chn<PotNum;chn++)
 	{
 		if(getPowerCHN(chn)==NULL)						//确定炉头类地址
 		{return;}	
@@ -1739,39 +1565,6 @@ void	APP_POWER_PotTypeCheckConfirm(void)				//通过功率点确认锅具类型
 			 halfPwm=1;			//1:为占空比调功，0：为50%
 		}
 
-#if 0
-
-//2.	功率大于1000W，必为钢锅	
-		if(PowerControl->staticReg->potPowerSave[1].power>IRON_POWER_H)	
-		{
-			m_pot_type=PotSteel;
-		}
-		else
-		{
-//3.	功率小于1000W，但以经是50%，必为铁锅
-			if(halfPwm==0)	
-			{
-				m_pot_type=PotIron;
-			}
-			else
-			{
-//4.	功率小于1000W，大于800W  但以经是占空比调功，必为钢锅
-				if(PowerControl->staticReg->potPowerSave[1].power>IRON_POWER_L)
-				{
-						m_pot_type=PotSteel;
-				}
-				else
-				{
-//5.	功率小于800W  但以经是最小调功PWM占空比调功，必为钢锅				
-					if(PowerControl->staticReg->potPowerSave[1].duty<=MAX_FRE_PWM)
-					{
-						m_pot_type=PotSteel;
-					}
-				}
-			}
-
-		}
-#else
 		uint16_t resAvg=PowerControl->staticReg->potPowerSave[0].res;
 		resAvg+=PowerControl->staticReg->potPowerSave[1].res;
 		resAvg/=2;
@@ -1804,7 +1597,7 @@ void	APP_POWER_PotTypeCheckConfirm(void)				//通过功率点确认锅具类型
 
 
 	}	
-#endif
+
 
 }
 
@@ -1856,9 +1649,6 @@ void	APP_POWER_PotTypeCheck(void)					//检查锅具类型，确定最大PPG
 			return;
 	}	
 	
-
-
-
 	for(uint8_t i=DataStruct_GetStackTop(&PowerStack);i>0;i--)		//查找最优先炉头，铁锅需要超过MIN_FRE_PWM
 	{
 		nowPot		=		DataStruct_GetStackValue(&PowerStack,i);//当前优先POT
@@ -1878,50 +1668,12 @@ void	APP_POWER_PotTypeCheck(void)					//检查锅具类型，确定最大PPG
 		}	
 	}
 
-
-
-
-
-
-
-
 	switch(newMinFree)
 	{
 		case	MIN_FRE_PWM:		//当前认为是钢锅
 			if(PowerCycle>=MIN_FRE_PWM*2)
 			{	
-
-#if 0				
-				overPot=0;
-				for(uint8_t i=0;i<PotNum;i++)	
-				{
-					overPot<<=1;	
-					if(PowerMem[i].staticReg->cycleChange.basePower<(700/25))
-					{
-						overPot|=1;		//有一个功率大于500,认为是钢锅，则保持MIN_FRE_PWM
-					}
-					if(PowerMem[i].input->status.targetPowerDiv25==0)
-					{
-						overPot|=1;
-					}	
-
-				}
-				if(overPot==0x0f)
-				{
-					AppPowerPotTypeCnt++;
-					if(AppPowerPotTypeCnt>100)
-					{
-						newMinFree=MID_FRE_PWM;
-					}
-
-				}
-				else
-				{
-
-					AppPowerPotTypeCnt=0;
-				}
-#endif
-			
+	
 
 				if(PowerMem[nowPot].staticReg->flag.bit.PotType==PotIron)
 				{
@@ -1941,14 +1693,6 @@ void	APP_POWER_PotTypeCheck(void)					//检查锅具类型，确定最大PPG
 		break;
 		case	LARGE_FRE_PWM:
 			overPot=3;						//只有一个炉头加热
-			// AppPowerPotTypeCnt=0;
-			// if(PowerMem[nowPot].staticReg->flag.bit.PowerCycleType)
-			// {
-			// 	PowerMem[nowPot].staticReg->SurgeDelay=0;
-			// 	PowerMem[nowPot].staticReg->flag.bit.PowerCycleType=0;
-			// 	Adc_TxaAvgReset(nowPot);
-			// }
-
 
 		break;
 		default:
@@ -1996,38 +1740,6 @@ void	PowerPanCheckFun(uint8_t chn)		//锅具检测功能
 	if(getPowerCHN(chn)==NULL)					//确定炉头类地址
 	{return;}
 }
-#if 0
-void	ResonanceCurrentCompare(void)				//母线电流与谐振电流比较
-{
-	uint32_t   masterCurrent=CurrentValue16;
-	uint32_t   resonanceCurrent=ResonanceCurrent16;
-	
-
-
-	
-				if(ResonanceCurrent16>0x10)			//这个ACUR是12位
-				{	
-	
-					masterCurrent<<=2;
-					resonanceCurrent*=resonanceCurrent;
-					resonanceCurrent*=FunPPGgetValue().prioed/2;			//占比
-					masterCurrent*=masterCurrent;
-					masterCurrent*=FunPPGgetValue().duty;
-					
-//					masterCurrent=ME_UDIV(masterCurrent,resonanceCurrent);
-					
-					masterCurrent/=resonanceCurrent;
-					EquivalentRes=masterCurrent&0xff;
-
-				}
-				else
-				{
-					EquivalentRes=0;
-
-				}			
-
-}	
-#endif
 
 
 //******************************************************************
@@ -2040,198 +1752,6 @@ void	ResonanceCurrentCompare(void)				//母线电流与谐振电流比较
 // 修改全局变量:			
 // 备注：多炉头统一控制
 //*****************************************************************
-
-
-// PPGgetAdcValue — 已删除，逻辑移到 AppAdc_OnDataReady 回调中自动填充
-
-
-		
-#if 0
-
-
-void	PPGgetAdcValue1(uint8_t ch)
-{
-	uint16_t txaValue;
-	switch(ch)
-	{
-		case PotCh1: 
-
-
-#ifdef CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupT1A+ch];
-		CurrentValue		=		CurrentValue16>>2;
-		
-#else	//CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupPower1+ch];
-		CurrentValue		=		CurrentValue16>>4;		
-		
-#endif // CurrentFromTxa		
-
-
-		
-		txaValue=_adc->inputValue[AdcGroupCeilQ1+ch];
-		s_limit_Qsum=txaValue;
-		
-		PWMValue_L=txaValue&0xff;
-		PWMValue_H=txaValue>>8;		
-		
-		VoltageValue		=		_adc->inputValue[AdcGroupVoltage+ch]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-//		IGBTValue			=		_adc->inputValue[AdcGroupIgbt1+ch]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-//		BOTTOMValue			=		_adc->inputValue[AdcGroupBottom1+ch]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh1+ch);			//得到谐振电流计算的功率
-		powerPhase			=		_adc->inputValue[AdcGroupPhase1+ch];
-
-
-
-		
-		break;
-		
-		case PotCh2: 
-
-//		ResonanceCurrent16	=		_adc->inputValue[AdcGroupT1A];
-
-#ifdef CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupT2A];
-		CurrentValue		=		CurrentValue16>>2;
-		
-#else	//CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
-		CurrentValue		=		CurrentValue16>>4;		
-		
-#endif // CurrentFromTxa		
-
-
-		
-		txaValue=_adc->inputValue[AdcGroupCeilQ2];
-		s_limit_Qsum=txaValue;
-		
-		PWMValue_L=txaValue&0xff;
-//		PWMValue_H=txaValue>>8;		
-		
-		VoltageValue		=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		// IGBTValue			=		_adc->inputValue[AdcGroupIgbt1]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		// BOTTOMValue			=		_adc->inputValue[AdcGroupBottom2]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh2);			//得到谐振电流计算的功率
-		powerPhase			=		_adc->inputValue[AdcGroupPhase2];
-
-//		IGBTValue=0x20;
-//		BOTTOMValue=0x20;	
-
-		break;		
-		case PotCh3: 
-
-
-#ifdef CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupT3A];
-		CurrentValue		=		CurrentValue16>>2;
-		
-#else	//CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
-		CurrentValue		=		CurrentValue16>>4;		
-		
-#endif // CurrentFromTxa		
-
-
-		
-		txaValue=_adc->inputValue[AdcGroupCeilQ3];
-		s_limit_Qsum=txaValue;
-		
-		PWMValue_L=txaValue&0xff;
-		PWMValue_H=txaValue>>8;		
-		
-		VoltageValue			=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		IGBTValue					=			_adc->inputValue[AdcGroupIgbt2]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		BOTTOMValue				=		_adc->inputValue[AdcGroupBottom3]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh3);			//得到谐振电流计算的功率
-		powerPhase			=		_adc->inputValue[AdcGroupPhase3];
-//		IGBTValue=0x20;
-//		BOTTOMValue=0x20;	
-		
-		break;		
-		case PotCh4: 
-
-
-#ifdef CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupT4A];
-		CurrentValue		=		CurrentValue16>>2;
-		
-#else	//CurrentFromTxa
-		
-		CurrentValue16		=		_adc->inputValue[AdcGroupPower1];
-		CurrentValue		=		CurrentValue16>>4;		
-		
-#endif // CurrentFromTxa		
-
-
-		
-		txaValue=_adc->inputValue[AdcGroupCeilQ4];
-		
-		PWMValue_L=txaValue&0xff;
-		PWMValue_H=txaValue>>8;		
-		s_limit_Qsum=txaValue;
-		
-		VoltageValue		=		_adc->inputValue[AdcGroupVoltage]>>4;//AdcInputValue[AdcGroupVoltage]>>4;
-		IGBTValue			=		_adc->inputValue[AdcGroupIgbt2]>>4;//	AdcInputValue[AdcGroupIgbt]>>4;
-		BOTTOMValue			=		_adc->inputValue[AdcGroupBottom4]>>4;//	AdcInputValue[AdcGroupBottom]>>4;
-		powerAdcFactTxa		=		Adc_GetPowerTxa(PotCh4);			//得到谐振电流计算的功率
-		powerPhase			=		_adc->inputValue[AdcGroupPhase4];
-//		IGBTValue=0x20;
-//		BOTTOMValue=0x20;	
-		break;				
-		
-	}
-	powerAdcFactTxa>>=6;		//移成16位
-
-
-
-	// uint8_t  phase=powerPhase/(FRE_1000K_PWM);	//相位以HRTIM 1US 为单位
-	// if(phase>0xf)
-	// {
-	// 	phase=0xf;
-	// }
-	// phase<<=4;				//LOADVALUE 高位为相位值
-	// LoadValue&=0x0f;
-	// LoadValue|=phase;
-	
-
-	BOTTOMValue=powerPhase;
-
-
-
-}	
-#endif
-
-void PPGgetAdcValueCh1(void)
-{
-	// ADC值已在 AppAdc_OnDataReady 回调中自动填充
-}
-void PPGgetAdcValueCh2(void)
-{
-	// ADC值已在 AppAdc_OnDataReady 回调中自动填充
-}
-void PPGgetAdcValueCh3(void)
-{
-	// ADC值已在 AppAdc_OnDataReady 回调中自动填充
-}
-void PPGgetAdcValueCh4(void)
-{
-	// ADC值已在 AppAdc_OnDataReady 回调中自动填充
-}
-
-
-
-
-
-
-
-
 
 void	PanStatusCheck(void)
 {		
@@ -2282,26 +1802,6 @@ void	PanStatusCheck(void)
 
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //******************************************************************
 // 函数名	：void pot_max_ppg_set(void)
 // 作者		：
@@ -2313,8 +1813,6 @@ void	PanStatusCheck(void)
 // 备注：主要用于区分钢锅，使钢锅PPG最大值能减小，铁锅保持默认最大周期
 //*****************************************************************
 
-
-
 void pot_max_ppg_set(void)
 {
 	INT8U	t_power_adj;
@@ -2322,8 +1820,7 @@ void pot_max_ppg_set(void)
 	INT8U	t_per_25;
 	static INT8U s_pot_max_count;	//功率稳定判断	
 
-//	t_per_25=PpgPerLimit;		//高4位为25差值
-//	t_per_25>>=4;
+
 	t_per_25=PPG_PER_25W;
 	
 	
@@ -2362,23 +1859,7 @@ void pot_max_ppg_set(void)
 
 //在电压零点关相位，高电压位置开相位
 
-void	PHASE_set(INT8U	t_on_off)			
-{
-			if(t_on_off)
-			{
-				if(ActualPower>MinPowerM)		//
-				{	
-//					_ersgf=0;
-//					_ersgc3 = 1;		//開相位保護中斷
-				}
-			}
-			else
-			{
-//				TB0_ON();			//开始过零检测
-//				_ersgc3 = 0;		//開相位保護中斷
-			}	
-	
-}
+
 
 
 
@@ -2481,28 +1962,6 @@ else
 	if(t_power_setm)				//功率明码 ，功率控制开关判断 高4位为0 表示关功率
 	{
 
-//		if(m_load_check_pan)
-//		{
-//			if(power_setm>=MinPowerM-200/25)	//先用最小功率保持一下		
-//			{
-//
-//				if(g_surge_power==0)
-//				{
-//					g_surge_power=MinPowerM-200/25;
-//					if(LoadValue<12)
-//					{
-//						g_surge_power-=250/25;	//较差的锅具用更小的值
-//					}
-//				}
-//				else
-//				{
-//					t_power_setm=g_surge_power;
-//				}
-//
-//			}
-//		}
-
-
 		g_power_adc_trig = s_power_convert_bass(t_power_setm);	//计算明码功率数据
 		if(t_power_switch&0xf0)		//抖频开关   //POWER_SWITCH为抖频系数
 		{
@@ -2547,7 +2006,7 @@ else
 		}	
 		m_power_resume_flag=1;
 		TargetPower=temp;		
-		reset_ppg_limit();
+		reset_ppg_limit_off();
 
 //切换最新更新炉头，此炉头功率调整优先	
 
@@ -2687,8 +2146,8 @@ void		APP_POWER_PhaseHalfTypeSet(void)
 
 
 	
-	duty=FunPPGgetValue().duty*2+10;
-	peroid=FunPPGgetValue().prioed;
+	duty=PPGgetDutyChX(Power_channel)*2+10;
+	peroid=PPGgetPeriodChX(Power_channel);
 
 	if(duty<peroid)		//75%模式
 	{
@@ -2734,16 +2193,17 @@ void		APP_POWER_PhaseHalfTypeSet(void)
 
 void		APP_POWER_PpgHalfTypeSet(int t_ppgchange)
 {
-	PPGvalueDef		ppgValue=FunPPGgetValue();
 
+	uint16_t	duty=PPGgetDutyChX(Power_channel);
+	uint16_t	period=PPGgetPeriodChX(Power_channel);
 	if(m_power_cycle_flag)			//PowerCycleType
 	{
-		PowerCycleDoubleDuty=FunPPGgetValue().duty;
+		PowerCycleDoubleDuty=duty;
 		PowerCycleDoublePower=ActualPower;		
 	}
 	else
 	{
-			PowerCycleBaseDuty=FunPPGgetValue().duty;
+			PowerCycleBaseDuty=duty;
 			PowerCycleBasePower=ActualPower;	
 	}	
 	
@@ -2772,7 +2232,7 @@ void		APP_POWER_PpgHalfTypeSet(int t_ppgchange)
 		{
 
 	
-			if(ppgValue.duty+t_ppgchange>=ppgValue.prioed/2)
+			if(duty+t_ppgchange>=period/2)
 			{
 
 				PowerCycleDoubleCnt++;	
@@ -2781,7 +2241,7 @@ void		APP_POWER_PpgHalfTypeSet(int t_ppgchange)
 					PowerCycleDoubleCnt=0;
 					m_power_cycle_flag=0;			//准备进入同频//PowerCycleType
 					PowerCycleBaseCnt=0;
-					PowerCycleDoubleDuty=FunPPGgetValue().duty;
+					PowerCycleDoubleDuty=duty;
 					PowerCycleDoublePower=ActualPower;		
 				}
 			}
@@ -2802,8 +2262,8 @@ void		APP_POWER_PpgHalfTypeSet(int t_ppgchange)
 			{
 	
 
-				if(ppgValue.duty<=MAX_FRE_PWM||m_power_hold_min)		//duty以经最小，或者相位小于等于1
-//				if(ppgValue.duty<=MAX_FRE_PWM)		//duty以经最小，或者相位小于等于1
+				if(duty<=PowerMaxFre||m_power_hold_min)		//duty以经最小，或者相位小于等于1
+//				if(ppgValue.duty<=PowerMaxFre)		//duty以经最小，或者相位小于等于1
 				{
 					PowerCycleBaseCnt++;
 					if(PowerCycleBaseCnt>MIN_BASE_COUNT)
@@ -2813,7 +2273,7 @@ void		APP_POWER_PpgHalfTypeSet(int t_ppgchange)
 
 						m_power_cycle_flag=1;			//准备进入倍频		//PowerCycleType
 						PowerCycleDoubleCnt=0;	
-						PowerCycleBaseDuty=FunPPGgetValue().duty;
+						PowerCycleBaseDuty=duty;
 						PowerCycleBasePower=ActualPower;	
 
 						uint32_t doubleOnTime=50;
@@ -2926,62 +2386,6 @@ INT8U s_ppg_fun(void)
 			return	0xff;	//暂时不用处理
 		}	
 
-#if 0
-		if(t_tem_power_new>=t_tem_power_old)  		//功率上升
-		{
-			if(t_tem_power_old>C_POWERUP_SUDDENLY*256)	//保证0功率时不产生突升
-			{
-				s_ppgup_powerdown_cnt = 0;
-				t_tem_power_dalta = t_tem_power_new - t_tem_power_old;
-				if(m_pwmequ_flag)										//如果功率已到达设定功率，才判断功率突升
-				{
-				
-					if(t_tem_power_dalta>(C_POWERUP_SUDDENLY*256))  	//功率突升保护，先降功率
-					{
-//					TOPValue=t_tem_power_dalta;	
-//					s_ppg_pan_res_low();				//先关功率保护，从零功率开始上升
-					g_off_flag=F_POWER_FAST_UP;		//功率突升	
-		
-					return 0x80;
-					}
-				}
-			}
-		}
-		else
-		{
-		
-			t_tem_power_dalta = t_tem_power_old - t_tem_power_new;
-			if(i_ppg_getppg()>MINPPG)						//ppg小于一定值不检测功率突降
-			{
-				
-				if(m_ppg_add_flag)					//ppg上升标志，PPG升，功率降，认为是颠锅，或移锅
-				{
-					s_ppgup_powerdown_cnt++;
-					m_ppg_add_flag = 0;
-				
-				}
-				if(t_tem_power_dalta>(C_POWERDOWN_SUDDENLY*256))	//判断是否突降
-				{ 	
-					
-					if(g_panc_time<0x0c)				//无浪涌标志，才认为是移锅,检锅数大于0x0c是浪涌后的设置值
-					{
-					
-						g_panc_time = 0x0f;			//g_panc_time =0x0f立即检锅
-//						s_pwm_off(1);				//突降认为移锅需要立即检锅
-	
-						g_off_flag=F_POWER_FAST_DOWN;		//功率突降	
-	
-						return 0x80;  	//保护式归零
-					}
-				}
-				if(s_ppgup_powerdown_cnt>=2)
-				{
-					return 0x80;   		//保护式归零
-				}
-			}
-		}
-
-#endif
 
 		//判断当前功率与最高保护功率（最大连续功率+200）的大小		
  		if(ActualPower>MaxPowerM+8)
@@ -3157,71 +2561,10 @@ INT16U s_low_voltage_limit_current(INT16U trig_power_adc)					//低压限电流
 // 备注：当前相量在需要锁相的值附近时，自动调整PPG增减量	
 //******************************************************************
 
-INT8U PHASE_Lock_fun(INT8U	t_phase_out)			
-{
-#if 0	
-	INT8U	t_ppg_add=0;
-//	INT16U	t_phase_adj;
+// INT8U PHASE_Lock_fun(INT8U	t_phase_out)			
+// {
 
-
-	pot_max_ppg_set();		//得到计算后的最大功率周期
-
-	t_ppg_add=0;
-
-//	BOTTOMValue=MinPhase;
-
-	if(g_surge_delay<50)	//延时2秒，前面不稳定
-	{
-		return 0;	
-	}	
-	
-	if(t_phase_out==0)
-	{
-		return 0;			//输入相位无效
-	}
-	
-	if(MinPhase<0x20)
-	{
-		return 0;			//相柆限制无效
-	}
-	
-	if(t_phase_out<MinPhase)					//相位超过了限制慢慢减小
-	{
-			if(ActualPower>LoadValue&&ActualPower<TargetPower)
-			{						//当前功率小于目标功率，而且当前功率
-				t_ppg_add=(MinPhase-t_phase_out)/2;
-				if(t_ppg_add>FRE_50)
-				{
-					t_ppg_add=FRE_50;
-				}
-				t_ppg_add|=0x80;
-			}	
-	}
-//	else	
-//	{
-//			t_phase_adj=t_phase_out-MinPhase;		//相位的差值决定最大占空比
-//													//每一个相位值增加的PPG
-//			
-//			if(t_phase_adj>0x10)
-//			{
-//				MaxPowerSet=MaxPowerM-500/25;
-//			}	
-//			
-////			if(s_ppg_power_adj>t_phase_adj)
-////			{
-////				t_phase_adj=s_ppg_power_adj-t_phase_adj;	//与计算出来的最大功率周期相减
-//////				BOTTOMValue=t_phase_adj>>4;
-////				set_PWM_MIN(t_phase_adj);			//设置最大PPG输出宽度
-////				TOPValue=t_phase_adj>>4;
-////
-////			}
-//
-//	}
-
-	return	t_ppg_add;
-#endif	
-	return 0;
-}
+// }
 
 
 INT8U	getMaxPowerDiv(void)
@@ -3243,86 +2586,6 @@ INT8U	getMaxPowerDiv(void)
 
 
 
-//******************************************************************
-// 函数名	：INT8U PHASE_limit_fun(INT8U	t_phase_out)	
-// 作者		：
-// 功能		：相位过大限制功能（锅具识别）
-// 参数		：当前相痊
-// 返回值	：PPG控制量
-// 调用全局变量:				
-// 修改全局变量:			
-// 备注：当前相量大于80H(可设定），PWM最大限制变为20K， 相位小于7A时恢复	
-//******************************************************************
-#if 0
-void PHASE_limit_fun(INT8U	t_phase_out)			
-{
-	
-	static	INT8U	s_phase_over;
-	INT8U	t_phase_div;		//相位差值
-	INT8U	t_power_div;		//限制功率差值 
-	INT8U	t_voltage_div;		//电压修正，电压越高增加相位值
-	if(g_surge_delay<50)	//延时2秒，前面不稳定
-	{
-		return ;	
-	}
-	
-	t_power_div=getMaxPowerDiv();	//得到钢锅限制功率值
-
-	t_phase_div=PotPowerM>>3;		//potpowerm高4位*2+0x10
-	t_phase_div+=0X10;
-	t_phase_div=MinPhase+t_phase_div;
-	
-	t_voltage_div=0;
-	if(VoltageValue>C_VOLTAGE_210V)
-	{
-		t_voltage_div=VoltageValue-C_VOLTAGE_210V;
-	}
-	
-	t_voltage_div/=4;			//电压修正最大0x10
-		
-	if(t_voltage_div>0x15)
-	{
-		t_voltage_div=0x15;		//最大增加量
-	}
-
-	t_phase_div+=t_voltage_div;
-	
-	if(t_phase_out>t_phase_div)
-	{							//相位太大，功率只能加到钢锅限制功率
-		MaxPowerSet=t_power_div;	
-	}
-	else
-	{
-		MaxPowerSet=MaxPowerM;	//相位接近最小相位，功率可以加到最大	
-	}
-	
-#if	DEBUG_FLAG			
-//	TOPValue=t_phase_div;
-#endif	
-
-/*	LoadLeavePhase=0xd9;*/
-
-	t_phase_div=LoadLeavePhase&0xf0;
-
-	if(t_phase_out>t_phase_div)
-	{
-		s_phase_over++;
-		if(s_phase_over>8)
-		{
-			B_PHASE_POT_UP=1;
-		}	
-			
-	}
-	
-	if(t_phase_out<t_phase_div-3)
-	{
-		s_phase_over=0;			
-		B_PHASE_POT_UP=0;
-	}	
-}
-
-#endif
-
 
 
 
@@ -3341,232 +2604,6 @@ void PHASE_limit_fun(INT8U	t_phase_out)
 //******************************************************************
 
 
-#if 0
-INT8U s_power_equ_control(INT16U t_power_adc_trig)
-{
-
-	
-	INT16U t_delta_power_adc;
-	
-	INT16U t_dead_power;
-	INT8U  t_ppg_add,t_ppg_dic; 
-//	int16_t	PowerDiv;
-
-//	t_delta_power_adc=u16_PPGF;
-	
-//	PowerDiv=t_power_adc_trig-t_power_adc_trig;				//功率差值 
-	
-	if(g_power_adc_fact>=t_power_adc_trig)					//目标功率与实际功率差值
-	{
-		t_delta_power_adc = g_power_adc_fact-t_power_adc_trig;		//大于目标功率，减PPG
-		t_ppg_dic = 0x80;				//加频率
-		
-	}
-	else
-	{
-		t_delta_power_adc = t_power_adc_trig-g_power_adc_fact;		//小于目标功率
-		t_ppg_dic = 0x00;			//减频率
-
-//------相位限制PPG------------------------------------------------
-
-	}
-	
-
-	
-	
-	
-//	tPowerErr0|=t_delta_power_adc;						//最高位方向位
-//	tPowerChange=PowerErr1-tPowerErr0;				//此次变化的增加量
-	
-	
-//	t_ppg_add=PHASE_Lock_fun(PHASE_Out);		//根据相位限制增减量
-
-
-//	if(t_ppg_add)
-//	{
-//		return	t_ppg_add;			
-//	}	
-
-	t_dead_power = g_p25_ad;				//计算死区功率 50w
-
-	if(t_delta_power_adc>t_dead_power)				//大于死区值
-	{
-
-//---------根据功率差值调整增减速度----------------------------------------------------		
-
-			if(t_delta_power_adc<g_p25_ad*4)				//100W以内微调
-			{
-				t_ppg_add=FRE_10;	
-			}
-			else
-			{			
-//				t_delta_power_adc/=(g_p25_ad);
-					
-				t_delta_power_adc=ME_UDIV(t_delta_power_adc,g_p25_ad);		//
-//				t_delta_power_adc*=5;
-
-				if(t_delta_power_adc>FRE_1000)
-				{
-					t_delta_power_adc=FRE_1000;				//最大增加值 
-				}
-				t_ppg_add=t_delta_power_adc;	
-//				if(ActualPower>500/25)
-				if(power_half_adj==0)
-				{
-					t_ppg_add/=4;	
-				}
-			}
-		g_power_limit_flag &= (~B_PWDEAD);				//清死区稳定标志
-	}
-	else
-	{
-		if(power_half_adj)
-		{
-			power_arrive++;
-			if(power_arrive>10)
-			{
-				power_half_adj=0;		//清除半功率逼近
-			}
-			g_power_limit_flag &= (~B_PWDEAD);
-		}
-		else
-		{
-			power_arrive=0;		
-		}	
-		t_ppg_add = 0;
-
-		if(t_ppg_dic==0)
-		{
-			t_ppg_add = 1;	//单方向稳定，加到需要减
-		}
-		else
-		{
-			if(power_half_adj==0)
-			{	
-				if(TargetPower==ActualPower)
-				{
-					g_power_limit_flag |= B_PWDEAD;					//设置死区稳定标志	
-				}
-			}
-		}	
-	}
-	t_ppg_add|=t_ppg_dic;	//加上方向位
-	return t_ppg_add;
-}
-#else
-
-
-#endif
-
-#if 0
-INT8U s_power_pid_control(INT16U t_power_adc_trig)
-{
-	INT16U t_delta_power_adc;
-	
-	INT16U t_dead_power;
-	INT8U  t_ppg_add,t_ppg_dic; 
-
-	int16_t 	tPowerErr0;
-
-	t_delta_power_adc=u16_PPGF;
-	
-	tPowerErr0=t_power_adc_trig-g_power_adc_fact;
-	
-	if(g_power_adc_fact>=t_power_adc_trig)					//目标功率与实际功率差值
-	{
-		t_delta_power_adc = g_power_adc_fact-t_power_adc_trig;		//大于目标功率，减PPG
-		t_ppg_dic = 0x80;				//加频率
-		
-	}
-	else
-	{
-		t_delta_power_adc = t_power_adc_trig-g_power_adc_fact;		//小于目标功率
-		t_ppg_dic = 0x00;			//减频率
-		tPowerErr0=0x0000;
-//------相位限制PPG------------------------------------------------
-
-	}
-
-	tPowerErr0|=t_delta_power_adc;						//最高位方向位
-	tPowerChange=PowerErr1-tPowerErr0;				//此次变化的增加量
-	
-	
-//	t_ppg_add=PHASE_Lock_fun(PHASE_Out);		//根据相位限制增减量
-
-
-//	if(t_ppg_add)
-//	{
-//		return	t_ppg_add;			
-//	}	
-
-	t_dead_power = g_p25_ad;				//计算死区功率 50w
-
-	if(t_delta_power_adc>t_dead_power)				//大于死区值
-	{
-
-//---------根据功率差值调整增减速度----------------------------------------------------		
-
-			if(t_delta_power_adc<g_p25_ad*4)				//100W以内微调
-			{
-				t_ppg_add=FRE_10;	
-			}
-			else
-			{			
-//				t_delta_power_adc/=(g_p25_ad);
-					
-				t_delta_power_adc=ME_UDIV(t_delta_power_adc,g_p25_ad);		//
-//				t_delta_power_adc*=5;
-
-				if(t_delta_power_adc>FRE_1000)
-				{
-					t_delta_power_adc=FRE_1000;				//最大增加值 
-				}
-				t_ppg_add=t_delta_power_adc;	
-//				if(ActualPower>500/25)
-				if(power_half_adj==0)
-				{
-					t_ppg_add/=4;	
-				}
-			}
-		g_power_limit_flag &= (~B_PWDEAD);				//清死区稳定标志
-	}
-	else
-	{
-		if(power_half_adj)
-		{
-			power_arrive++;
-			if(power_arrive>10)
-			{
-				power_half_adj=0;		//清除半功率逼近
-			}
-			g_power_limit_flag &= (~B_PWDEAD);
-		}
-		else
-		{
-			power_arrive=0;		
-		}	
-		t_ppg_add = 0;
-
-		if(t_ppg_dic==0)
-		{
-			t_ppg_add = 1;	//单方向稳定，加到需要减
-		}
-		else
-		{
-			if(power_half_adj==0)
-			{	
-				if(TargetPower==ActualPower)
-				{
-					g_power_limit_flag |= B_PWDEAD;					//设置死区稳定标志	
-				}
-			}
-		}	
-	}
-	t_ppg_add|=t_ppg_dic;	//加上方向位
-	return t_ppg_add;
-}
-
-#endif
 
 
 //******************************************************************
@@ -3615,7 +2652,9 @@ INT8U s_pan_check_fun(void)
 			}
 			
 		}
-//		API_GPIO_WritePin(DebugB_pin,0);			
+
+#ifdef HALF
+	
 
 		if(g_surge_delay==POT_TYPE_DELAY1)
 		{
@@ -3640,7 +2679,7 @@ INT8U s_pan_check_fun(void)
 			}
 			APP_POWER_PotTypeCheckConfirm();
 		}
-
+#endif // HALF	
 											//正常加热后
 		t_pan_flag = s_check_pan_leave();		//有功率输出直接判移锅
 
@@ -3679,31 +2718,30 @@ void	StartPPG(void)
 
 //	Power_channel=PotCh3;
 	FunPanCountInit();				//计数器初始化	
-	
-//	FunPPGsetDuty(PAN_FRE_PWM);
 	FunDeadTimeSetValue(DTS4US,DTS4US);	
-
-	
-	PPGvalueDef 			input;
-	input.duty		=		PAN_FRE_PWM-1000;
-	input.prioed	=		PAN_FRE_PWM*2;
-	API_PPG_setValue(Power_channel,input);
-	
 	
 	m_check_pan_flag=1;		//起振检锅标志
 	CheckPanStep=C_CHECKPAN_GET_PLUSE;			//下一个10ms检查检锅数
 	g_panc_time = 0;		//清检锅时间计数器
 
-	API_ADC_Pan_ConfigChannel(1);					//PAN->PAN
-	API_PPG_SET_SINGLE(Power_channel);				//单脉冲模式
-
-		//延时约10us, 等待单脉冲完成再启动DMA
-//		volatile uint32_t dly = 1000; while (dly--);
-
-		FunPanCountReset();							//开始计数
-//	API_GPIO_WritePin(DebugA_pin,1);
 	
-//	FunDeadTimeSetValue(DTS4US,DTS4US);
+#ifdef HALF	
+	PPGvalueDef 			input;
+	input.duty		=		PAN_FRE_PWM-1000;
+	input.prioed	=		PAN_FRE_PWM*2;
+	API_PPG_setValue(Power_channel,input);
+	
+//	API_ADC_Pan_ConfigChannel(1);					//PAN->PAN
+	API_PPG_SET_SINGLE(Power_channel);				//单脉冲模式
+#else
+
+//	API_ADC_Pan_ConfigChannel(1);					//PAN->PAN
+	API_FB_SinglePulseStart(Power_channel);				//单脉冲模式
+
+#endif
+
+	FunPanCountReset();							//开始计数
+
 
 
 }
@@ -3736,7 +2774,7 @@ void	check_pot_pluse(void) 		//产生起振脉冲
 		
 		if(temp1==03)		//暂停不检锅
 		{
-			 	return;
+			return;
 		}
 
 
@@ -3745,6 +2783,11 @@ void	check_pot_pluse(void) 		//产生起振脉冲
 			if(Time_GetSecFlg())
 			{
 				g_panc_time++;
+				#ifndef HALF    //全桥检锅设置PPG值
+				APP_POWER_ppgActual(Power_channel,PAN_PPG);
+				// API_FB_SetPreiodCountSimple(Power_channel,  FRE_30K_PWM*2);		//设置起振周期
+				// API_FB_SetPhaseShiftSimple(Power_channel,  FRE_30K_PWM*5/10);		//设置
+				#endif // HALF
 				CheckPanStep=0;						//每一秒清零用于两个炉头同步
 			}	
 
@@ -3972,7 +3015,14 @@ INT8U s_check_pan_leave()
 
 		INT8U		t_load_leave;		//移锅功率根据下发功率来设定，下发功率的一半+100W为当前移锅功率，但最小不小于设定的移锅功率
 
+		if(m_ic_vc_adc_ok_flag==0)
+		{
+			return 	t_pan_flag;
+		}	
+
 /*		LoadLeavePhase=0xd9;*/
+#ifdef HALF
+
 
 		t_fre_25_per=STEEL_LOAD_FRE_PWM;			//+((LoadLeavePhase&0xf*4)<<4);		//检锅功率加上修正值  LoadLeavePhase（低四位*4）  
 
@@ -4006,67 +3056,23 @@ INT8U s_check_pan_leave()
 		{
 			t_fre_25_per=s_ppg_limit;
 		}
+#else
+	t_fre_25_per=100;		//测试值，全桥移锅	
 
-/*		TOPValues=t_fre_25_per>>4;*/
-//		t_fre_25_per=FRE_25K_PWM;
+#endif // HALF
+
 		
 //----------------------------------------------		
 		t_pan_flag = C_POT_MAY;
 
-		if(m_ic_vc_adc_ok_flag==0)
-		{
-			return 	t_pan_flag;
-		}	
-
-
-
-
-//		U16_PPG_LIMIT=LOAD_FRE_PWM;
-	
-
-//大于有锅功率或者大于有锅电流 都可判为有锅
-//		if((g_power_adc_fact>s_power_convert_bass(LoadLeave))||(t_pan_curr>s_power_convert_bass(LoadCurrent)))    //
-//		if(i_ppg_getppg()>=t_fre_25_per||g_surge_delay>50)
-/*		LoadLeavePhase=0xd9;*/
-
-//		t_pan_phase=LoadLeavePhase&0xf0;
-//		if(t_pan_phase<0x20)
-//		{
-//			t_pan_phase=PHASE_POT_LEAVE;
-//		}	
 
 		if(g_surge_delay>APP_POWER_PAN_DELAY)
 		{														// 延时5秒开始判断移锅
-
-//			ResonanceCurrentCompare();		//得到母线电流与谐振电流的比值用于移锅
-			
-			//PPG不再一直加了，修正为加到PPG限制值，到了限制值认为无锅		
-//				t_load_leave=TargetPower;
-		
-
-				// if(power_half_adj)
-				// {
-				// 	t_load_leave=power_half_adj;
-				// }
-	
-				// if(t_load_leave>(200/25))
-				// {
-				// 	t_load_leave-=(200/25);
-				// }	
+				t_load_leave=LoadLeave;	
 				
-				
-				// t_load_leave/=2;					//不同功率的移锅功率不同 一半+100W
-				
-
-				// if(t_load_leave<LoadLeave)
-				// {
-				// 	t_load_leave=LoadLeave;			//最小值 
-				// }	
-					t_load_leave=LoadLeave;	
-				
-					uint8_t minReson=(MinPhase&0XF)*4;
-					minReson=2;
-					uint16_t	resonanceLeave=0X80+minReson;			//Q值大于100認為移鍋
+				uint8_t minReson=(MinPhase&0XF)*4;
+				minReson=2;
+				uint16_t	resonanceLeave=0X80+minReson;			//Q值大于100認為移鍋
 
 #ifdef		DEBUG_POWER_OUT
 		powerPhase=0x10;
@@ -4075,30 +3081,13 @@ INT8U s_check_pan_leave()
 					if(minReson)				//小于4不使能
 					{
 
-
-
-// 							if(FunPPGgetValue().duty<FRE_55K_PWM||m_power_cycle_flag)		//频率过小，检查相位
-// 							{
-// 								if(powerPhase>75)
-// 								{
-// //									t_panLeave=1;
-// 								}
-// 							}
-// 							else
-// 							{
-// 								if(s_limit_Qsum>resonanceLeave)
-// 								{
-// //									t_panLeave=1;
-// 								}	
-// 							}
-
-								if(powerPhase>75)
-								{
-									t_panLeave=1;
-								}
-
-
+						if(powerPhase>75)		//这里改成常量
+						{
+							t_panLeave=1;
 						}
+
+
+					}
 						
 					if(t_panLeave)
 					{
@@ -4117,11 +3106,14 @@ INT8U s_check_pan_leave()
 				}
 				else
 				{	
-					if(FunPPGgetValue().duty>=t_fre_25_per||m_vcout_flag)	//PPG太大直接移锅，有电流限制  母线电流与谐振电波比例太大
+
+					if(PPGgetDutyChX(Power_channel)>=t_fre_25_per||m_vcout_flag)	//PPG太大直接移锅，有电流限制  母线电流与谐振电波比例太大
 					{
 						t_pan_flag = s_pan_err_adj(C_PEN_MOVE_TIME);
 //						t_pan_flag = C_POT_IN;	
-					}
+					}	
+
+
 				}
 		}
 		else
@@ -4170,7 +3162,9 @@ void	s_pwm_off(INT8U	off_num)
 	m_ppg_on=0;
 	FunTimBkFlag();			//清除BKFLAG
 	// s_power_surge=0;
-	g_duty_actual=OFF_FRE_PWM;
+	// g_duty_actual=OFF_FRE_PWM;
+	APP_POWER_dutyTarget(Power_channel,OFF_PPG);	
+
 	m_power_off_flag=1;
 	// g_power_limit_flag &= (~B_PWDEAD);				//清死区稳定标志
 	MaxPowerSet=getMaxPowerDiv();		//最大功率赋值
@@ -4190,7 +3184,8 @@ void	s_pwm_on()
 		}
 		else
 		{	
-			g_power_duty=START_FRE_PWM;			//软启动
+			// g_power_duty=START_FRE_PWM;			//软启动
+			APP_POWER_dutyTarget(Power_channel,START_PPG);
 		}
 		
 		m_ppg_on=1;	
@@ -4242,17 +3237,7 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 
 	INT16U t_ppg_limit;
 	
-//	t_corrent_ppg=g_ppg_buf_actual;				//得到当前PPG大小（实际产生的）
-	
-//	if(m_powerChangeType)
-//	{	
-//		t_corrent_ppg=g_power_duty;
-//	}
-//	else
-//	{	
-//		t_corrent_ppg=g_ppg_buf;
-//	}
-	
+
 	t_corrent_ppg=g_duty_actual;
 	
 	
@@ -4284,9 +3269,7 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 		}
 	}
 		  
-//		BOTTOMValue=s_ppg_limit>>8;		
-					
-	
+
 	if(t_pan_cur_change!=0xff)	//0xff不调整
 	{
 
@@ -4295,11 +3278,6 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 
 		if(t_pan_cur_change)	//当前变化值			
 		{
-			
-//			s_limit_max_count=0;   	//功率不稳定重置LIMIT_max
-//			i_ppg_rest_limit();	   	 //根椐条件更新LIMIT(电压变化，输入功率变化）
-
-
 	
 			t_ppg_dict=t_pan_cur_change&0x80;	//方向位	当前调整数据		
 			t_ppg_change_value=t_pan_cur_change&0x7f;//变化数据
@@ -4340,30 +3318,9 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 //;-----------根据限制值进行功率调整----------------------------------------------------------------------------------
 		i_ppg_set_limit(t_corrent_ppg);
 
-//相位判锅限制
-
-//		PHASE_limit_fun(PHASE_Out);
-
-//		if(B_PHASE_POT_UP)	
-//		{
-//			if(s_ppg_limit>FRE_20K_PWM)
-//			{
-//				s_ppg_limit=FRE_20K_PWM;	
-//			}
-//			
-//		}	
-
-//	根据当前功率与PPG周期推算最大功率周期
-
-		// if(s_ppg_limit > s_ppg_power_adj)	
-		// {
-		// 	s_ppg_limit = s_ppg_power_adj;
-		// }	
-
 
 #if 1
 
-//		t_ppg_limit=s_ppg_limit+(PPG_MAX_RANGE/10);
 
 		t_ppg_limit=s_ppg_limit;		
 		
@@ -4394,43 +3351,23 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 	
 	PowerStatus = ((g_off_flag&0x0f)<<4) + (g_power_limit_flag&0x0f);	//高4位返回128ms反压计数高4位 低4位返回功率控制标志    20161027
 
-//	BOTTOMValue=s_ppg_limit>>4;
-//	
-	
-//	if(m_powerChangeType)								//根据占空比或频率，得到修改量
-//	{
-//			g_power_duty=t_corrent_ppg;
-//		
-//	}
-//	else
-//	{	
-//			g_ppg_buf=t_corrent_ppg;
-//	
-//	}
-	
-//	if(m_power_master)									//主炉头是确定的输出，其它炉头会以主炉头关联
-//	{
+
 		if(m_ppg_on)
 		{	
-			if (t_corrent_ppg < MAX_FRE_PWM)
-			{
-				t_corrent_ppg = MAX_FRE_PWM;
-			}
+			// if (t_corrent_ppg < MAX_FRE_PWM) //统一处理边界
+			// {
+			// 	t_corrent_ppg = MAX_FRE_PWM;
+			// }
 		}
+#ifdef HALF
 		if (t_corrent_ppg > PowerMinFre)
 		{
 			t_corrent_ppg = PowerMinFre;
 		}
-	
+#endif // HALF	
 
-		g_power_duty=t_corrent_ppg;
+	g_power_duty=t_corrent_ppg;
 		
-		
-//	}		
-	
-	
-	
-
 
 	TOPValue=s_ppg_limit>>8;
 	ActualPPG= g_power_duty>>8;	
@@ -4439,32 +3376,18 @@ INT16U	i_ppg_control(INT8U t_pan_cur_change)
 	return	t_corrent_ppg;	
 }
  
-void	PotPPGtotalFun(void)
-{
-
-	for(uint8_t i=0;i<POTNUM;i++)
-	{
-		
-		if(getPowerCHN(i)==NULL)						//确定炉头类地址
-		{break;}	
-		
-
-		
-		
-		
-		
-	}	
-
-}	
-
-
-static uint8_t runCnt;
-static uint8_t runCnt1;
 
 void	i_ppg_set_limit(INT16U	t_corrent_ppg)	  	//PPG以稳定，设定限制值
 {
 
+#ifdef HALF
+		uint16_t	limitMax_min=FRE_30K_PWM;
+		uint16_t	limit_min=FRE_40K_PWM;
 
+#else	
+		uint16_t	limitMax_min=MIN_SHIFT_PWM;	//
+		uint16_t	limit_min=MIN_SHIFT_PWM;	
+#endif // HALF
 
 
 	if((g_power_limit_flag & B_PWDEAD))   //死区标志。连续低功率不测限制			//进入死区限制区, 同时PPG抖频过完成	
@@ -4483,26 +3406,19 @@ void	i_ppg_set_limit(INT16U	t_corrent_ppg)	  	//PPG以稳定，设定限制值
 
 					s_limit_max_count++;
 					
-//					if(s_limit_Qsum==0)
-//					{
-//							s_limit_Qsum=EquivalentRes*10;
-//					}	
-//					s_limit_Qsum-=s_limit_Qsum/10;
-
-//					s_limit_Qsum+=EquivalentRes;
-					
+				
 					if(s_limit_max_count>10)
 					{	
 						s_limit_max_count=0;
 						s_ppg_limit_max=t_corrent_ppg+PPG_MAX_RANGE;
 
-						if(s_ppg_limit_max<FRE_30K_PWM)			//最小限制值
+
+
+						if(s_ppg_limit_max<limitMax_min)			//最小限制值
 						{
-							s_ppg_limit_max=FRE_30K_PWM;
+							s_ppg_limit_max=limitMax_min;
 						}
 
-//						s_limit_Qvalue=(s_limit_Qsum)/10+5;
-//						TOPValue=s_limit_Qvalue;	
 					}	
 				
  
@@ -4512,16 +3428,21 @@ void	i_ppg_set_limit(INT16U	t_corrent_ppg)	  	//PPG以稳定，设定限制值
 					
 					IHStatus|=B_POW_ARRIVE_FLAG;
 					s_ppg_limit=t_corrent_ppg+(PPG_MAX_RANGE/5);
-					if(s_ppg_limit<FRE_40K_PWM)
+
+
+
+					if(s_ppg_limit<limit_min)
 					{
-						s_ppg_limit=FRE_40K_PWM;
+						s_ppg_limit=limit_min;
 					}
-					
+#ifdef HALF					
 					uint16_t   cycle=PowerCycle/4+100;
 					if(s_ppg_limit<cycle)
 					{
 						s_ppg_limit=cycle;
 					}
+
+#endif // HALF						
 					m_ppg_lock_flag=1;		//功率以经稳定可以锁定功率 移锅后解除
 					s_limit_voltage=VoltageValue;			//保存当前电压值，电压发生大变化重新设置
 
@@ -4549,64 +3470,59 @@ void	reset_ppg_limit_ch(uint8_t	i)
 {
 
 	uint16_t minFre=PowerMinFre;
-	// if(PowerMem[i].staticReg->flag.bit.PotType==PotSteel)
-	// {
-	// 	if(PowerMinFre==MID_FRE_PWM)
-	// 	{
-	// 		minFre=MIN_FRE_PWM;			//多炉头下钢锅最大值为29.5K
-	// 	}
 
-	// }
 
 	if(i<PotNum)
 	{
 		PowerMem[i].staticReg->LimitMaxCount=0;	
-//		PowerMinFre=MIN_FRE_PWM;				
 		PowerMem[i].staticReg->PpgLimit=minFre;					//恢复最大PPG
 		PowerMem[i].staticReg->ppgLimitMax=minFre;
 		PowerMem[i].staticReg->LimitVoltage=VoltageValue;
 		
 	}
 
-
-	//			m_keepPPG_flag=0;
-//			m_pwmequ_flag=0;
-//			s_cal_max_ppg=MIN_FRE_PWM;				//恢复频率限制
-//	g_panc_time = 0x0e;					//马上启动加热	
-
 }
 
 
 
-void	reset_ppg_limit(void)
+void	reset_ppg_limit_off(void)
 {
 
 	s_ppg_limit_power=TargetPower;					
 	s_limit_max_count=0;
-	PowerMinFre=MIN_FRE_PWM;
+// #ifdef HALF	
+// 	PowerMinFre=MIN_FRE_PWM;
+// #else
+// 	PowerMinFre=APP_POWER_dutyShiftToHrtim(0,MAX_PPG);			//这里设置的是相移角
+// 			//这里设置的是相移角
+// #endif	//HALF
 	s_ppg_limit=PowerMinFre;					//恢复最大PPG
 	s_ppg_limit_max=PowerMinFre;
 	s_limit_voltage=VoltageValue;	
-	// s_ppg_power_adj=PowerMinFre;
+
 	s_limit_Qvalue=0;
-//	s_limit_Qsum=0;
-	// 			g_surge_delay=0;
-	//			m_keepPPG_flag=0;
-//			m_pwmequ_flag=0;
-//			s_cal_max_ppg=PowerMinFre;				//恢复频率限制
-//	g_panc_time = 0x0e;					//马上启动加热	
+
 	g_power_limit_flag=0;
 	PowerDeadCnt=0;
+#ifdef HALF
+
 	PowerCycleBaseDuty=START_FRE_PWM;
 	PowerCycleDoubleDuty=START_FRE_PWM;
-//	PhaseController_Init(&PowerControl->staticReg->potPhase);	//重新相位定义基准
+
+#endif // HALF		
 }
 
 
 
 void	APP_POWER_PotCheckRest(void)
 {
+
+#ifdef HALF	
 	PowerMinFre=MIN_FRE_PWM;
+#else
+	PowerMinFre=APP_POWER_dutyShiftToHrtim(0,MAX_PPG);			//这里设置的是相移角
+#endif	//HALF	
+
 	PowerPotCheckEnd=0;
 
 	for(uint8_t i=0;i<PotNum;i++)
@@ -4614,14 +3530,16 @@ void	APP_POWER_PotCheckRest(void)
 
 		reset_ppg_limit_ch(i);						//清除
 		PowerMem[i].staticReg->SurgeDelay=0;
+#ifdef HALF		
 		PowerMem[i].staticReg->flag.bit.PowerCycleType=0;	
 		PowerMem[i].staticReg->flag.bit.PotType=PotSteel;
-		PowerMem[i].staticReg->PPGdutyActual=START_FRE_PWM;
+		PowerMem[i].staticReg->PPGdutyActual=START_FRE_PWM;		//
 		PowerMem[i].staticReg->cycleChange.baseDuty=START_FRE_PWM;
 		PowerMem[i].staticReg->cycleChange.doubleDuty=START_FRE_PWM;	
 		PowerMem[i].staticReg->potPowerSave[0].count=0;
 		PowerMem[i].staticReg->potPowerSave[1].count=0;	
 		PowerMem[i].staticReg->potPowerSave[2].count=0;				
+#endif // HALF
 		Adc_TxaAvgReset(i);
 	}
 
@@ -4645,19 +3563,20 @@ void	powerOnSetMIN(uint8_t chn)
 	
 //	FunPPGcenOnoff(0);	
 
-	if(chn<=PotCh4)		//powermem 只定义了4个
+	if(chn<=PotNum)		//powermem 只定义了4个
 	{	
-		PowerMem[chn].staticReg->PowerDuty=START_FRE_PWM;
-		PowerMem[chn].staticReg->PPGdutyActual=START_FRE_PWM;
-		PowerMem[chn].staticReg->powerCycle=START_FRE_PWM*2;
+		// PowerMem[chn].staticReg->PowerDuty=START_FRE_PWM;
+		// PowerMem[chn].staticReg->powerCycle=START_FRE_PWM*2;
+		APP_POWER_ppgActual(chn,START_PPG);			//直接修改PPG
 		PowerMem[chn].staticReg->flag.bit.PowerCycleType=0;
 		PowerMem[chn].staticReg->cycleRoll=0;
 	}
 
 
-	PPGsetHalf(chn,START_FRE_PWM);
-	PowerCycle=START_FRE_PWM*2;
-
+	// PPGsetHalf(chn,START_FRE_PWM);
+#ifdef  HALF	
+	PowerCycle=PowerMem[chn].staticReg->powerCycle;
+#endif
 }
 
 void	ClearStruct(int* structAdr,int size)
@@ -4685,22 +3604,12 @@ uint8_t	power_zero_adjust(uint8_t chn)
 		 {	
 			xReturn=chn+1;
 
-			// PWM_VALUE_SET(START_FRE_PWM);
-//			FunPPGsetDuty(START_FRE_PWM);
-			 
-			 
-//			PPGsetHalf(PotCh1,START_FRE_PWM);		//所有炉头统一频率	 
-//			PPGsetHalf(PotCh2,START_FRE_PWM);	
-//			PPGsetHalf(PotCh3,START_FRE_PWM);				 
-//			PPGsetHalf(PotCh4,START_FRE_PWM);				 
-
-
-
 			powerOnSetMIN(chn);						//所有炉头重新从小功率启动
 #ifdef HALF
 			API_HRTIM_MasterSync_SetPeriod(PowerCycle);
 #else
-			API_FB_SetPreiodCountSimple(0,PowerCycle);
+//			API_FB_SetPreiodCountSimple(chn,PowerCycle); //poweeronsetmin里以经设了MASTER
+
 #endif
 			
 			FunDeadTimeSetValue(DTS4US,DTS4US);
@@ -4732,14 +3641,10 @@ uint8_t	power_zero_adjust(uint8_t chn)
 		}
 		m_ppg_work_flag=0;	   //关功率
 			
-	
-		g_duty_actual= OFF_FRE_PWM;
-		
-		FunPPGsetDuty(OFF_FRE_PWM);
-//		PPGsetHalf(chn,PAN_FRE_PWM);
+		APP_POWER_dutyTarget(Power_channel,OFF_PPG);
 
 		FunPPGonOff(PPG_OFF);
-//		PowerChangeFlag=1;
+
 		m_power_off_flag=0;
 
 	}
@@ -4758,11 +3663,12 @@ void	APP_ADC_DebugValueCallBack(uint8_t ch,uint8_t value)
 
 void	PowerDeatTimeSet(uint8_t chn)	
 {	
+
 	if(getPowerCHN(chn)==NULL)					//确定炉头类地址
 	{return; }	
 
 
-#if 1
+#ifdef  HALF
 		PPGvalueDef		ppgValue=FunPPGgetValue();	
 		uint32_t  freDiv;	
 		uint32_t  freNow=ppgValue.duty;
@@ -4809,31 +3715,9 @@ freNow-FRE_40K_PWM*DT差值/FRE差值=需要减少多少DT单位
 			}	
 #else
 
-		uint32_t  freDiv;	
-		uint32_t  freNow=FunPPGgetValue().prioed;	
-		if(freNow<FRE_50K_PWM*2)
-		{
-			freDiv=DTS6US;	
-		}
-		else if(freNow>FRE_40K_PWM*2)
-		{
-			freDiv=DTS1US;	
-		}
-		else
-		{
-/*
-fre差值/DT差值=每变化多少FRE值增加1单位DT
-freNow-FRE_40K_PWM*DT差值/FRE差值=需要减少多少DT单位
-结果为DTS6US-减少DT值
-*/
+		uint32_t  freDiv;		
+		freDiv=DTS3US;
 
-			freDiv=(FRE_40K_PWM-FRE_50K_PWM)*2;
-			freNow-=(FRE_50K_PWM)*2;
-			freNow*=(DTS6US-DTS1US);
-			freNow/=freDiv;	
-			freDiv=DTS6US;
-			freDiv-=freNow;
-		}	
 		FunDeadTimeSetValue(freDiv,freDiv);		//PWM0死區時間;PWM1死區時間 - 單位ns
 
 
@@ -4919,7 +3803,7 @@ void	powerZeroChange(void)
 
 	
 	
-	for(uint8_t i=0;i<POTNUM;i++)
+	for(uint8_t i=0;i<PotNum;i++)
 	{
 		t_return=power_zero_adjust(i);
 		t_checkPan|=t_return&0xf;
@@ -4938,12 +3822,6 @@ void	powerZeroChange(void)
 		
 	}
 	
-	// uint8_t nowPot		=		DataStruct_GetStackValue(&PowerStack);//当前优先POT	
-	// if(PowerPotHot!=nowPot)
-	// {
-	// 	PowerPotHot=nowPot;
-	// 	t_checkPan=1;			//有热点切换重新更新
-	// }
 	if(PowerPotReset)			//得到功率切换标志
 	{
 		PowerPotReset=0;
@@ -4953,11 +3831,14 @@ void	powerZeroChange(void)
 	if(t_checkPan)
 	{	
 		
-		for(uint8_t i=0;i<PotMax;i++)
+		for(uint8_t i=0;i<PotNum;i++)
 		{
-				powerOnSetMIN(i);						//所有炉头重新从小功率启动
+			powerOnSetMIN(i);						//所有炉头重新从小功率启动
 		}			
-		TIMsynchronousPower();
+		
+	
+		TIMsynchronousPower();		//输出信号
+	
 		APP_POWER_PotCheckRest();
 		
 
@@ -4982,22 +3863,7 @@ void	powerZeroChange(void)
 
 
 
-
-	
-//	API_TIM_GCC_DELAY(20000);							//等待软启动
-	
-//	if(t_checkPan)									//有炉头需要软启动，则重新同步PPG
-//	{
-//		for(uint8_t i=0;i<POTNUM;i++)
-//		{
-//				powerOnSetMIN(i);						//所有炉头重新从小功率启动
-//		}	
-
-//		TIMsynchronous();
-//	}	
-
-	
-	for(uint8_t i=0;i<POTNUM;i++)			
+	for(uint8_t i=0;i<PotNum;i++)			
 	{
 
 		PowerDeatTimeSet(i);					//更新死区值 
@@ -5045,8 +3911,6 @@ void		PowerMemInit(void)
 
 	memcpy(&(PowerControl->input->init),g_core_para_init,8);
 	
-
-	
 	m_ppg_on = 0;
 	FixedPID_Init(&PowerPid, 0.1, 0.01, 0.00, 1000);			//以1000为单位的定点数增量PID
 	g_power_cycle=PowerCycle;
@@ -5061,7 +3925,7 @@ void		PowerMemInit(void)
 
 void	API_POWER_RxControlCallback(uint8_t chn, uint8_t* buff,uint8_t len)
 {
-//		uint8_t  chn=getI2cChn(buff[0]);
+
 
 				uint8_t*  p;
 
@@ -5187,90 +4051,62 @@ uint8_t* API_UART_TxInitCallback(uint8_t chn, uint8_t len)
 
 void u_power_init()
 {
-//	SetI2cRxControlCallBackFun(getI2cPowerControl);
-//	SetI2cRxInitCallBackFun(getI2cPowerInit);
-//	SetI2cSetTxValueCallBackFun(setPowerTxValue);	
-	
-	PowerMem[0].keepReg=&PowerKeepReg[0];								//内部变量区地址											//指针指向POWER1
-	PowerMem[0].staticReg=&PowerStaticReg[0];								//内部变量区地址											//指针指向POWER1
+
+							//内部变量区地址											//指针指向POWER1
 	PowerMem[0].funAdr=(AppPowerFunDef*)&Power1FunTable;			//方法区地址
-	PowerMem[0].input=&PowerInput[0];
-	
-
-	
-//	PowerMem[0].funAdr->_PPGinit();
-	
-	PowerMem[1].staticReg=&PowerStaticReg[1];								//内部变量区地址											//指针指向POWER1
-	PowerMem[1].keepReg=&PowerKeepReg[1];								//内部变量区地址											//指针指向POWER1
-
 	PowerMem[1].funAdr=(AppPowerFunDef*)&Power2FunTable;			//方法区地址
-	PowerMem[1].input=&PowerInput[1];//PowerSlaveInput;
-
-	PowerMem[2].keepReg=&PowerKeepReg[2];								//内部变量区地址											//指针指向POWER1
-	PowerMem[2].staticReg=&PowerStaticReg[2];								//内部变量区地址											//指针指向POWER1
 	PowerMem[2].funAdr=(AppPowerFunDef*)&Power3FunTable;			//方法区地址
-	PowerMem[2].input=&PowerInput[2];//PowerSlaveInput;
-		
-	PowerMem[3].keepReg=&PowerKeepReg[3];								//内部变量区地址											//指针指向POWER1
-	PowerMem[3].staticReg=&PowerStaticReg[3];								//内部变量区地址											//指针指向POWER1
 	PowerMem[3].funAdr=(AppPowerFunDef*)&Power4FunTable;			//方法区地址
-	PowerMem[3].input=&PowerInput[3];//PowerSlaveInput;
-	
-//	PoweSlaveMem.funAdr->_PPGinit();
-	
 
-
-	uint8_t ch=PotCh1;
-	PowerControl=&PowerMem[ch];
-	Power_channel=ch;		
-	PowerMemInit();
 	
-	ch=PotCh2;
-	PowerControl=&PowerMem[ch];
-	Power_channel=ch;		
-	PowerMemInit();	
-
-	ch=PotCh3;
-	PowerControl=&PowerMem[ch];
-	Power_channel=ch;		
-	PowerMemInit();
+	for(uint8_t ch=0;ch<PotNum;ch++)
+	{
+		PowerMem[ch].keepReg=&PowerKeepReg[ch];								//内部变量区地址											//指针指向POWER1
+		PowerMem[ch].staticReg=&PowerStaticReg[ch];
+		PowerMem[ch].input=&PowerInput[ch];//PowerSlaveInput;
+					
+		PowerControl=&PowerMem[ch];
+		Power_channel=ch;		
+		PowerMemInit();	
 	
-	ch=PotCh4;
-	PowerControl=&PowerMem[ch];
-	Power_channel=ch;		
-	PowerMemInit();	
-	
+		APP_POWER_dutyTarget(ch,PAN_PPG);
+		APP_POWER_periodTarget(ch,PAN_PPG);	
+	}
+#ifndef HALF  //全桥是单炉头
+	PowerMem[0].staticReg->flag.bit.powerSingle=1;				
+#endif // !HALF	
 	MemSetInt((uint32_t*)(&PowerAll),0,sizeof(AppPowerAllDef)/sizeof(int));
 
 
+#ifdef HALF
 	PowerCycle=PAN_FRE_PWM*2;			//共同周期设置初值 
+
+#endif // HALF
 	PowerScrCnt=0;						//關閉繼電器	
 	DataStruct_StackInit(&PowerStack);
 }
 
-
+#define	DEC_PWM_SHIFT	2
 void PowerStepDec(AppPowerDef* powerCh)
 {	
 	uint16_t	t_ppg_duty;
+	uint8_t	ch=powerCh->keepReg->channel;
 	
-	
-		t_ppg_duty=powerCh->funAdr->_PPGgetValue().duty;
-		
-		if(t_ppg_duty<MAX_FRE_PWM)
-		{
-			t_ppg_duty=MAX_FRE_PWM;	
-		}	
-		
+	t_ppg_duty=PPGgetDutyChX(ch);
+
+	if(t_ppg_duty<PowerMaxFre)
+	{
+		t_ppg_duty=PowerMaxFre;	
+	}	
+	else
+	{
 		t_ppg_duty-=	DEC_PWM_SURGE;
+	}	
 
-		powerCh->funAdr->_PPGsetDuty(t_ppg_duty);
+
+	PPGsetDutyChX(ch,t_ppg_duty);	//写入实际数据到PPG	
 		
-		powerCh->staticReg->PPGdutyActual=t_ppg_duty;
-
-
-//		PowerChangeFlag=1;
-
-
+	powerCh->staticReg->PPGdutyActual=t_ppg_duty;
 	powerCh->staticReg->VcoutDelay=60;						//10次半波不增加PPG
 	powerCh->staticReg->flag.bit.Vcout=1;					//m_vcout_flag=1;
 
@@ -5301,18 +4137,18 @@ uint16_t PowerStepChange(AppPowerDef* powerCh)
 {
 
 	uint8_t xReturn=0;
+	uint8_t	ch=powerCh->keepReg->channel;
 	
 	if(powerCh->staticReg->flag.bit.ppgOn)
 	{
 
-//				PowerStepChangeDuty(powerCh);			//1： 统一调整上管开通时间， 周期统一按最大炉头周期
 
-			uint16_t	t_ppg_now=powerCh->funAdr->_PPGgetValue().duty;			//占空比
+			uint16_t	t_ppg_now=PPGgetDutyChX(ch);			//占空比
 	
 			if(t_ppg_now!=powerCh->staticReg->PowerDuty)
 			{
 				xReturn=1;
-//				PowerChangeFlag=1;
+
 
 				if(t_ppg_now>powerCh->staticReg->PowerDuty)
 				{
@@ -5332,9 +4168,14 @@ uint16_t PowerStepChange(AppPowerDef* powerCh)
 							powerCh->staticReg->VcoutDelay--;
 						}			
 				}
-				powerCh->staticReg->PPGdutyActual=t_ppg_now;
 
 			}
+
+	//---------------
+	//做最大最小值检查
+	//---------------
+			powerCh->staticReg->PPGdutyActual=t_ppg_now;//统一写入地
+
 
 	}
 
@@ -5351,7 +4192,7 @@ uint16_t PowerStepChange(AppPowerDef* powerCh)
 
 void 	AdcIrqHandleWatchDogLock(void)		//这个要单独处理，两个炉头
 {
-		for(uint8_t i=0;i<POTNUM;i++)			//关闭所有炉头 
+		for(uint8_t i=0;i<PotNum;i++)			//关闭所有炉头 
 		{
 
 			powerOffPot(i);					
@@ -5359,21 +4200,14 @@ void 	AdcIrqHandleWatchDogLock(void)		//这个要单独处理，两个炉头
 	
 }	
 
-void 	AdcIrqHandlePPGstepChangeCh1(void)		//这个要单独处理，两个炉头
-{
-	PowerStepDec(&PowerMem[0]);
-}	
-void 	AdcIrqHandlePPGstepChangeCh2(void)		//这个要单独处理，两个炉头
-{
-	PowerStepDec(&PowerMem[1]);
-}	 
+
 //确定上管开通占比是否小于50%
 void	APP_POWER_DutyLess50(void)
 {
 
 		uint16_t 	powerCycleHalf=PowerCycle/2-2;
 	
-				for(uint8_t i=0;i<POTNUM;i++)
+				for(uint8_t i=0;i<PotNum;i++)
 				{
 					if(PowerMem[i].staticReg->PPGdutyActual>=powerCycleHalf)
 					{
@@ -5413,51 +4247,16 @@ uint8_t  APP_POWER_ZeroSync(void)
 {
 
 		uint8_t	ppgChange=0;
-			
-//		peroid[4]=API_HRTIM_GetTxaCnt(PotChTest1);
-//		peroid[0]=API_HRTIM_GetTxaCnt(PotCh1);	
-//		peroid[1]=API_HRTIM_GetTxaCnt(PotCh2);	
-//		peroid[2]=API_HRTIM_GetTxaCnt(PotCh3);	
-//		peroid[3]=API_HRTIM_GetTxaCnt(PotCh4);
+	
+
 
 		uint16_t*  	peroid=Adc_GetHrtimSyncBuffAdr();//取同一点的HRTIM值
 				
 		uint16_t  peroid_temp=0;		
 				
-		for (uint8_t  i = 0; i < POTNUM; i++)
+		for (uint8_t  i = 0; i < PotNum; i++)
 		{
-//			if(PowerMem[i].staticReg->flag.bit.powerSingle||PowerMem[i].staticReg->flag.bit.ppgOn==0)
-//			{
-//				continue;					//单独调频的炉头不进行同步处理
-//			}	
 
-
-
-//				if(PowerMem[i].staticReg->cycleRoll)						/* 倍频CNT修正 */
-//				{
-//					peroid[i]+=PowerCycle/2;
-//				}
-//				if((i&1)==0)
-//				{
-//					peroid[i]+=0xa8;			//奇数炉头加上固定的偏差
-//				}
-
-//				if(peroid_temp==0)
-//				{
-//					peroid_temp	= peroid[i];			//保存第一个炉头周期，供其它炉头比较
-//				}
-
-
-//					if(abs(peroid_temp-peroid[i])>0x100)		
-//					{										//偏差太大重新更新								
-////					API_GPIO_WritePin(DebugA_pin,1);
-////					API_GPIO_WritePin(DebugA_pin,0);	
-//					TIMsynchronousPower();	
-//					}
-
-
-
-	
 
 
 			if(PowerMem[i].staticReg->flag.bit.PowerCycleType)
@@ -5482,7 +4281,7 @@ uint8_t  APP_POWER_ZeroSync(void)
 				{	
 					ppgChange=1;			
 					PowerMem[i].staticReg->cycleRoll=0;		//同频
-					PowerMem[i].staticReg->PPGdutyActual=PowerMem[i].staticReg->cycleChange.baseDuty;		//用切换前的占空比
+					PowerMem[i].staticReg->PowerDuty=PowerMem[i].staticReg->cycleChange.baseDuty;		//用切换前的占空比
 				}
 			}	
 
@@ -5507,114 +4306,98 @@ uint8_t 		APP_POWER_GetCycleType(uint8_t change)
 		}	
 	
 	
-				for(uint8_t i=0;i<POTNUM;i++)
-				{
+		for(uint8_t i=0;i<PotNum;i++)
+		{
 
 
-						ppgChange|=PowerStepChange(&PowerMem[i]);						//处理其它炉头
+			ppgChange|=PowerStepChange(&PowerMem[i]);						//处理其它炉头
 						
 					
-						if(PowerMem[i].staticReg->flag.bit.powerSingle)
-						{
-							continue;		
-						}
+//			if(PowerMem[i].staticReg->flag.bit.powerSingle)
+//			{
+//				continue;		
+//			}
 					
-						uint16_t ppgTemp=PowerMem[i].staticReg->PPGdutyActual;
-						if(ppgTemp<MAX_FRE_PWM)
-						{
-								ppgTemp=MAX_FRE_PWM;
-						}					
-					
-						if(ppgMax<ppgTemp)		//取最大频率
-						{
-							ppgMax=ppgTemp;
-						}	
-				}
+			uint16_t ppgTemp=PowerMem[i].staticReg->PPGdutyActual;
+			if(ppgTemp<PowerMaxFre)
+			{
+				ppgTemp=PowerMaxFre;
+			}		
+			
+			if(ppgTemp>PowerMinFre)
+			{
+				ppgTemp=PowerMinFre;
+			}		
+			
+			PowerMem[i].staticReg->PPGdutyActual=ppgTemp;		
+			
+			if(ppgMax<ppgTemp)		//取最大频率
+			{
+				ppgMax=ppgTemp;
+			}	
+		}
 	
-				if(ppgMax>PowerMinFre)
-				{
-					ppgMax=PowerMinFre;
-				}		
+//		if(ppgMax>PowerMinFre)		//最大值
+//		{
+//			ppgMax=PowerMinFre;
+//		}		
 	
-				if(ppgMax&1)			//PowerCycle保證為4的倍數。
-				{
-					ppgMax	+=1;	
-				}
+
 
 #if 	PotChWorkAll==0			
-				if(g_surge_delay>POT_TYPE_DELAY2+2)
-				{	
-					if(PowerMem[PotChWork].input->init.potPowerM>1600/25)
-					{
+			if(g_surge_delay>POT_TYPE_DELAY2+2)
+			{	
+				if(PowerMem[PotChWork].input->init.potPowerM>1600/25)
+				{
 						ppgMax=FRE_CYCLE_PWM;
-					}
-				}	
+				}
+			}	
 #endif								
 				
 				
+#ifdef HALF				//全橋周期固定不于DUTY相關
 
-				PowerCycle=ppgMax*2;
-				powerCycleHalf=ppgMax;
+		if(ppgMax&1)			//PowerCycle保證為4的倍數。
+		{
+			ppgMax	+=1;	
+		}
+		PowerCycle=ppgMax*2;
 
-				//判断是否需要倍频	
-
-
-				for(uint8_t i=0;i<POTNUM;i++)
-				{
-					if(PowerMem[i].staticReg->flag.bit.powerSingle)			
-					{//非同步炉头采用50%占空比
-						powerDuty[i]=PowerMem[i].staticReg->PPGdutyActual;
-						powerCycle[i]=powerDuty[i]*2;
-
-
-					}else
-					{
-						powerCycle[i]=PowerCycle>>(PowerMem[i].staticReg->cycleRoll);
-						powerDuty[i]=PowerMem[i].staticReg->PPGdutyActual;
-						powerCycleHalf=powerCycle[i]/2;
-						if(powerDuty[i]>powerCycleHalf)
-						{	//占空比不大于一半
-							PowerMem[i].staticReg->PPGdutyActual=powerCycleHalf;
-							powerDuty[i]=powerCycleHalf;
-						}	
-
-					}
+		powerCycleHalf=ppgMax;
+#else			
+			
+#endif // HALF
+		//判断是否需要倍频	
 
 
+		for(uint8_t i=0;i<PotNum;i++)
+		{
+			if(PowerMem[i].staticReg->flag.bit.powerSingle)			
+			{//非同步炉头采用50%占空比
+				powerDuty[i]=PowerMem[i].staticReg->PPGdutyActual;
+				#ifdef	HALF
+				powerCycle[i]=powerDuty[i]*2;
+				#else
+				powerCycle[i]=PowerMem[i].staticReg->powerCycle;
+				#endif
+			}else
+			{
+				powerCycle[i]=PowerCycle>>(PowerMem[i].staticReg->cycleRoll);
+				powerDuty[i]=PowerMem[i].staticReg->PPGdutyActual;
+				powerCycleHalf=powerCycle[i]/2;
+				if(powerDuty[i]>powerCycleHalf)
+				{	//占空比不大于一半
+							// PowerMem[i].staticReg->PPGdutyActual=powerCycleHalf;
+					powerDuty[i]=powerCycleHalf;
+				}	
 
-				}
+			}
 
 
-				// powerDuty1=PowerMem[0].staticReg->PPGdutyActual;
-				// powerCycleHalf=powerCycle1/2;
-				// if(powerDuty1>powerCycleHalf)
-				// {	//占空比不大于一半
-				// 	PowerMem[0].staticReg->PPGdutyActual=powerCycleHalf;
-				// 	powerDuty1=powerCycleHalf;
-				// }	
-				// powerDuty2=PowerMem[1].staticReg->PPGdutyActual;
-				// powerCycleHalf=powerCycle2/2;
-				// if(powerDuty2>powerCycleHalf)
-				// {
-				// 	PowerMem[1].staticReg->PPGdutyActual=powerCycleHalf;
-				// 	powerDuty2=powerCycleHalf;
-				// }	
 
-				// powerDuty3=PowerMem[2].staticReg->PPGdutyActual;
-				// powerCycleHalf=powerCycle3/2;
-				// if(powerDuty3>powerCycleHalf)
-				// {
-				// 	PowerMem[2].staticReg->PPGdutyActual=powerCycleHalf;
-				// 	powerDuty3=powerCycleHalf;
-				// }	
+		}
 
-				// powerDuty4=PowerMem[3].staticReg->PPGdutyActual;
-				// powerCycleHalf=powerCycle4/2;
-				// if(powerDuty4>powerCycleHalf)
-				// {
-				// 	PowerMem[3].staticReg->PPGdutyActual=powerCycleHalf;
-				// 	powerDuty4=powerCycleHalf;
-				// }	
+
 		return	ppgChange;
 }
 
@@ -5633,6 +4416,7 @@ void	APP_POWER_SetPowerCycleType(void);
 void	APP_POWER_ResetPowerCycleType(void);
 void	APP_POWER_CycleChange(void)				//中间切换到同频，提高功率
 {
+
 
 	CycleChangeCnt++;
 	if(CycleChangeCnt==10)
@@ -5669,10 +4453,13 @@ void	APP_POWER_SetPowerCycleType(void)
 		{
 			ppgChange=1;
 			PowerMem[i].staticReg->cycleRoll=0;		//同频
-			PowerMem[i].staticReg->PPGdutyActual=PowerMem[i].staticReg->cycleChange.baseDuty;		//用切换前的占空比
+			PowerMem[i].staticReg->PowerDuty=PowerMem[i].staticReg->cycleChange.baseDuty;		//用切换前的占空比
 		}
 	}
-	g_req_cycle = 1;
+	if(ppgChange)
+	{
+		g_req_cycle = 1;
+	}
 
 }
 
@@ -5697,12 +4484,15 @@ void	APP_POWER_ResetPowerCycleType(void)
 				{
 					ppgChange=1;
 					PowerMem[i].staticReg->cycleRoll=1;		//恢复倍频
-					PowerMem[i].staticReg->PPGdutyActual=MAX_FRE_PWM;
+					PowerMem[i].staticReg->PowerDuty=PowerMaxFre;
 				}
 	
 			}
 	}
-	g_req_cycle = 1;
+	if(ppgChange)
+	{
+		g_req_cycle = 1;
+	}
 
 }
 
@@ -5720,14 +4510,6 @@ void	APP_ADC_IRQ_PPGstepChangeCallBack(void)
 		switch (PowerChangeStatus)
 		{
 			case POWER_CHANGE_CYCLE:
-	
-	
-	
-//				API_GPIO_WritePin(DebugA_pin,1);
-	
-
-
-
 
 
 POWER_CHANGE_CYCLE_Line:
@@ -5741,7 +4523,7 @@ POWER_CHANGE_CYCLE_Line:
 				}
 
 #else
-				API_FB_SetPreiodCountSimple(0,PowerCycle);
+//				API_FB_SetPreiodCountSimple(0,PowerCycle);
 				for(uint8_t i=0;i<PotNum;i++)
 				{
 					API_FB_SetPhaseShiftSimple(i,powerDuty[i]);
@@ -5753,9 +4535,9 @@ POWER_CHANGE_CYCLE_Line:
 
 				g_req_cycle = 0;
 				g_zero_occur = 1;				// 通知主循环执行 PPG_MainLoop
-					PowerChangeStatus=POWER_CHANGE_DUTY;	
+		PowerChangeStatus=POWER_CHANGE_DUTY;	
 		
-//				API_GPIO_WritePin(DebugA_pin,0);
+//		API_GPIO_WritePin(DebugA_pin,0);
 		
 
 			/* code */
@@ -5788,10 +4570,14 @@ POWER_CHANGE_CYCLE_Line:
  */
 void	APP_POWER_PPG_MainLoop(void)
 {
+#ifdef HALF
+
+
 	APP_POWER_ZeroSync();
 
+#if 0	
 	uint16_t ppgMax = 0;
-	for (uint8_t i = 0; i < POTNUM; i++)
+	for (uint8_t i = 0; i < PotNum; i++)
 	{
 		if (PowerMem[i].staticReg->flag.bit.powerSingle)
 			continue;
@@ -5808,7 +4594,7 @@ void	APP_POWER_PPG_MainLoop(void)
 
 	PowerCycle = ppgMax * 2;
 
-	for (uint8_t i = 0; i < POTNUM; i++)
+	for (uint8_t i = 0; i < PotNum; i++)
 	{
 		if (PowerMem[i].staticReg->flag.bit.powerSingle)
 		{
@@ -5822,19 +4608,42 @@ void	APP_POWER_PPG_MainLoop(void)
 			uint16_t half = powerCycle[i] / 2;
 			if (powerDuty[i] > half)
 			{
-				PowerMem[i].staticReg->PPGdutyActual = half;
+				// PowerMem[i].staticReg->PPGdutyActual = half;		//PPGdutyActual为只读，它在中断会被修改
 				powerDuty[i] = half;
 			}
 		}
 	}
 
 	g_req_cycle = 1;
+#endif //0	
+#else
+//---------調整全橋頻率--------------------
+
+	if(PowerCycle!=PowerMem[0].staticReg->powerCycle)
+	{
+		PowerMem[0].staticReg->powerCycle=PowerCycle;//PowerCycle是目標值，不直接更新到PPG，每個過零點再更新
+	}
+
+
+#endif // HALF		
 }
 void APP_POWER_ZeroOccurTask(void)
 {
 	if (g_zero_occur) {
 		g_zero_occur = 0;
+
 		APP_POWER_PPG_MainLoop();
+
+#ifdef HALF	
+	PowerMinFre=MIN_FRE_PWM;
+	PowerMaxFre=MAX_FRE_PWM;
+#else
+	PowerMinFre=APP_POWER_dutyShiftToHrtim(0,MAX_PPG);//这里设置的是相移角
+	PowerMaxFre=APP_POWER_dutyShiftToHrtim(0,MIN_PPG);//这里设置的是相移角
+				
+			//这里设置的是相移角
+#endif	//HALF
+
 	}
 }
 void	TimIrqHandleBkCh1(void)						//BK 电流浪涌保护
@@ -5863,14 +4672,42 @@ void	TimIrqHandleBkCh2(void)
 
 //--------PPGsetDuty--------------------------
 
-void	PPGsetDutyChX(uint8_t ch,uint16_t duty)
+void	PPGsetDutyChX(uint8_t ch,uint16_t duty)		//实际写入PPG
 {
 #ifdef HALF
 	API_PPG_setPluse(ch,duty);
 #else
-	API_FB_SetPhaseShift(ch,duty);
+	API_FB_SetPhaseShiftSimple(ch,duty);
 #endif
 }
+void	PPGsetPeriodChX(uint8_t ch,uint16_t period)		//实际写入PPG
+{
+#ifdef HALF
+	API_PPG_setPeriod(ch,period);
+#else
+	API_FB_SetPreiodCountSimple(ch,period);
+#endif
+}
+
+
+uint16_t	PPGgetDutyChX(uint8_t ch)		//实际写入PPG
+{
+#ifdef HALF
+	return API_PPG_getPluse(ch,duty);
+#else
+	return API_FB_GetPhaseShiftSimple(ch);
+#endif
+}
+uint16_t	PPGgetPeriodChX(uint8_t ch)		//实际写入PPG
+{
+#ifdef HALF
+	return API_PPG_GetPeroid(ch,duty);
+#else
+	return API_FB_GetPreiodCountSimple(ch);
+#endif
+}
+
+
 void	PPGsetDutyCh1(uint16_t duty)
 {
 	PPGsetDutyChX(PotCh1,duty);
@@ -5890,6 +4727,8 @@ void	PPGsetDutyCh4(uint16_t duty)
 
 
 //--------PPGsetValue--------------------------
+
+
 
 void	PPGsetValueCh1(PPGvalueDef input)
 {
@@ -6078,9 +4917,6 @@ void	APP_POWER_PanCountInitChX(uint8_t ch)					//void			(*PanCountInit)(void);		
 #endif
 //	APP_ADC_PanSwChange(ch);		//切换PANSW选择合适的ADC通道
 
-	API_TIM_PAN_RESET();				//开启TIM 1.3us检锅触发源
-
-
 	PanPluse.ch=ch;
 
 	
@@ -6110,7 +4946,6 @@ void	APP_POWER_PanCountInitCh4(void)					//void			(*PanCountInit)(void);							/
 uint8_t APP_POWER_PanCountGetValue(void)			//uint8_t 	(*PanCountGetValue)(void);					//得到检锅数
 {	
 
-	API_TIM_PAN_STOP();
 	uint8_t xReturn;
 
 		PanPluse.res=PanCheckRest;	
@@ -6125,7 +4960,7 @@ void	APP_POWER_PanCountSetValue(uint8_t onOff)			//void  		(*PanCountSetValue)(u
 
 	APP_ADC_PanSwChange(PanPluse.ch);
 	APP_ADC_DMA_RecoverPan(PanPluse.ch);				//恢复DMA	
-//				API_GPIO_WritePin(DebugB_pin,1);
+	PanPluse.res=PanDmaEnd;
 	
 }
 
@@ -6136,16 +4971,12 @@ void	APP_POWER_PanCountSetValue(uint8_t onOff)			//void  		(*PanCountSetValue)(u
 uint8_t	API_DMA_PAN_IRQHandlerCallBack(uint8_t ch)
 {
 
-	// API_ADC_DISABLE_IT_JEOC();	
-	
 	
 	
 	API_DMA_STOP(ChDmaPan);	
 
 	APP_ADC_PanSwChange(0x20);			//关所有检锅通道
-	API_ADC_Pan_ConfigChannel(0);		//恢复VCIC检测
-//					API_GPIO_WritePin(DebugB_pin,0);
-//	API_TIM_PAN_STOP();	
+
 	PanPluse.res=PanDmaEnd;			//DMA读取完成
 	return ch;
 
@@ -6306,41 +5137,6 @@ void	APP_ADC_IRQ_PPGstepDecTxA(Power_AwdDntr_LINK_t* txaDntr,uint16_t* txaBuff)
 #define	 OutRam		1
 
 
-void APP_POWER_FmacSetPan(uint8_t ch)
-{
-	
-		API_FMAC_MEMDEF* fmacMem=API_FMAC_GetMemAddress();
-		if(fmacMem->type==FmacStop)		//没有FMAC在执行 在完成回调中清除
-		{	
-			fmacMem->type=FmacPan;		//正在檢鍋
-			
-			PublicBuffFreeAll();
-			Pan_ADC_AdcFmacBuff=PubicBuffCalloc(Pan_ADC_DMA_BUFF_NUM*sizeof(uint16_t));
-
-
-
-#ifdef	DEBUG_POWER_OUT_CONST			//选择内部数据仿真
-		fmacMem->X1=(int16_t *)pluse_getIntervalsAddress(0) ;
-		fmacMem->Y=(int16_t *)Pan_ADC_AdcFmacBuff;
-		fmacMem->outSize=pluse_getIntervalsSize(0);//大小要与输入数组大小一致
-#else	// DEBUG_POWER_OUT
-			fmacMem->X1=(int16_t *)Pan_ADC_AdcDmaBuff ;
-			fmacMem->Y=(int16_t *)Pan_ADC_AdcFmacBuff;
-			fmacMem->outSize=Pan_ADC_DMA_BUFF_NUM;
-
-#endif // DEBUG_POWER_OUT
-			fmacMem->ch=ch;//4個爐頭后是檢鍋
-
-			API_FMAC_Rest();
-		}	
-}	
-
-
-void	API_FMAC_AppPowerOverCallBack(API_FMAC_MEMDEF* fmacMem)
-{
-		PanPluse.res=PanFmacEnd;		//FMAC滤波完成 需要统计脉冲数
-}
-
 
 
 
@@ -6348,40 +5144,12 @@ void	API_FMAC_AppPowerOverCallBack(API_FMAC_MEMDEF* fmacMem)
 
 void 	API_POWER_PanFmac(void)
 {	
-//	PanPluse.res=PanDmaEnd;
+
 	if(PanPluse.res==PanDmaEnd)
 	{	
-
-#if 1		
-		APP_POWER_FmacSetPan(PanPluse.ch);
 		API_POWER_PanCheckPluse();	//对PAN信号进行脉冲检测
 	}	
-#else		
-		
-		
-//		APP_ADC_WaitTxaCalOver();
-		
-		API_FMAC_MEMDEF		fmacMem={0};
 
-		PublicBuffFreeAll();
-		Pan_ADC_AdcFmacBuff=PubicBuffCalloc(Pan_ADC_DMA_BUFF_NUM*sizeof(uint16_t));
-	
-#if OutRam==0		
-		fmacMem.X1=(int16_t*)Pan_ADC_AdcDmaBuff;		//PAN ADC缓存地址
-#else
-		fmacMem.X1=(int16_t *)pluse_getIntervalsAddress(0);
-		
-#endif
-		fmacMem.Y=(int16_t*)Pan_ADC_AdcFmacBuff;							//FMAC计算结果地址
-
-
-		API_FMAC_Rest(&fmacMem);		
-		
-		PanPluse.res=PanFmacEnd;		//FMAC滤波完成 需要统计脉冲数
-		
-	}	
-#endif
-	
 }
 
 
@@ -6396,15 +5164,15 @@ void	APP_POWER_PanPluseMessage(uint8_t ch)
 #ifdef  	DEBUG_POWER_OUT_CONST
 	message.array[0].buff=(uint16_t *)pluse_getIntervalsAddress(0);
 #else	
-	message.array[0].buff=Pan_ADC_AdcDmaBuff;
+	message.array[0].buff=(uint16_t*)APP_POWER_GetPanDmaBuffAddress();
 #endif
-	message.array[1].buff=Pan_ADC_AdcFmacBuff+4;
+	message.array[1].buff=0;
 	message.array[2].buff=0;
 	message.array[3].buff=0;
 
 
 	message.array[0].size=Pan_ADC_DMA_BUFF_NUM;
-	message.array[1].size=Pan_ADC_DMA_BUFF_NUM;
+	message.array[1].size=0;
 	message.array[2].size=0;
 	message.array[3].size=0;	
 	
@@ -6435,29 +5203,11 @@ void	APP_POWER_PanPluseMessage(uint8_t ch)
 void		API_POWER_PanCheckPluse(void)
 {
 
-		int16_t		newValue,oldValue;
-		int16_t 		div;
-		int32_t		avgValue=0;
-	
-
-			
-	
-//		if(PanPluse.res==PanDmaEnd)		
-		{
+		PanPluse.res=PanPluseEnd;			//PAN脉冲检测完成
+		PanPluse.pulse_count= pulse_check_process((uint16_t*)APP_POWER_GetPanDmaBuffAddress(),Pan_ADC_DMA_BUFF_NUM);
 				
-				while(PanPluse.res==PanDmaEnd);
+		APP_POWER_PanPluseMessage(PanPluse.ch);
 
-				PanPluse.res=PanPluseEnd;			//PAN脉冲检测完成
-				PanPluse.pulse_count= pulse_check_process(Pan_ADC_AdcFmacBuff+FmacLeve/2,Pan_ADC_DMA_BUFF_NUM-FmacLeve);
-				
-				APP_POWER_PanPluseMessage(PanPluse.ch);
-// #ifdef		PrintMessage		
-// 		printf("check pan %d,%d,\r\n", PanPluse.pulse_count,PanPluse.res16);
-// #endif		
-
-	}
-		
-	
 }	
 void	Power_EKF_Input(MODULE_INPUT(AppPower) *in)
 {
@@ -6484,7 +5234,7 @@ void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 	s_last_seq_AppAdc = in->AppAdc_params->seq;
 		
     /* ---- 输入段: ADC 数据从输入缓存分发到各炉头 PowerMem ---- */
-    for (uint8_t ch = 0; ch < POTNUM; ch++) {
+    for (uint8_t ch = 0; ch < PotNum; ch++) {
 
 
 		PowerMem[ch].staticReg->flag.bit.IcVcAdcOk=1;
@@ -6500,57 +5250,6 @@ void		Power_Adc_Input(MODULE_INPUT(AppPower) *in)
 	
 }
 
-#if 0
-
-#include "../../../../../app/ekf/modbus_ekf_regs.h"
-
-/**
- * API_POWER_EKF_GetTelemetry — 覆盖弱函数, 填充 EKF 遥测数据
- *
- * 从 PowerMem[chn] 和 API_PPG_getValue() 读取实时相位/频率/PPG 数据,
- * 写入 EKF_Telemetry_t 供 MODBUS 0x1020 区域回读。
- * 调用时机: 每次 MODBUS FC03 读 EKF 区域前, Update_Static_Register_DATA() 内触发
- */
-void API_POWER_EKF_GetTelemetry(uint8_t chn, EKF_Telemetry_t *ekf)
-{
-    PPGvalueDef ppg;
-    uint32_t   freq_hz;
-
-    if (!ekf) return;
-    if (chn >= 4) return;
-
-    ppg = API_PPG_getValue(chn);
-
-    /* 相位 0~1800 (0.1° 单位) */
-    ekf->Phase_Angle = (uint16_t)PowerMem[chn].staticReg->phaseValue;
-
-    /* 频率: f_hz = 384000000 / prioed * 2 (半桥倍频) */
-    if (ppg.prioed > 0) {
-        freq_hz = 384000000UL / (uint32_t)ppg.prioed * 2;
-    } else {
-        freq_hz = 0;
-    }
-    ekf->Freq_Hz_Hi = (uint16_t)(freq_hz >> 16);
-    ekf->Freq_Hz_Lo = (uint16_t)(freq_hz & 0xFFFF);
-
-    /* PPG 周期 / 占空比 */
-    ekf->PPG_Period = ppg.prioed;
-    ekf->PPG_Duty   = ppg.duty;
-
-    /* PID 增量 */
-    ekf->Delta_PPG = PidReturn[chn];
-
-    /* 谐振电流 (平均有功电流, 16位) */
-    ekf->Resonant_Curr = (uint16_t)PowerMem[chn].staticReg->current16;
-}
-#endif
-
-/* ====== v2.2 MODULE_SKELETON + MODULE_EXPORT ======
- * APP_Power_GetIO → Switcher 注册入口
- * DoWork 内部: InputCallback (weak 空壳) → ProcessInput → OutputCallback (weak 空壳)
- * 输入: g_in (Power_Input_t) ← Switcher 填入 ADC raw
- * 输出: g_out (Power_Output_t) → Switcher 读取状态
- * ================================================================ */
 
 
 
@@ -6578,6 +5277,59 @@ static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *ou
 
 }
 
+// static	PPGvalueDef dutyActual[PotNum];		//duty值统一写到内部寄存器
+// static	PPGvalueDef dutyTarget[PotNum];		//duty值统一写到目标值，由中断逼近
 
+void	APP_POWER_ppgActual(uint8_t ch,uint8_t value)		//实际把数据保存
+{
+	APP_POWER_periodTarget(ch,value);	//要先設頻率，再算DUTY， 頻率可能會變
+	APP_POWER_dutyTarget(ch,value);
+
+	//以下是实际写入处理
+	PPGsetDutyChX(ch,PowerMem[ch].staticReg->PowerDuty);
+	PPGsetPeriodChX(ch,PowerMem[ch].staticReg->powerCycle);
+
+
+
+}
+
+//---------------------------------------
+//半桥是DUTY的HRTIM值，  全桥是千分比。
+//------------------------------------
+
+uint16_t 	APP_POWER_dutyShiftToHrtim(uint8_t ch,uint8_t value)
+{
+	uint32_t xRetrun=PowerMem[ch].staticReg->powerCycle/2;	//用當前頻率算相位角對應移相值
+		xRetrun*=APP_POWER_PPG[value].duty;
+		xRetrun/=1800;			//相位角180.0度
+	return	xRetrun;	
+}
+
+void	APP_POWER_dutyTarget(uint8_t ch,uint8_t value)
+{
+	#ifdef	HALF
+		uint16_t	dutyHrtim=APP_POWER_PPG[value].duty;
+
+	#else
+		uint16_t	dutyHrtim=APP_POWER_dutyShiftToHrtim(ch,value);
+	#endif
+	
+	PowerMem[ch].staticReg->PowerDuty=dutyHrtim;
+	
+	
+
+}
+void	APP_POWER_periodTarget(uint8_t ch,uint8_t value)
+{
+	uint32_t period=APP_POWER_PPG[value].prioed<<1;	
+
+	if(PowerCycle)
+	{
+		period=PowerCycle;
+	}
+	PowerCycle=period;			//只有當PowerCycle為零是才調用表格默認值
+	PowerMem[ch].staticReg->powerCycle=period;
+	
+}
 //**********************************end of file********************************
 

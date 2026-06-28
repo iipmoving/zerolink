@@ -1056,18 +1056,18 @@ void	API_TIM_ZERO_Init(void)
 }	
 
 
-void	API_TIM_PAN_RESET(void)
-{
-	HAL_TIM_GenerateEvent(&htim_pan,TIM_EVENTSOURCE_UPDATE);
-	__HAL_TIM_ENABLE(&htim_pan);
-}	
+//void	API_TIM_PAN_RESET(void)
+//{
+//	HAL_TIM_GenerateEvent(&htim_pan,TIM_EVENTSOURCE_UPDATE);
+//	__HAL_TIM_ENABLE(&htim_pan);
+//}	
 
-void	API_TIM_PAN_STOP(void)
-{
-//	__HAL_TIM_DISABLE(&htim_pan);
-	CLEAR_BIT(htim_pan.Instance->CR1,TIM_CR1_CEN);
-	
-}	
+//void	API_TIM_PAN_STOP(void)
+//{
+////	__HAL_TIM_DISABLE(&htim_pan);
+//	CLEAR_BIT(htim_pan.Instance->CR1,TIM_CR1_CEN);
+//	
+//}	
 
 void 	API_TIM_BLANKING_Init(void)
 {

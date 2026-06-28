@@ -1176,84 +1176,24 @@ void	API_ADC_InjectedConfig(void)
 	
 
 
-#if 0
-void		API_ADC_Pan_ConfigChannel(uint8_t ch)		//CH0  VCIC单次触发，CH1 PAN连续触发
+
+/**
+ * @brief  切换ADC1 Regular Group 序列
+ *         panMode=1: SQ1=PAN, SQ2=PAN  (检锅模式)
+ *         panMode=0: SQ1=VC,  SQ2=PAN  (正常模式)
+ */
+void API_ADC_SwitchPanSequence(uint8_t panMode)
 {
-	ADC_ChannelConfTypeDef   sConfig;
-	ADC_TOTAL_InitTypeDef* adcTotal;	
-	
-	if(ch==0)
-	{	
-//		adcTotal=	(ADC_TOTAL_InitTypeDef*)	&VcIc_ADC_TOTAL;
-//		ADC_CR2_CONTINUOUS(DISABLE);//开启连续转换
-//		CLEAR_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_CONT));		//触发ADC
-		CLEAR_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_ADON|ADC_CR2_ALIGN));		//触发ADC
-		uint32_t cr2=AdcCurrentHandle.Instance->CR2;
-		cr2&=~ADC_CR2_JEXTSEL|ADC_CR2_JEXTTRIG;
-//		cr2|=ADC2_CR2_JEXTSEL_JSWSTART;
-		AdcCurrentHandle.Instance->CR2=cr2;				//关闭ADC2
-	
-	}
-	else
-	{
-
-
-
-		CLEAR_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_ADON));		//触发ADC
-		SET_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_ALIGN));		//左对齐
-		
-		uint32_t cr2=AdcCurrentHandle.Instance->CR2;
-		cr2&=~(ADC_CR2_EXTSEL|ADC_CR2_EXTTRIG);
-//		cr2|=ADC2_CR2_EXTSEL_SWSTART;
-		AdcCurrentHandle.Instance->CR2=cr2;													//关闭ADC2		
-		API_ADC_InjectedConfig();																	//adc2 inj group
-		
-		
-//		adcTotal=	(ADC_TOTAL_InitTypeDef*)	&TEMPE_ADC2_TOTAL;
-//		ADC_CR2_CONTINUOUS(ENABLE);//开启连续转换	
-//		SET_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_CONT));		//触发ADC
-		
-	}	
-
-#if 0	
-	
-  for(uint8_t i=0;i<adcTotal->AdcRank->Length;i++)
-  {
-	sConfig=adcTotal->AdcRank->Rank[i];
-	  
-	if(sConfig.Channel)
-	{	
-		if (HAL_ADC_ConfigChannel(&AdcCurrentHandle, &sConfig) != HAL_OK)
-		{
-			Error_Handler();
-		}
-	}	
-
+    if (panMode) {
+        /* SQ1 = PAN(CH10) */
+        AdcT12aHandle.Instance->SQR3 &= ~ADC_SQR3_SQ1_Msk;
+        AdcT12aHandle.Instance->SQR3 |= (PAN_CHANNEL << ADC_SQR3_SQ1_Pos);
+    } else {
+        /* SQ1 = VC(CH9) */
+        AdcT12aHandle.Instance->SQR3 &= ~ADC_SQR3_SQ1_Msk;
+        AdcT12aHandle.Instance->SQR3 |= (VoltageAd_CHANNEL << ADC_SQR3_SQ1_Pos);
+    }
 }
-	SET_BIT(AdcCurrentHandle.Instance->CR2, (ADC_CR2_SWSTART));		//触发ADC
-#endif
-}
-#else
-void		API_ADC_Pan_ConfigChannel(uint8_t ch)	
-{
-	ADC_ChannelConfTypeDef   sConfig;
-
-	switch(ch)
-	{
-		case 1:	
-//			sConfig=VcT2A_RankInitTypeDef.Rank[1];		//切換成T2A
-//			if (HAL_ADC_ConfigChannel(&AdcT12aHandle, &sConfig) != HAL_OK)
-//			{
-//				Error_Handler();
-//			}
-		break;
-
-	}
-
-
-}
-
-#endif
 
 
 

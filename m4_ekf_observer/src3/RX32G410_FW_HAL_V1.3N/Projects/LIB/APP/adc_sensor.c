@@ -203,10 +203,10 @@ typedef struct __attribute__((aligned(32))) {
     ADC_Buff_SumDef     Avg;
     ADC_Current_Def     CurrentAdc2Save[TxA_ADC_AdcBUFF_NUM];
     ADC_Current_Def     CurrentAdc3Save[TxA_ADC_AdcBUFF_NUM];
-    uint16_t            HrtimSave[PotNum][TxA_ADC_AdcBUFF_NUM];
+    uint16_t            HrtimSave[4][TxA_ADC_AdcBUFF_NUM];
 } APP_ADC_AdcTxADMA_BUFF_DEF;
 
-typedef struct __attribute__((aligned(1))) {
+typedef struct __attribute__((aligned(32))) {
     uint32_t        num;
     uint16_t        Vc[AdcAvageCount];
     ADC_Tempe_Def   TempeAdc1;
@@ -1130,17 +1130,12 @@ void APP_ADC_DMA_RecoverHrtim(void)
 void APP_ADC_DMA_RecoverPan(uint8_t ch)
 {
     volatile API_DMA_RecoverDef recover;
-    recover.SrcAddress = API_ADC_GetAddressDRx(ChAdc1_Vc, PanADC1_ADC1Group);
+    recover.SrcAddress = API_ADC_GetAddressDR(ChAdc1_Vc);
 
-    /* 检锅高速采样: 使用 wave_capture 大缓存, 2000点=500μs@0.25μs */
-    WaveCaptureFrame *wf = (WaveCaptureFrame*)WaveCapture_GetFramePtr();
-    if (wf) {
-        recover.DstAddress = (uint32_t)&wf->data[0];
-        recover.DataLength = 2000;
-    } else {
-        recover.DstAddress = (uint32_t)APP_POWER_GetPanDmaBuffAddress();
-        recover.DataLength = Pan_ADC_DMA_BUFF_NUM;
-    }
+
+    recover.DstAddress = (uint32_t)APP_POWER_GetPanDmaBuffAddress();
+    recover.DataLength = Pan_ADC_DMA_BUFF_NUM;
+
 
     API_DMA_RECOVER(ChDmaPan, (API_DMA_RecoverDef*)(&recover));
 }
@@ -1171,7 +1166,12 @@ void APP_ADC_PanSwChange(uint32_t ch)
 
     if (ch < 10) {
         API_GPIO_WritePin(pinCh, SW_ON);
+				API_ADC_SwitchPanSequence(1);		//切换ADC 全采PAN
     }
+		else
+		{
+				API_ADC_SwitchPanSequence(0);
+		}	
 }
 
 /* ================================================================

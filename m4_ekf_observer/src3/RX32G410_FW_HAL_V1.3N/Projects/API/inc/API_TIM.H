@@ -24,9 +24,9 @@ void	API_TIM_100US_RESET(void);
 void	API_TIM_100US_STOP(void);
 void 	API_TIM_100US_Init(void);
 
-void	API_TIM_PAN_RESET(void);
-void	API_TIM_PAN_STOP(void);
-void 	API_TIM_PAN_Init(void);
+//void	API_TIM_PAN_RESET(void);
+//void	API_TIM_PAN_STOP(void);
+//void 	API_TIM_PAN_Init(void);
 
 void	API_TIM_TXA_RESET(void);
 void	API_TIM_TXA_STOP(void);

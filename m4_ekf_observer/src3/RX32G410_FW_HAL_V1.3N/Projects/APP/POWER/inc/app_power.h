@@ -190,6 +190,18 @@ typedef struct
 }APP_POWER_ZeroReturn;			//过零状态
 
 
+//--------POWER 内用的hrtim相关值---------------------------------
+enum
+{
+	START_PPG,	//检锅PPG	
+	PAN_PPG,
+	OFF_PPG,
+	MIN_PPG,	//最小相位角	
+	MAX_PPG,	//最大相位角
+	MAX_PPG_NUM,
+};
+
+
 void u_power_init(void);				//初始化
 
 void	PowerControlFun(uint8_t chn);		//功率大小控制
@@ -262,13 +274,18 @@ enum{
 	// PanSwitch,			//下一个过零点切换T1A T2A
 	// PanStartPpg,		//准备起振
 	PanDmaEnd,			//DMA读取完成
-	PanFmacEnd,			//FMAC滤波完成
+//	PanFmacEnd,			//FMAC滤波完成
 	PanPluseEnd,		//PAN脉冲检测完成	
 	TxaDmaEnd,			//谐振电流DMA读取完成
 };
 
 
-	
+
+void		PPGsetDutyChX(uint8_t ch,uint16_t duty);
+uint16_t 	PPGgetDutyChX(uint8_t ch);
+uint16_t 	PPGgetPeriodChX(uint8_t ch);
+		
+
 void	APP_POWERR_SetTxaAwdValue(void);		//设置AWD值 谐振电流保护值 ch=0 正常高值  ch=1 低电压移锅值
 void	API_POWER_PanFmac(void);					//PAN ADC FIR低通
 void		API_POWER_PanCheckPluse(void);	//PAN ADC PLUSE检测
@@ -290,8 +307,8 @@ void	APP_POWER_PotTypeCheck(void);					//检查锅具类型，确定最大PPG
 void	APP_POWER_PotCheckRest(void);				//重新炉头检查
 
 
-int16_t* 	APP_POWER_GetPanDmaBuffAddress(void);		//返回PAN  ADC缓存
-int16_t* 	APP_POWER_GetPanFmacBuffAddress(void);		//返回PAN  fMAC缓存
+uint16_t* 	APP_POWER_GetPanDmaBuffAddress(void);		//返回PAN  ADC缓存
+
 
 
 #if 0		//通讯接口实现

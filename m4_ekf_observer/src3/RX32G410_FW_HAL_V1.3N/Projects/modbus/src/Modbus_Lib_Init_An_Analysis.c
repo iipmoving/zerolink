@@ -555,6 +555,12 @@ void API_UART_RxEventCallback(uint16_t Size)
     API_UART_DMA_ReadValue(UARTX, MB_Uart_Rx_Data, DF_MB_Uart_Rx_LONG);
 }
 
+/* ========== API_UART_ErrorRecover (UART错误恢复) ==================== */
+void API_UART_ErrorRecoverCallback(void)
+{
+    API_UART_DMA_ReadValue(UARTX, MB_Uart_Rx_Data, DF_MB_Uart_Rx_LONG);
+}
+
 /* ========== Modbus_Protocol_Analysis_Main ============================ */
 void Modbus_Protocol_Analysis_Main(void)
 {

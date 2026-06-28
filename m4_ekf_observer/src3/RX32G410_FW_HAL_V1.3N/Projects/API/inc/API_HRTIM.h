@@ -15,22 +15,6 @@
 
 
 
-enum{
-				//炉头序号，作为外部索引，内部指向对应HRTIM OP  CMP BK
-	PotCh1=0,	//	Pot1_TimerIndex=HRTIM_TIMERINDEX_TIMER_B,
-	PotCh2,		//Pot2_TimerIndex=HRTIM_TIMERINDEX_TIMER_E,
-	PotCh3,		//Pot3_TimerIndex=HRTIM_TIMERINDEX_TIMER_A,
-	PotCh4,		//Pot4_TimerIndex=HRTIM_TIMERINDEX_TIMER_D,
-	PotChTest1,
-	PotChBase,
-//	PotMaster,		//potmaster是最后一个
-	PotMax,	
-	PotAll=0xff,
-	PotNum=PotChTest1,
-};	
-
-
-
 typedef struct {
 	uint16_t prioed;		//PPG周期
 	uint16_t duty;			//PPG占空比 
@@ -147,6 +131,9 @@ enum
 #define	FRE_SOFTSTART_PWM	(PWM_SF/FRE_SOFTSTART)			//移锅判断 PWM frequency					
 
 
+#define	MIN_SHIFT_PWM		8000			//80%
+#define	MAX_SHIFT_PWM		800
+
 #define	LARGE_FRE_PWM			(PWM_SF/LARGE_FRE)	//minimum PWM frequency 对应PWM值
 #define	MID_FRE_PWM			(PWM_SF/MID_FRE)	//minimum PWM frequency 对应PWM值
 #define	MIN_FRE_PWM			(PWM_SF/MIN_FRE)	//minimum PWM frequency 对应PWM值
@@ -163,6 +150,44 @@ enum
 #define	MAX_FRE_PERIOD		MAX_FRE_PWM*2
 
 #define TIMD_PERIOD 	MIN_FRE_PWM*2	//((uint16_t)((((uint64_t)HRTIM_INPUT_CLOCK) * 32) / TIMD_PWM_FREQ))
+
+
+#ifdef	HALF
+
+enum{
+				//炉头序号，作为外部索引，内部指向对应HRTIM OP  CMP BK
+	PotCh1=0,	//	Pot1_TimerIndex=HRTIM_TIMERINDEX_TIMER_B,
+	PotCh2,		//Pot2_TimerIndex=HRTIM_TIMERINDEX_TIMER_E,
+	PotCh3,		//Pot3_TimerIndex=HRTIM_TIMERINDEX_TIMER_A,
+	PotCh4,		//Pot4_TimerIndex=HRTIM_TIMERINDEX_TIMER_D,
+	PotChTest1,
+	PotChBase,
+//	PotMaster,		//potmaster是最后一个
+	PotMax,	
+	PotAll=0xff,
+	PotNum=PotChTest1,
+};	
+
+#else
+
+enum{
+				//炉头序号，作为外部索引，内部指向对应HRTIM OP  CMP BK
+	PotCh1=0,	//	Pot1_TimerIndex=HRTIM_TIMERINDEX_TIMER_B,
+	PotCh2,		//Pot2_TimerIndex=HRTIM_TIMERINDEX_TIMER_E,
+	PotCh3,		//Pot3_TimerIndex=HRTIM_TIMERINDEX_TIMER_A,
+	PotCh4,		//Pot4_TimerIndex=HRTIM_TIMERINDEX_TIMER_D,
+	PotChTest1,
+	PotChBase,
+//	PotMaster,		//potmaster是最后一个
+	PotMax,	
+	PotAll=0xff,
+	PotNum=PotCh2,
+};	
+
+#endif
+
+
+
 
 
 //#define		DTS2US				DTS1US*2		//1.6US		//0XC0+2000/DTS_PER_0xC0-32 
@@ -333,16 +358,16 @@ void API_SystemClocks_Init(void);
 void	API_PPG_SET_CONTINUOUS(uint8_t ch);			//对应通道PPG设置为半脉冲输出或连续输出
 void	API_PPG_SET_SINGLE(uint8_t ch);
 
-
+#ifdef	HALF
 void		API_PPG_setPluse(uint8_t ppgCh ,uint16_t value);	
 void		API_PPG_setPeriod(uint8_t ppgCh ,uint16_t value);		
 
 void		API_PPG_setValueChx(uint8_t ppgCh ,uint16_t period,uint16_t duty);
-//void		API_PPG_setPeriod(uint16_t value);			//设置PWM输出周期
-
-
+uint16_t	API_PPG_getPluse(uint8_t ppgCh);			//设置PWM输出周期
+void		API_PPG_setValue(uint8_t ppgCh,PPGvalueDef value);			//设置PWM输出周期
+#endif
 void				API_PPG_DeadTime(uint8_t ppgCh,uint8_t upDts,uint8_t downDts);		//死区时间设置 
-void				API_PPG_setValue(uint8_t ppgCh,PPGvalueDef value);			//设置PWM输出周期
+
 PPGvalueDef			API_PPG_getValue(uint8_t ppgCh);					//PWM周期返回
 PPGpointDef			API_PPG_getValueDeadTime(uint8_t ppgCh);		//减去死区的DUTY	
 uint32_t    		API_PPG_GetPeroid(uint8_t ppgCh);
@@ -410,13 +435,13 @@ void		API_HRTIM_SetDmaHandle(uint32_t* addr);
 //   API_HRTIM_MasterSync_ConfigSlave(PotCh2, basePer / 2);   // 50kHz
 //   API_HRTIM_MasterSync_StartAll();
 //   → 每个Master周期末尾全部归零，倍频通道自动对齐
-
+#ifdef 	HALF
 void API_HRTIM_MasterSync_InitMaster(uint16_t masterPeriod);
 void API_HRTIM_MasterSync_ConfigSlave(uint8_t ch, uint16_t slavePeriod);
 void API_HRTIM_MasterSync_StartAll(void);
 void API_HRTIM_MasterSync_StopAll(void);
 void API_HRTIM_MasterSync_SetPeriod(uint16_t masterPeriod);
-
+#endif
 // MASTER 中断服务 + 使能/禁能
 void API_HRTIM1_Master_IRQHandler(void);
 void API_HRTIM_Master_ENABLE_IT_UPD(void);

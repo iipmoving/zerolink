@@ -4304,8 +4304,10 @@ uint8_t	power_zero_adjust(uint8_t chn)
 
 
 			powerOnSetMIN(chn);						//所有炉头重新从小功率启动
+			 
+#ifdef 	HALF			 
 			API_HRTIM_MasterSync_SetPeriod(PowerCycle);
-			
+#endif			
 			FunDeadTimeSetValue(DTS4US,DTS4US);
 			FunPPGonOff(PPG_ON);
 					 
@@ -5424,9 +5426,9 @@ void	APP_ADC_IRQ_PPGstepChangeCallBack(void)
 
 
 POWER_CHANGE_CYCLE_Line:
-			
+#ifdef HALF			
 				API_HRTIM_MasterSync_SetPeriod(PowerCycle);
-			
+#endif			
 				for(uint8_t i=0;i<PotNum;i++)
 				{
 					API_PPG_setValueChx(i,powerCycle[i],powerDuty[i]);

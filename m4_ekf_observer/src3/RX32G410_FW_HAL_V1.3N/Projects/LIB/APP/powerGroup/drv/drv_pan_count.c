@@ -36,8 +36,7 @@ void APP_ADC_DMA_RecoverPan(uint8_t ch);
 enum {
     PanPluseEnd = 0,
     PanCheckRest = 1,
-    PanDmaEnd = 2,
-    PanFmacEnd = 3
+
 };
 
 /* === 自声明 PanPluse 结构 === */

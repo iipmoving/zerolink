@@ -65,6 +65,7 @@ virtualFolder:
       files:
         - path: ../../DRV/SRC/DRV_GPIO.C
         - path: ../../DRV/SRC/drv_hrtim.c
+        - path: ../../DRV/SRC/drv_pan_single_pulse.c
       folders: []
     - name: APP
       files: []
@@ -105,10 +106,11 @@ virtualFolder:
         - path: ../../BaseClass/src/phase.c
         - path: ../../BaseClass/src/power_calculator_fullbridge.c
         - path: ../../BaseClass/src/wave_capture.c
-        - path: ../../BaseClass/src/ih_elec_params.c
         - path: ../../../../../base_class/drv_hrtim_consumer.c
         - path: ../../BaseClass/src/calculator.c
         - path: ../../BaseClass/src/elec_params.c
+        - path: ../../BaseClass/src/ekf_lkf.c
+        - path: ../../BaseClass/src/telemetry.c
       folders: []
     - name: powerGroup
       files:
@@ -160,16 +162,16 @@ virtualFolder:
       folders: []
     - name: AppLibSrc
       files:
-        - path: ../../LIB/APP/APP_ADC.C
         - path: ../../LIB/APP/app_power.c
-        - path: ../../APP/POWER/src/app_power_drv.c
-        - path: ../../../../../app/adc_sensor.c
+        - path: ../../LIB/APP/adc_sensor.c
+        - path: ../../LIB/APP/APP_ADC.C
       folders: []
     - name: modbus
       files:
+        - path: ../../modbus/src/Modbus_Analysis_Lib_C_1.1.lib
         - path: ../../modbus/src/Modbus_Lib_Init_An_Analysis.c
+        - path: ../../modbus/src/modbus_ekf_regs.c
         - path: ../../modbus/src/Modbus_Analysis_Lib.c
-        - path: ../../../../../app/ekf/modbus_ekf_regs.c
       folders: []
     - name: TXT
       files:
@@ -196,7 +198,8 @@ targets:
         - CurrentFromTxa
         - COMM_UARTx
         - TxaFmac
-        - DEBUG_POWER_OUT_CONSTX
+        - DEBUG_POWER_OUT_CONSTx
+        - HALFx
       incList:
         - ../../../../../include
         - ../../../../../app
@@ -221,14 +224,15 @@ targets:
     excludeList:
       - <virtual_root>/DRV/drv_hrtim.c
       - <virtual_root>/APP/SYS/Simulative_Uart.c
-      - <virtual_root>/baseClass/power_calculator.c
       - <virtual_root>/baseClass/queue.c
+      - <virtual_root>/baseClass/phase.c
       - <virtual_root>/baseClass/power_calculator_fullbridge.c
+      - <virtual_root>/baseClass/drv_hrtim_consumer.c
       - <virtual_root>/powerGroup
       - <virtual_root>/output
       - <virtual_root>/ApiLib
       - <virtual_root>/AppLibSrc/APP_ADC.C
-      - <virtual_root>/AppLibSrc/app_power_drv.c
+      - <virtual_root>/modbus/Modbus_Analysis_Lib.c
       - <virtual_root>/TXT
     settings:
       debugger: cortex-debug
@@ -354,8 +358,8 @@ targets:
         baseAddr: ""
         bin: ""
         cpuInfo:
-          cpuName: "null"
-          vendor: "null"
+          cpuName: RX32G410xE
+          vendor: iCore
         otherCmds: ""
         proType: 1
         speed: 8000

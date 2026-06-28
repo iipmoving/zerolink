@@ -13,6 +13,9 @@
 
 #include	"API_gpio.h"
 
+/* 全桥对角单脉冲 ISR (定义在 API_hrtim_fullbridge.c) */
+void API_FB_SinglePulse_ISR(void);
+
 
 
 
@@ -903,7 +906,7 @@ void API_HRTIM1_Init(void)
 	HAL_HRTIM_WaveformOutputStop(&hhrtim1, HRTIM_OUTPUT_TF1|HRTIM_OUTPUT_TF2|HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2|HRTIM_OUTPUT_TB1|HRTIM_OUTPUT_TB2|HRTIM_OUTPUT_TE1|HRTIM_OUTPUT_TE2|HRTIM_OUTPUT_TA1|HRTIM_OUTPUT_TA2|HRTIM_OUTPUT_TD1|HRTIM_OUTPUT_TD2);
 
 	//HRTIM_OENR  输出使能
-	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2|HRTIM_OUTPUT_TF1|HRTIM_OUTPUT_TF2|HRTIM_OUTPUT_TA1|HRTIM_OUTPUT_TA2|HRTIM_OUTPUT_TD1|HRTIM_OUTPUT_TD2);
+//	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2|HRTIM_OUTPUT_TF1|HRTIM_OUTPUT_TF2|HRTIM_OUTPUT_TA1|HRTIM_OUTPUT_TA2|HRTIM_OUTPUT_TD1|HRTIM_OUTPUT_TD2);
 //	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TC1|HRTIM_OUTPUT_TC2|HRTIM_OUTPUT_TF1|HRTIM_OUTPUT_TF2);
 		
 
@@ -995,9 +998,13 @@ void				API_PPG_setValue(uint8_t ppgCh,PPGvalueDef value)			//设置PWM输出周
 
 }
 
+inline	uint16_t API_PPG_getPluse(uint8_t ppgCh)
+{
+	return __HAL_HRTIM_GETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ppgCh].num,COMPAREUNIT_REST);
+}
+
 inline void		API_PPG_setPluse(uint8_t ppgCh ,uint16_t value)	
 {
-
 	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ppgCh].num,COMPAREUNIT_REST,value);
 	__HAL_HRTIM_SETCOMPARE(&hhrtim1,HRTIM_CFG_NUM[ppgCh].num,COMPAREUNIT_BLKS_END,value+BLKS_DIV);		
 }
@@ -1100,9 +1107,6 @@ void	API_PPG_FaultMode(uint8_t ppgCh,uint8_t flag)
 		faultMode=HRTIM_FAULTMODECTL_ENABLED;
 #endif	
 
-		
-		
-		
 	}	
 	
 	HAL_HRTIM_FaultModeCtl(&hhrtim1,HRTIM_FAULT_NUM[ppgCh].num,  faultMode);		
@@ -1154,6 +1158,7 @@ void	API_FB_PPG_OnOff(uint8_t ppgCh,uint8_t flag)				//PWM输出开始
 
 
 	// API_PPG_BkFlag(ppgCh);			//清除BK标志
+	
 	API_PPG_FaultMode(ch,flag);    //BK是同一个
 	API_PPG_FaultMode(ch+1,flag);    //BK是同一个
 
@@ -1727,10 +1732,16 @@ void 	TIMsynchronousPower(void)			//HRTIM同步
 // 修改日期: 2026-05-28
 void 	TIMsynchronousPower(void)			//HRTIM同步 (MASTER模式)
 {
+#ifdef	HALF	
 	API_HRTIM_MasterSync_StartAll();
 
 	// 补充: StartAll 只恢复 HrtimOutPutPinSave，这里补上 Test 通道输出
 	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HRTIM_OUTPUT_TC1 | HRTIM_OUTPUT_TC2);
+#else
+	HAL_HRTIM_WaveformOutputStart(&hhrtim1, HrtimOutPutPinSave);
+
+
+#endif	
 }	
 
 
@@ -1861,7 +1872,7 @@ void		API_HRTIM_SetDmaHandle(uint32_t* addr)
 /*============================================================================
  *        【新增】Master 同步模式 (半桥通道内部同步，替代 IO 过零同步)
  *============================================================================*/
-
+#ifdef	HALF
 void API_HRTIM_MasterSync_InitMaster(uint16_t masterPeriod)
 {
     HRTIM_TimeBaseCfgTypeDef timeBaseCfg = {
@@ -1987,7 +1998,7 @@ void API_HRTIM_MasterSync_StopAll(void)
         HRTIM_TIMERID_TIMER_C | HRTIM_TIMERID_TIMER_D |
         HRTIM_TIMERID_TIMER_E | HRTIM_TIMERID_TIMER_F);
 }
-
+#endif
 /* ========== MASTER 中断服务 ========== */
 
 void API_HRTIM1_Master_IRQHandler(void)
@@ -2005,7 +2016,13 @@ void API_HRTIM1_Master_IRQHandler(void)
         /* UPD: one-shot, triggered after main-loop calc */
         __HAL_HRTIM_MASTER_CLEAR_FLAG(&hhrtim1, HRTIM_MISR_MUPD);
         __HAL_HRTIM_MASTER_DISABLE_IT(&hhrtim1, HRTIM_MASTER_IT_MUPD);
-        API_HRTIM1_TEST_UPD_IRQHandlerCallback(1);
+//        API_HRTIM1_TEST_UPD_IRQHandlerCallback(1);
+				API_HRTIM1_TEST_CMP1_IRQHandlerCallback();
+    }
+    if (active & HRTIM_MISR_MCMP2) {
+        /* CMP2: 对角单脉冲控制 (开/关 OENR) */
+        __HAL_HRTIM_MASTER_CLEAR_FLAG(&hhrtim1, HRTIM_MISR_MCMP2);
+        API_FB_SinglePulse_ISR();
     }
 }
 

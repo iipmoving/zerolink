@@ -39,6 +39,10 @@
 #include	"API_UART.H"
 #include "Modbus_Lib_Init_An_Analysis.h" 
 #include	"wave_capture.h"
+#include	<stdio.h>
+
+static uint16_t s_debug_seq = 0;    /* 调试输出序号 */
+
 void Task_Sys(void);
 /*********************************************变量申请*/
 
@@ -143,6 +147,9 @@ void Task_TimeChip2(void)
 //	API_TIM_TGO_PPG_SINGLE_Start();
 	 		Switcher_Run_Slot1();			// v2.0 Data Switcher: ADC → Power 路由
 
+		/* 调试输出: 每周期输出控制序号 */
+
+
 }
 
 void Task_TimeChip3(void)
@@ -201,13 +208,7 @@ void Task_Tk(void)      //触摸扫描
 	iic_bus_updata();
 
 	
-	if(Time_GetSecFlg())
-	{
-	}
-	else
-	{	
-//				API_GPIO_WritePin(DebugB_pin,0);	
-	}	
+
 	APP_ADC_TimDmaEnd();
 	APP_ADC_CalculatePower();
 	APP_POWER_ZeroOccurTask();
@@ -225,13 +226,7 @@ void Task_Ms(void)
 //	adc_ic_vc_fun();							//每一MS采集一次电流电压
 
  	API_ADC_DMA_TimStart();
-	if(Time_GetSecFlg())
-	{
-	}
-	else
-	{	
-//				API_GPIO_WritePin(DebugB_pin,0);	
-	}	
+
 //	API_POWER_ScrOutput(SYS_GetTskId());			//过零开通
 
 
@@ -295,8 +290,8 @@ void Error_Handler(void)
 {
 }	
 
-uint8_t string[10]="ABCDE12345";
-uint8_t rxBuff[25];
+
+
 
 
 
@@ -320,9 +315,9 @@ void SystemInitial(void)
 	API_UART_Init(UARTX,API_DMA_GetDmaHandle(ChDmaRx),API_DMA_GetDmaHandle(ChDmaTx));		//控制口采用DMA
 
 
-	API_UART_DMA_SendValue(UARTX,string,10);
+
 	
-//	API_UART_DMA_ReadValue(UARTX,MB_Uart_Rx_Data,DF_MB_Uart_Rx_LONG);	
+
 	
 	
 
@@ -341,21 +336,47 @@ void SystemInitial(void)
 	
 #ifdef	HALF	
 	API_HRTIM_MasterSync_InitMaster(MAX_FRE_PWM*2);      // Master 周期 = 基频
+	
+	PPGvalueDef		value;
+	value.duty=PAN_FRE_PWM;
+	value.prioed=PAN_FRE_PWM*2;
+	
+	API_HRTIM_MasterSync_SetPeriod(value.prioed);
+	API_PPG_setValue(PotCh1,value);
+	API_PPG_setValue(PotCh2,value);
+	API_PPG_setValue(PotCh3,value);	
+	API_PPG_setValue(PotCh4,value);		
+	API_PPG_setValue(PotChTest1,value);	
+	API_PPG_setValue(PotChBase,value);			
+	
+	
 #else
 #include "API_hrtim_fullbridge.h"	
 	// ==================== 全桥1: 调频模式 ====================
 	// 50kHz，90度移相(phaseShift = period/4 = 7680)
-	API_FB_OutputFreqModulation(PotCh1, 50000,7680+1000);
 
+	
+	API_FB_OutputFreqModulation(PotCh1, FRE_25K_PWM*2,FRE_25K_PWM*2/10);
 
-	API_FB_SetFrequency(PotCh1, 50000);       // 改频率到60kHz（自动保持50%占空比）
-	API_FB_SetPhaseShift(PotCh1, 5840);       // 改移相到45度
-	API_FB_SetPhaseShift(PotCh1, 3840);       // 改移相到45度
-	API_FB_SetPhaseShift(PotCh1, 1840);       // 改移相到45度	
-	API_FB_SetPhaseShift(PotCh1, 10);       // 改移相到45度
+		API_GPIO_WritePin(DebugB_pin,1);	
+	API_FB_SetFrequency(PotCh1, FRE_25K_PWM*2);       // 改频率到60kHz（自动保持50%占空比）
+
+	API_FB_SetPhaseShift(PotCh1, FRE_25K_PWM*2/10);       // 改移相到45度
+
+//	API_FB_SetPhaseShift(PotCh1, 2840);       // 改移相到45度
+
 #endif
 
-#if 0	
+
+#if 0
+
+
+//	API_ADC_Pan_ConfigChannel(1);					//PAN->PAN
+	API_FB_SinglePulseStart(0);				//单脉冲模式
+
+#endif
+
+#if 0
 #include "API_hrtim_fullbridge.h"	
 	// ==================== 全桥1: 调频模式 ====================
 	// 50kHz，90度移相(phaseShift = period/4 = 7680)
@@ -379,25 +400,15 @@ API_HRTIM_MasterSync_InitMaster(basePer);      // Master 周期 = 基频
 API_HRTIM_MasterSync_ConfigSlave(PotCh1, basePer);       // 25kHz
 API_HRTIM_MasterSync_ConfigSlave(PotCh2, basePer / 2);   // 50kHz (2倍频)
 API_HRTIM_MasterSync_StartAll();               // 同一条指令全部启动
-
-
-// ==================== 停止 ====================
-API_FB_Stop(PotCh1);
-API_FB_Stop(PotCh2);
-	
 #endif	
+				API_GPIO_WritePin(DebugB_pin,0);	
+// ==================== 停止 ====================
+//API_FB_Stop(PotCh1);
+//API_FB_Stop(PotCh2);
 	
-	PPGvalueDef		value;
-	value.duty=PAN_FRE_PWM;
-	value.prioed=PAN_FRE_PWM*2;
+
 	
-	API_HRTIM_MasterSync_SetPeriod(value.prioed);
-	API_PPG_setValue(PotCh1,value);
-	API_PPG_setValue(PotCh2,value);
-	API_PPG_setValue(PotCh3,value);	
-	API_PPG_setValue(PotCh4,value);		
-	API_PPG_setValue(PotChTest1,value);	
-	API_PPG_setValue(PotChBase,value);		
+
   /* Enable HRTIM's outputs TD1 and start Timer D */
 //	API_GPIO_PinPull(HRTIM_SYN_pin,PUPDR_Pulldown);
 	

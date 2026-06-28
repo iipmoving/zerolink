@@ -112,6 +112,29 @@ void API_UART_Init(uint8_t ch,uint32_t * rxHandle,uint32_t* txHandle)
     UARTHandle[ch].hdmatx=(DMA_HandleTypeDef*)txHandle; 
 		UARTHandle[ch].hdmatx->Parent=&UARTHandle[ch];
 
+	
+			uint8_t string[10]="ABCDE12345";
+		API_UART_DMA_SendValue(UARTX,string,10);
+		API_UART_DMA_ReadValue(UARTX,string,10);	
+		__HAL_UART_ENABLE_IT(&UARTHandle[ch],UART_IT_IDLE);
+
+
+
+		switch(ch)
+		{	
+			case	Uart3:
+			
+			HAL_NVIC_SetPriority(UART3_IRQn, 0, 0);
+			HAL_NVIC_EnableIRQ(UART3_IRQn);
+			break;
+			case  Uart2:
+			
+			HAL_NVIC_SetPriority(UART2_IRQn, 0, 0);
+			HAL_NVIC_EnableIRQ(UART2_IRQn);
+				
+		}	
+		
+		
 }	
 
 void	API_UART_DMA_SendValue(uint8_t ch, uint8_t * value,uint16_t size)
@@ -124,10 +147,22 @@ void	API_UART_DMA_SendValue(uint8_t ch, uint8_t * value,uint16_t size)
 
 void	API_UART_DMA_ReadValue(uint8_t ch, uint8_t * value,uint16_t size)
 {
-		if(HAL_UARTEx_ReceiveToIdle_DMA(&UARTHandle[ch],value,size))
-		{
-		        Error_Handler();
-		}
+	if(HAL_UARTEx_ReceiveToIdle_DMA(&UARTHandle[ch],value,size))
+	{
+	        Error_Handler();
+	}
+	/* DMA配完后才开UART中断, 防上电时IRQ卡死 */
+//	__HAL_UART_ENABLE_IT(&UARTHandle[ch],UART_IT_IDLE);
+//	if(UARTHandle[ch].Instance == UART2)
+//	{
+//		HAL_NVIC_SetPriority(UART2_IRQn, 0, 0);
+//		HAL_NVIC_EnableIRQ(UART2_IRQn);
+//	}
+//	else if(UARTHandle[ch].Instance == UART3)
+//	{
+//		HAL_NVIC_SetPriority(UART3_IRQn, 0, 0);
+//		HAL_NVIC_EnableIRQ(UART3_IRQn);
+//	}
 }
 
 void UARTx_Config(UART_HandleTypeDef* uartx,UART_TOTAL_InitTypeDef* uartBase)
@@ -151,9 +186,13 @@ void UARTx_Config(UART_HandleTypeDef* uartx,UART_TOTAL_InitTypeDef* uartBase)
   *         add your own implementation.
   * @retval None
   */
+__weak void API_UART_ErrorRecoverCallback(void)
+{
+}
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *UARTHandle)
 {
-
+    HAL_UART_Abort(UARTHandle);
+    API_UART_ErrorRecoverCallback();
 }
 
 
@@ -201,9 +240,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef *hUART)
     {
         __HAL_RCC_UART2_CLK_ENABLE();
 
-  			__HAL_UART_ENABLE_IT(&UARTHandle[Uart2],UART_IT_IDLE);  
-        HAL_NVIC_SetPriority(UART2_IRQn, 0, 0);
-        HAL_NVIC_EnableIRQ(UART2_IRQn);
+  			// __HAL_UART_ENABLE_IT(&UARTHandle[Uart2],UART_IT_IDLE);  /* 移到 API_UART_DMA_ReadValue, DMA配完后设 */  
+        // HAL_NVIC_SetPriority(UART2_IRQn, 0, 0);
+        // HAL_NVIC_EnableIRQ(UART2_IRQn);
     
 //        HAL_NVIC_SetPriority(DMA2_Channel2_IRQn, 1, 1);
 //        HAL_NVIC_EnableIRQ(DMA2_Channel2_IRQn);
@@ -213,11 +252,11 @@ void HAL_UART_MspInit(UART_HandleTypeDef *hUART)
     {
         __HAL_RCC_UART3_CLK_ENABLE();
 		
-				__HAL_UART_ENABLE_IT(&UARTHandle[Uart3],UART_IT_IDLE);
+//				__HAL_UART_ENABLE_IT(&UARTHandle[Uart3],UART_IT_IDLE);
 
 
-        HAL_NVIC_SetPriority(UART3_IRQn, 0, 0);
-        HAL_NVIC_EnableIRQ(UART3_IRQn);
+//        HAL_NVIC_SetPriority(UART3_IRQn, 0, 0);
+//        HAL_NVIC_EnableIRQ(UART3_IRQn);
   
     }
     if(hUART->Instance == UART4)
@@ -262,16 +301,7 @@ void	API_UART_IRQHandler(void)
 
 }	
 
-#if 0
-int fputc(int ch, FILE *fp)
-{
-    if(IS_UART_INSTANCE(UART_SEL))
-    {
 
-    }
-
-}
-#endif
 
 
 void	API_UART_RxIdle_IRQHandler(void)

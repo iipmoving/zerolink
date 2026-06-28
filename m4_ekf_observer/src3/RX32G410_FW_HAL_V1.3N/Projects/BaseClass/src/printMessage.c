@@ -17,10 +17,10 @@
 #include    <stdlib.h>
 #include    <stdio.h>
 
-uint16_t 		buff[2046];			//预分配空间，
+//uint16_t 		buff[2046];			//预分配空间，
 #ifdef	PrintMessage	
 
-#define			MessageBuffSize		4*180
+#define			MessageBuffSize		4*500
 
 #else
 #define			MessageBuffSize		4*2
@@ -116,26 +116,21 @@ uint8_t    PrintMessagePush(MessageDef messageIn)   //将需要打印的数据�
 uint8_t     PrintMessageFun(MessageBuffDef *messageBuff,uint16_t num)
 {
     uint16_t   size=messageBuff->size;
-    uint16_t   para[num];  
+    uint16_t   paraValue;  
 
     for (uint16_t i = 0; i < size; i++) 
     {
-        
+        printf("%d",i);
         for(uint8_t j=0;j<num;j++)
         {
             if((messageBuff+j)->size!=0)
             {
-                para[j]=(messageBuff+j)->buff[i];
+                paraValue=(messageBuff+j)->buff[i];
+								printf("\t%d",paraValue);
             }
-						else
-						{
-								para[j]=0;
-						}	
     
         }
-
-
-		printf("%d,%d,%d,%d,%d\r\n", i,  para[0],para[1],para[2],para[3]);
+				printf("\r\n");
 				
 
     }

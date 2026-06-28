@@ -27,7 +27,7 @@
 
 #define	TxA_ADC_TimDMA_BUFF_NUM	40*4		//DMA接收数量 保证能得到一个HRTIM周期的数据
 #define	VcIc_ADC_DMA_BUFF_NUM	VcIc_ADC_GROUP_NUM*AdcAvageCount		//DMA接收数量 8*
-#define	Pan_ADC_DMA_BUFF_NUM	300											//DMA接收数量 8*
+#define	Pan_ADC_DMA_BUFF_NUM	4*500   //采集500us											//DMA接收数量 8*
 #define	Hrtim_ADC_DMA_BUFF_NUM	4											//DMA接收数量 8*
 
 
@@ -228,6 +228,7 @@ void	portPendvClear(void);
 //void	API_ADC_DISABLE_IT_JEOC(void);							//PAN检锅JEOC中断
 
 void		API_ADC_Pan_ConfigChannel(uint8_t ch);		//CH0  VCIC单次触发，CH1 PAN连续触发
+void		API_ADC_SwitchPanSequence(uint8_t panMode);	//1=PAN,PAN  0=VC,PAN
 
 
 void	API_ADC_ClearDrxValue(void);

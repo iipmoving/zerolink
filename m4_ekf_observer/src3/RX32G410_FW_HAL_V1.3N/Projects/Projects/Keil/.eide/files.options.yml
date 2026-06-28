@@ -20,9 +20,10 @@ options:
         virtualPathFiles:
             <virtual_root>/DRV/drv_hrtim.c: ""
             <virtual_root>/APP/SYS/Simulative_Uart.c: ""
-            <virtual_root>/baseClass/power_calculator.c: ""
             <virtual_root>/baseClass/queue.c: ""
+            <virtual_root>/baseClass/phase.c: ""
             <virtual_root>/baseClass/power_calculator_fullbridge.c: ""
+            <virtual_root>/baseClass/drv_hrtim_consumer.c: ""
             <virtual_root>/ApiLibSrc/API_hrtim_fullbridge.c: ""
             <virtual_root>/AppLibSrc/APP_ADC.C: ""
-            <virtual_root>/AppLibSrc/app_power_drv.c: ""
+            <virtual_root>/modbus/Modbus_Analysis_Lib.c: ""

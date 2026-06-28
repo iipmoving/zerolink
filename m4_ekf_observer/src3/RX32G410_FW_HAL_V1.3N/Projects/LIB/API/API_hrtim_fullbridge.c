@@ -110,8 +110,11 @@ static const FB_HWMapTypeDef FB_HW_MAP[FB_MAX_CH] = {
 /** @brief 默认周期值 (25kHz @ 192MHz MUL4) */
 #define FB_DEFAULT_PERIOD           (((uint32_t)192000000U * 4U) / FB_DEFAULT_FREQ_HZ)
 
-/** @brief 全桥Slave定时器使用的比较单元 (CMP2 = 占空比控制) */
-#define FB_COMPAREUNIT_DUTY         HRTIM_COMPAREUNIT_2
+/** @brief 全桥FAULT使能开关 — 调试时可临时关闭 */
+#define FB_FAULT_ENABLE             0   /* 1=使能FAULT保护, 0=关闭(调试用) */
+
+/** @brief 全桥Slave定时器使用的比较单元 (CMP1 = 占空比控制, HALF模式自算50%) */
+#define FB_COMPAREUNIT_DUTY         HRTIM_COMPAREUNIT_1
 
 /** @brief 独立模式时基配置 (各通道独立周期) */
 static const HRTIM_TimeBaseCfgTypeDef FB_TimeBaseCfg_Independent = {
@@ -136,12 +139,12 @@ static const HRTIM_TimeBaseCfgTypeDef FB_MasterTimeBaseCfg = {
     HRTIM_PRESCALERRATIO_MUL4,          /* 必须与Slave预分频一致 */
     HRTIM_MODE_CONTINUOUS,
 };
-static const HRTIM_TimeBaseCfgTypeDef FB_PPGSingleTimeBaseCfg = {
-    FB_DEFAULT_PERIOD,                  /* Period (运行时覆盖) */
-    0,
-    HRTIM_PRESCALERRATIO_MUL4,          /* 必须与Slave预分频一致 */
-    HRTIM_MODE_SINGLESHOT,
-};
+// static const HRTIM_TimeBaseCfgTypeDef FB_PPGSingleTimeBaseCfg = {
+//     FB_DEFAULT_PERIOD,                  /* Period (运行时覆盖) */
+//     0,
+//     HRTIM_PRESCALERRATIO_MUL4,          /* 必须与Slave预分频一致 */
+//     HRTIM_MODE_SINGLESHOT,
+// };
 /** @brief 定时器波形控制配置 (共用) */
 static const HRTIM_TimerCtlTypeDef FB_TimerCtl = {
     HRTIM_TIMERUPDOWNMODE_UP,           /* UpDownMode: 向上计数 */
@@ -227,6 +230,10 @@ static FB_ConfigTypeDef* const g_fbConfigPtrs[FB_MAX_CH] = {
     &g_fbConfig_Ch1,    /* fbCh=PotCh1=0 */
     &g_fbConfig_Ch2,    /* fbCh=PotCh2=1 */
 };
+
+/* 对角单脉冲状态 (CMP2 ISR 使用) */
+static uint32_t g_fb_sp_outPin = 0;
+static uint8_t  g_fb_sp_count  = 0;
 
 /*============================================================================
  *                    【新增】内部辅助函数: 硬件映射获取
@@ -369,7 +376,7 @@ static HAL_StatusTypeDef FB_ConfigTimerFull_MasterSync(const FB_HWMapTypeDef *hw
     timerCfg.BurstMode                = HRTIM_TIMERBURSTMODE_MAINTAINCLOCK;
     timerCfg.RepetitionUpdate         = HRTIM_UPDATEONREPETITION_ENABLED;
     timerCfg.PushPull                 = HRTIM_TIMPUSHPULLMODE_DISABLED;
-    timerCfg.FaultEnable              = hw->faultEnable;
+    timerCfg.FaultEnable              = hw->faultEnable & FB_FAULT_ENABLE;
     timerCfg.FaultLock                = HRTIM_TIMFAULTLOCK_READWRITE;
     timerCfg.DeadTimeInsertion        = HRTIM_TIMDEADTIMEINSERTION_ENABLED;
     timerCfg.DelayedProtectionMode    = HRTIM_TIMER_A_B_C_DELAYEDPROTECTION_DISABLED;
@@ -398,11 +405,11 @@ static HAL_StatusTypeDef FB_ConfigTimerFull_MasterSync(const FB_HWMapTypeDef *hw
  *============================================================================*/
 
 /**
- * @brief  配置定时器输出+比较器 (调频模式: 50%占空比互补输出)
+ * @brief  配置定时器输出+比较器 (调频模式: 50%占空比互补输出, HALF模式)
  * @param  timerIndex: 定时器索引
  * @param  outPin1: 输出1 (上管, 奇数引脚)
  * @param  outPin2: 输出2 (下管, 偶数引脚, 互补)
- * @param  period: 周期值 (CMP2 = period/2 实现50%占空比)
+ * @param  period: 周期值 (CMP1 = period/2 实现50%占空比, HALF模式自动计算)
  * @return HAL状态
  */
 static HAL_StatusTypeDef FB_ConfigOutput_FreqMod(uint32_t timerIndex,
@@ -414,8 +421,10 @@ static HAL_StatusTypeDef FB_ConfigOutput_FreqMod(uint32_t timerIndex,
     HRTIM_CompareCfgTypeDef cmpCfg;
     HRTIM_OutputCfgTypeDef  outCfg;
 
-    /* ---- CMP2: 50%占空比 = period/2 ---- */
-    cmpCfg.CompareValue      = period / 2U;
+    uint16_t halfPeriod = period / 2U;
+
+    /* ---- 手动写入CMP1初始值 (HALF尚未生效, 因PER在TimeBaseConfig已写入) ---- */
+    cmpCfg.CompareValue      = halfPeriod;
     cmpCfg.AutoDelayedMode   = HRTIM_AUTODELAYEDMODE_REGULAR;
     cmpCfg.AutoDelayedTimeout = 0;
 
@@ -423,10 +432,17 @@ static HAL_StatusTypeDef FB_ConfigOutput_FreqMod(uint32_t timerIndex,
                                               FB_COMPAREUNIT_DUTY, &cmpCfg);
     if (status != HAL_OK) return status;
 
-    /* ---- 输出1 (上管): PER置位 → CMP2复位 → 50%高电平 ---- */
+    /* ---- CMP3: 消隐/消抖 (CMP1 + BLKS_DIV) ---- */
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, timerIndex, COMPAREUNIT_BLKS_END,
+                           halfPeriod + BLKS_DIV);
+
+    /* ---- 使能HALF模式: 后续写PER时硬件自动设CMP1=PER/2 ---- */
+    hhrtim1.Instance->sTimerxRegs[timerIndex].TIMxCR |= HRTIM_TIMCR_HALF;
+
+    /* ---- 输出1 (上管): PER置位 → CMP1复位 → 50%高电平 ---- */
     outCfg.Polarity              = HRTIM_OUTPUTPOLARITY_HIGH;
     outCfg.SetSource             = HRTIM_OUTPUTSET_TIMPER;
-    outCfg.ResetSource           = HRTIM_OUTPUTRESET_TIMCMP2;
+    outCfg.ResetSource           = HRTIM_OUTPUTRESET_TIMCMP1;
     outCfg.IdleMode              = HRTIM_OUTPUTIDLEMODE_NONE;
     outCfg.IdleLevel             = HRTIM_OUTPUTIDLELEVEL_INACTIVE;
     outCfg.FaultLevel            = HRTIM_OUTPUTFAULTLEVEL_INACTIVE;
@@ -438,8 +454,8 @@ static HAL_StatusTypeDef FB_ConfigOutput_FreqMod(uint32_t timerIndex,
         if (status != HAL_OK) return status;
     }
 
-    /* ---- 输出2 (下管，互补): CMP2置位 → PER复位 (硬件死区自动反相) ---- */
-    outCfg.SetSource   = HRTIM_OUTPUTSET_TIMCMP2;
+    /* ---- 输出2 (下管，互补): CMP1置位 → PER复位 (硬件死区自动反相) ---- */
+    outCfg.SetSource   = HRTIM_OUTPUTSET_TIMCMP1;
     outCfg.ResetSource = HRTIM_OUTPUTRESET_TIMPER;
 
     if (outPin2) {
@@ -455,11 +471,11 @@ static HAL_StatusTypeDef FB_ConfigOutput_FreqMod(uint32_t timerIndex,
  * @param  timerIndex: 定时器索引
  * @param  outPin1: 输出1 (上管)
  * @param  outPin2: 输出2 (下管, 互补)
- * @param  cmpValue: CMP2比较值 (控制占空比)
+ * @param  cmpValue: CMP1比较值 (控制占空比)
  * @return HAL状态
- * @note   上管: PER置位 → CMP2复位
- *         下管: CMP2置位 → PER复位 (互补+死区)
- *         改CMP2值即同时改变两路占空比
+ * @note   上管: PER置位 → CMP1复位
+ *         下管: CMP1置位 → PER复位 (互补+死区)
+ *         改CMP1值即同时改变两路占空比
  */
 static HAL_StatusTypeDef FB_ConfigOutput_PowerMod(uint32_t timerIndex,
                                                    uint32_t outPin1,
@@ -470,7 +486,10 @@ static HAL_StatusTypeDef FB_ConfigOutput_PowerMod(uint32_t timerIndex,
     HRTIM_CompareCfgTypeDef cmpCfg;
     HRTIM_OutputCfgTypeDef  outCfg;
 
-    /* ---- CMP2: 统一占空比控制 ---- */
+    /* ---- 禁用HALF模式 (调功模式需手动控制占空比) ---- */
+    hhrtim1.Instance->sTimerxRegs[timerIndex].TIMxCR &= ~HRTIM_TIMCR_HALF;
+
+    /* ---- CMP1: 统一占空比控制 ---- */
     cmpCfg.CompareValue      = cmpValue;
     cmpCfg.AutoDelayedMode   = HRTIM_AUTODELAYEDMODE_REGULAR;
     cmpCfg.AutoDelayedTimeout = 0;
@@ -479,10 +498,14 @@ static HAL_StatusTypeDef FB_ConfigOutput_PowerMod(uint32_t timerIndex,
                                               FB_COMPAREUNIT_DUTY, &cmpCfg);
     if (status != HAL_OK) return status;
 
-    /* ---- 输出1 (上管): PER置位 → CMP2复位 ---- */
+    /* ---- CMP3: 消隐/消抖 (CMP1 + BLKS_DIV) ---- */
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, timerIndex, COMPAREUNIT_BLKS_END,
+                           cmpValue + BLKS_DIV);
+
+    /* ---- 输出1 (上管): PER置位 → CMP1复位 ---- */
     outCfg.Polarity              = HRTIM_OUTPUTPOLARITY_HIGH;
     outCfg.SetSource             = HRTIM_OUTPUTSET_TIMPER;
-    outCfg.ResetSource           = HRTIM_OUTPUTRESET_TIMCMP2;
+    outCfg.ResetSource           = HRTIM_OUTPUTRESET_TIMCMP1;
     outCfg.IdleMode              = HRTIM_OUTPUTIDLEMODE_NONE;
     outCfg.IdleLevel             = HRTIM_OUTPUTIDLELEVEL_INACTIVE;
     outCfg.FaultLevel            = HRTIM_OUTPUTFAULTLEVEL_INACTIVE;
@@ -494,8 +517,8 @@ static HAL_StatusTypeDef FB_ConfigOutput_PowerMod(uint32_t timerIndex,
         if (status != HAL_OK) return status;
     }
 
-    /* ---- 输出2 (下管，互补): CMP2置位 → PER复位 ---- */
-    outCfg.SetSource   = HRTIM_OUTPUTSET_TIMCMP2;
+    /* ---- 输出2 (下管，互补): CMP1置位 → PER复位 ---- */
+    outCfg.SetSource   = HRTIM_OUTPUTSET_TIMCMP1;
     outCfg.ResetSource = HRTIM_OUTPUTRESET_TIMPER;
 
     if (outPin2) {
@@ -553,6 +576,7 @@ static const struct {
  */
 static void FB_InitFaults(void)
 {
+
     HRTIM_FaultCfgTypeDef faultCfg;
 
     faultCfg.Source  = HRTIM_FAULTSOURCE_INTERNAL;
@@ -564,8 +588,10 @@ static void FB_InitFaults(void)
         faultCfg.Source   = FB_FaultChCfg[i].source;
         faultCfg.Polarity = FB_FaultChCfg[i].polarity;
         HAL_HRTIM_FaultConfig(&hhrtim1, FB_FaultChCfg[i].num, &faultCfg);
-        HAL_HRTIM_FaultModeCtl(&hhrtim1, FB_FaultChCfg[i].num, HRTIM_FAULTMODECTL_ENABLED);
+
+        HAL_HRTIM_FaultModeCtl(&hhrtim1, FB_FaultChCfg[i].num, HRTIM_FAULTMODECTL_DISABLED);
     }
+
 }
 
 /**
@@ -577,7 +603,7 @@ static void FB_InitFaults(void)
  */
 static void FB_ConfigTimerFault_HAL(uint32_t timerIndex, uint32_t faultEnable)
 {
-    hhrtim1.Instance->sTimerxRegs[timerIndex].FLTxR = faultEnable;
+    hhrtim1.Instance->sTimerxRegs[timerIndex].FLTxR = faultEnable & FB_FAULT_ENABLE;
 }
 
 /** @brief 输出引脚分离辅助函数 */
@@ -772,6 +798,7 @@ void API_FB_Init_MasterSync(uint8_t fbCh)
     /* ---- 步骤5: 根据全桥模式配置输出和比较器 ---- */
     if (cfg->bridgeMode == FB_BRIDGE_MODE_FREQ_MOD) {
         /* 调频模式: 50%互补输出 */
+#if 1			
         if (FB_ConfigOutput_FreqMod(hw->leadTimerIndex,
                                      FB_GetOutPin1(hw->leadOutPin),
                                      FB_GetOutPin2(hw->leadOutPin),
@@ -784,6 +811,7 @@ void API_FB_Init_MasterSync(uint8_t fbCh)
                                      period) != HAL_OK) {
             Error_Handler(); return;
         }
+#endif																		 
         cfg->value.cmpValue = period / 2U;
     } else {
         /* 调功模式: 统一CMP值控制占空比 */
@@ -834,7 +862,7 @@ void API_FB_Init_MasterSync(uint8_t fbCh)
  * @note   period = (192MHz * 4) / freqHz
  *         同步模式: 同时更新Master + 超前臂 + 滞后臂周期
  *         独立模式: 仅更新超前臂和滞后臂周期
- *         调频模式: 自动保持CMP2=PER/2 (50%占空比)
+ *         调频模式: 自动保持CMP1=PER/2 (50%占空比, HALF模式)
  *         调功模式: 按比例缩放CMP值保持相同占空比百分比
  */
 
@@ -845,9 +873,9 @@ void API_FB_SetPreiodCountSimple(uint8_t fbCh, uint32_t period)
     __HAL_HRTIM_SETPERIOD(&hhrtim1, hw->leadTimerIndex, period);
     __HAL_HRTIM_SETPERIOD(&hhrtim1, hw->lagTimerIndex, period);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, hw->leadTimerIndex,
-                                FB_COMPAREUNIT_DUTY, period/2);
+                                COMPAREUNIT_BLKS_END, period/2+BLKS_DIV);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, hw->lagTimerIndex,
-                                FB_COMPAREUNIT_DUTY, period/2);
+                                COMPAREUNIT_BLKS_END, period/2+BLKS_DIV);
 
 }
 
@@ -960,7 +988,7 @@ void API_FB_SetPhaseShift(uint8_t fbCh, uint16_t phaseShiftCount)
  * @brief  设置统一CMP值 (调功模式核心接口)
  * @param  fbCh: 全桥通道号 (PotCh1 或 PotCh2)
  * @param  cmpValue: CMP比较值 (0 ~ period-1)
- * @note   一次调用同时设置超前臂和滞后臂的CMP2值
+ * @note   一次调用同时设置超前臂和滞后臂的CMP1值
  *         死区由硬件自动插入, 无需软件处理
  */
 void API_FB_SetCmpValue(uint8_t fbCh, uint16_t cmpValue)
@@ -972,7 +1000,7 @@ void API_FB_SetCmpValue(uint8_t fbCh, uint16_t cmpValue)
 
     cfg->value.cmpValue = cmpValue;
 
-    /* 同时更新超前臂和滞后臂的CMP2 (占空比控制) */
+    /* 同时更新超前臂和滞后臂的CMP1 (占空比控制) */
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, hw->leadTimerIndex,
                             FB_COMPAREUNIT_DUTY, cmpValue);
     __HAL_HRTIM_SETCOMPARE(&hhrtim1, hw->lagTimerIndex,
@@ -1228,9 +1256,9 @@ void API_FB_OutputFreqModulation(uint8_t fbCh,
  * @param  fbCh: 全桥通道号 (PotCh1 或 PotCh2)
  * @param  freqHz: 初始频率 (Hz)
  * @param  cmpValue: 初始CMP比较值
- * @note   两桥臂同相输出，统一CMP值控制占空比:
- *         - 前后桥臂使用相同的CMP2值, 一次设值同时影响两臂
- *         - 改变CMP值 = 调节输出功率
+ * @note   两桥臂同相输出，统一CMP1值控制占空比:
+ *         - 前后桥臂使用相同的CMP1值, 一次设值同时影响两臂
+ *         - 改变CMP1值 = 调节输出功率
  *
  *         波形时序:
  *         ┌─ 周期 ─┐
@@ -1271,43 +1299,66 @@ void API_FB_SinglePulseStart(uint8_t fbCh)
 {
     if (fbCh >= FB_MAX_CH) return;
 
-    uint32_t leadIdx = FB_HW_MAP[fbCh].leadTimerIndex;
-    uint32_t lagIdx  = FB_HW_MAP[fbCh].lagTimerIndex;
-    uint32_t leadID  = FB_HW_MAP[fbCh].leadTimerID;
-    uint32_t lagID   = FB_HW_MAP[fbCh].lagTimerID;
+    uint32_t outPin = FB_HW_MAP[fbCh].leadOutPin& 0x55555555U;     /* 上管 TB1/TA1 */
+    outPin |= FB_HW_MAP[fbCh].lagOutPin &0xAAAAAAAAU;              /* 下管 TE2/TD2 */
 
-    uint32_t period = __HAL_HRTIM_GETPERIOD(&hhrtim1, leadIdx);
+		hhrtim1.Instance->sCommonRegs.ODISR  |= (FB_HW_MAP[fbCh].leadOutPin|FB_HW_MAP[fbCh].lagOutPin);
+	
+    uint32_t period = __HAL_HRTIM_GETPERIOD(&hhrtim1,
+                         FB_HW_MAP[fbCh].leadTimerIndex);
 
-    /* 停止 MASTER + 所有从定时器 */
-    HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_TIMERID_MASTER);
-    HAL_HRTIM_WaveformCountStop(&hhrtim1, leadID);
-    HAL_HRTIM_WaveformCountStop(&hhrtim1, lagID);
+    /* MCMP2 设在周期末尾 -- 此处开/关 OENR */
+    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_MASTER,
+                           HRTIM_COMPAREUNIT_2, period - 100U);
 
-    /* 超前/滞后臂切换为单次模式 */
-    HRTIM_TimeBaseCfgTypeDef single = FB_PPGSingleTimeBaseCfg;
-    single.Period = period;
-    HAL_HRTIM_TimeBaseConfig(&hhrtim1, leadIdx, &single);
-    HAL_HRTIM_SoftwareUpdate(&hhrtim1, leadIdx);
-    HAL_HRTIM_TimeBaseConfig(&hhrtim1, lagIdx, &single);
-    HAL_HRTIM_SoftwareUpdate(&hhrtim1, lagIdx);
+    /* 关输出, 复位计数器 */
+    g_fb_sp_outPin = outPin;
+    g_fb_sp_count  = 0;
 
-    __HAL_HRTIM_SETCOUNTER(&hhrtim1, leadIdx, 0);
-    __HAL_HRTIM_SETCOUNTER(&hhrtim1, lagIdx, 0);
+    /* 开 CMP2 中断 -- 第一次触发时开 OENR, 第二次关 OENR */
+    hhrtim1.Instance->sMasterRegs.MICR |= HRTIM_MICR_MCMP2;
+    hhrtim1.Instance->sMasterRegs.MDIER |= HRTIM_MDIER_MCMP2IE;
 
-    /* 使能超前/滞后臂输出 */
-    HAL_HRTIM_WaveformOutputStart(&hhrtim1, FB_HW_MAP[fbCh].leadOutPin);
-    HAL_HRTIM_WaveformOutputStart(&hhrtim1, FB_HW_MAP[fbCh].lagOutPin);
-    HAL_HRTIM_WaveformCountStart(&hhrtim1, leadID);
-    HAL_HRTIM_WaveformCountStart(&hhrtim1, lagID);
+    uint32_t   delay=2000;
+     do
+     {
+       delay--; /*最大延时怕没有中断 */
+        if(g_fb_sp_count>3)
+        {
+            break;
+        }
 
-    /* 启动 MASTER — 同步触发超前/滞后臂各出 1 个脉冲后自动停止 */
-    HAL_HRTIM_WaveformCountStart(&hhrtim1, HRTIM_TIMERID_MASTER);
+     } while (delay>0);
+        
 
-    /* 延时 + 关闭输出 */
-    volatile uint32_t dly = 500; while (dly--);
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, FB_HW_MAP[fbCh].leadOutPin);
-    HAL_HRTIM_WaveformOutputStop(&hhrtim1, FB_HW_MAP[fbCh].lagOutPin);
-    HAL_HRTIM_WaveformCountStop(&hhrtim1, HRTIM_TIMERID_MASTER);
+
+}
+
+/**
+ * @brief 对角单脉冲 ISR 回调 -- 放入 HRTIM1_Master_IRQHandler 中调用
+ *        CMP2 中断进两次: 第一次开 OENR, 第二次关 OENR 并关中断
+ */
+void API_FB_SinglePulse_ISR(void)
+{
+		g_fb_sp_count++;
+		switch(g_fb_sp_count)
+		{	
+			case 1:
+        /* 第一拍: 周期末尾开输出 → 下一周期从头出完整相位波形 */
+        hhrtim1.Instance->sCommonRegs.OENR |= g_fb_sp_outPin;
+        break;
+        case 2:
+//    __HAL_HRTIM_SETCOMPARE(&hhrtim1, HRTIM_TIMERINDEX_MASTER,
+//                           HRTIM_COMPAREUNIT_2, 1U);
+
+//        break;
+			// case 3:
+        /* 第二拍: 一个完整周期结束 → 关输出(OENR是rs类型, 清用ODISR), 关中断 */
+//        hhrtim1.Instance->sCommonRegs.ODISR |= g_fb_sp_outPin;
+        hhrtim1.Instance->sMasterRegs.MDIER &= ~HRTIM_MDIER_MCMP2IE;
+        g_fb_sp_count = 0x4;
+    }
+    hhrtim1.Instance->sMasterRegs.MICR |= HRTIM_MICR_MCMP2;
 }
 
 /**
@@ -1320,5 +1371,4 @@ __weak void API_FB_IRQHandlerCallback(uint8_t fbCh, uint8_t interruptSource)
     (void)fbCh;
     (void)interruptSource;
 }
-
 
