@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from m4_modbus_tool import (
     M4ModbusClient, DataLogger, READ_REGS, EKF_REGS,
     READ_START_ADDR, READ_COUNT, EKF_START_ADDR, EKF_COUNT,
-    TELEM_START_ADDR, TELEM_TOTAL_WORDS
+    TELEM_START_ADDR, TELEM_TOTAL_WORDS, _pm_feed
 )
 
 try:
@@ -320,6 +320,7 @@ class M4DebugApp:
         # 遥测选择
         self._mon_std = tk.BooleanVar(value=False)  # 标准遥测 (默认关, 节省带宽)
         self._mon_ekf = tk.BooleanVar(value=True)   # EKF 遥测
+        self._mon_telem = tk.BooleanVar(value=False)  # 0x7000 遥测 (默认关)
 
         # 数据记录
         self._recording = False
@@ -479,6 +480,12 @@ class M4DebugApp:
                                 cursor="hand2", state=tk.DISABLED, width=7)
         self.pm_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
+        self.auto_btn = tk.Button(bar, text="▶ 自动", command=self._toggle_auto_test,
+                                  bg=BORDER, fg="#c678dd", font=("Consolas", 9),
+                                  activebackground=BORDER, relief=tk.FLAT,
+                                  cursor="hand2", state=tk.DISABLED, width=7)
+        self.auto_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
         # 遥测选择 checkboxes
         sep2 = tk.Frame(bar, width=2, bg=BORDER)
         sep2.pack(side=tk.RIGHT, padx=6, fill=tk.Y)
@@ -493,6 +500,11 @@ class M4DebugApp:
                             activeforeground=FG)
         cb2.pack(side=tk.RIGHT, padx=(0, 2))
 
+        cb3 = tk.Checkbutton(bar, text="遥测", variable=self._mon_telem,
+                            bg=BG2, fg=FG, font=("Consolas", 8),
+                            selectcolor=BG, activebackground=BG2,
+                            activeforeground=FG)
+        cb3.pack(side=tk.RIGHT, padx=(0, 2))
         self.cap_btn = tk.Button(bar, text="■ Capt", command=self._read_capture,
                                   bg=BORDER, fg=FG, font=("Consolas", 9),
                                   activebackground=BORDER, relief=tk.FLAT,
@@ -1231,6 +1243,7 @@ class M4DebugApp:
         self.telem_btn.configure(state=state)
         self.telem_read_btn.configure(state=state)
         self.pm_btn.configure(state=state)
+        self.auto_btn.configure(state=state)
         for btn in getattr(self, '_quick_btns', []):
             btn.configure(state=state)
 
@@ -1261,6 +1274,194 @@ class M4DebugApp:
 
         self._pm_ui = PrintMessageTab(self._pm_window)
         self._pm_ui._start_capture()
+
+    # ---- 自动测试 ------------------------------------------------
+
+    def _toggle_auto_test(self):
+        if hasattr(self, '_auto_win') and self._auto_win and self._auto_win.winfo_exists():
+            self._auto_win.destroy()
+            self._auto_win = None
+            self._auto_active = False
+            return
+        self._auto_active = False
+        self._auto_results = []
+        self._auto_cycle = 0
+        self._auto_state = "IDLE"
+        self._auto_last_frame = None
+        self._auto_win = tk.Toplevel(self.root)
+        self._auto_win.title("自动测试")
+        self._auto_win.geometry("520x320")
+        self._auto_win.configure(bg=BG2)
+        ctrl = tk.Frame(self._auto_win, bg=BG2)
+        ctrl.pack(fill=tk.X, padx=6, pady=6)
+        tk.Label(ctrl, text="循环:", bg=BG2, fg=FG,
+                 font=("Consolas", 9)).pack(side=tk.LEFT)
+        self._auto_spin = tk.Spinbox(ctrl, from_=1, to=100, width=4,
+                                      bg=BORDER, fg=FG, font=("Consolas", 9),
+                                      relief=tk.FLAT, buttonbackground=BORDER)
+        self._auto_spin.pack(side=tk.LEFT, padx=(4, 6))
+        self._auto_spin.delete(0, tk.END)
+        self._auto_spin.insert(0, "10")
+        self._auto_start_btn = tk.Button(ctrl, text="▶ 开始",
+                                          command=self._auto_cmd_start,
+                                          bg="#c678dd", fg="#fff",
+                                          font=("Consolas", 9, "bold"),
+                                          relief=tk.FLAT, cursor="hand2")
+        self._auto_start_btn.pack(side=tk.LEFT)
+        self._auto_save_btn = tk.Button(ctrl, text="💾 CSV",
+                                         command=self._auto_save_csv,
+                                         bg=BORDER, fg=FG, font=("Consolas", 9),
+                                         relief=tk.FLAT, cursor="hand2",
+                                         state=tk.DISABLED)
+        self._auto_save_btn.pack(side=tk.LEFT, padx=(6, 0))
+
+        cols = ("#", "f_res", "pulse", "rows", "time")
+        self._auto_tree = ttk.Treeview(self._auto_win, columns=cols,
+                                        show="headings", height=10)
+        for c in cols:
+            self._auto_tree.heading(c, text=c)
+        self._auto_tree.column("#", width=40, anchor=tk.CENTER)
+        self._auto_tree.column("f_res", width=100, anchor=tk.CENTER)
+        self._auto_tree.column("pulse", width=60, anchor=tk.CENTER)
+        self._auto_tree.column("rows", width=60, anchor=tk.CENTER)
+        self._auto_tree.column("time", width=80, anchor=tk.CENTER)
+        self._auto_tree.pack(fill=tk.BOTH, expand=True, padx=6)
+
+        stat = tk.Frame(self._auto_win, bg=BG2)
+        stat.pack(fill=tk.X, padx=6, pady=4)
+        self._auto_stat = tk.Label(stat, text="", bg=BG2, fg=DIM,
+                                    font=("Consolas", 9))
+        self._auto_stat.pack(side=tk.LEFT)
+
+    def _auto_cmd_start(self):
+        self._auto_active = not getattr(self, '_auto_active', False)
+        if self._auto_active:
+            try:
+                self._auto_total = int(self._auto_spin.get())
+            except ValueError:
+                self._auto_active = False
+                return
+            self._auto_cycle = 0
+            self._auto_state = "COOLDOWN"
+            self._auto_results.clear()
+            for i in self._auto_tree.get_children():
+                self._auto_tree.delete(i)
+            self._auto_start_btn.configure(text="■ 停止")
+            self._auto_save_btn.configure(state=tk.DISABLED)
+            self._auto_last_frame = None
+            if hasattr(self, '_auto_timer'):
+                del self._auto_timer
+            self._auto_stat.configure(text="运行中...", fg=YELLOW)
+            self._set_status(f"自动测试 {self._auto_total} 次")
+        else:
+            self._auto_state = "IDLE"
+            self._auto_start_btn.configure(text="▶ 开始")
+            self._auto_save_btn.configure(state=tk.NORMAL)
+            self._auto_done()
+
+    def _auto_tick(self):
+        """在 _poll_once 末尾执行（同一线程，不竞争）"""
+        from pan_analyzer import PanAnalyzer
+        analyzer = PanAnalyzer()
+
+        if self._auto_state == "COOLDOWN":
+            # 等待 2 秒冷却
+            if not hasattr(self, '_auto_timer'):
+                self._auto_timer = time.monotonic()
+                self._auto_stat.configure(text="冷却中...", fg=YELLOW)
+                if self.client:
+                    self.client.set_power(0)
+                    self.client.set_work_sta(False, fan_on=True)
+            if time.monotonic() - self._auto_timer > 3:
+                self._auto_stat.configure(text="发送加热指令...", fg=YELLOW)
+                if self.client:
+                    ok1 = self.client.set_power(1000)
+                    ok2 = self.client.set_work_sta(True, fan_on=True)
+                    if not ok1 or not ok2:
+                        self._auto_stat.configure(text="指令失败，重试", fg=RED)
+                        self._auto_timer = time.monotonic()  # 重试
+                        return
+                self._auto_state = "HEATING"
+                self._auto_timer = time.monotonic()
+
+        elif self._auto_state == "HEATING":
+            # 10 秒超时
+            if time.monotonic() - self._auto_timer > 10:
+                self._auto_stat.configure(text="超时未收到 PM，重新开始", fg=RED)
+                self._auto_state = "COOLDOWN"
+                self._auto_timer = time.monotonic()
+                return
+            frame = getattr(self, '_auto_last_frame', None)
+            if not frame:
+                self._auto_stat.configure(
+                    text=f"等待 PM... {int(time.monotonic()-self._auto_timer)}s",
+                    fg=YELLOW)
+                return
+            self._auto_last_frame = None
+            rows = frame.get("rows", [])
+            if frame.get("msg_type", -1) != 0:  # 非 PAN
+                return
+            self._auto_cycle += 1
+            f = pulse = cnt = 0
+            adc = []
+            in_data = False
+            for r in rows:
+                if "pluse" in r:
+                    try: pulse = int(r.split("is")[-1].strip().rstrip("."))
+                    except: pass
+                if r.startswith("Index"):
+                    in_data = True
+                    continue
+                if in_data and r.count("\t") >= 1:
+                    try: adc.append(int(r.split("\t")[1].strip()))
+                    except: pass
+            cnt = len(adc)
+            if cnt > 10:
+                f = round(analyzer.estimate_freq(adc, 1_000_000), 1)
+            rec = {"cycle": self._auto_cycle, "f_res_hz": f,
+                   "pulse": pulse, "rows": cnt}
+            self._auto_results.append(rec)
+            self._auto_tree.insert("", "end", values=(
+                self._auto_cycle, f"{f:.1f}" if f else "N/A",
+                pulse or "-", cnt or "-", f"{time.monotonic()-self._auto_timer:.1f}s"))
+            self._auto_tree.see(self._auto_tree.get_children()[-1])
+            # 下一轮
+            if self._auto_cycle >= self._auto_total:
+                self._auto_active = False
+                self._auto_start_btn.configure(text="▶ 开始")
+                self._auto_save_btn.configure(state=tk.NORMAL)
+                self._auto_done()
+                return
+            # 停
+            if self.client:
+                self.client.set_power(0)
+                self.client.set_work_sta(False, fan_on=True)
+            self._auto_state = "COOLDOWN"
+            self._auto_timer = time.monotonic()
+
+    def _auto_done(self):
+        freqs = [r["f_res_hz"] for r in self._auto_results if r["f_res_hz"] > 0]
+        if freqs:
+            avg = sum(freqs) / len(freqs)
+            mn, mx = min(freqs), max(freqs)
+            self._auto_stat.configure(
+                text=f"f_res: 平均={avg:.1f}  最小={mn:.1f}  最大={mx:.1f}  波动={mx-mn:.1f}Hz",
+                fg=GREEN)
+        else:
+            self._auto_stat.configure(text="无有效数据", fg=YELLOW)
+        self._auto_timer = None
+
+    def _auto_save_csv(self):
+        if not self._auto_results:
+            return
+        fn = f"auto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        path = self._get_save_path(fn)
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["cycle", "f_res_hz", "pulse", "rows"])
+            for r in self._auto_results:
+                w.writerow([r["cycle"], r["f_res_hz"], r["pulse"], r["rows"]])
+        self._auto_save_btn.configure(text="✓ 已保存")
 
     # ---- PrintMessage 数据转发 ----------------------------------
 
@@ -1494,78 +1695,103 @@ class M4DebugApp:
     def _poll_once(self):
         """单次 MODBUS 读取 + 提交 UI 更新"""
         try:
-            # ====== drain PM 数据（从 client.recv 入口复制而来）======
+            # ====== 串口数据读取 + PM 截留 ======
             if self.client and hasattr(self.client.client, 'recv'):
                 cli = self.client.client
+                # 自动模式下直接读串口，不走 MODBUS
+                if getattr(self, '_auto_active', False) and hasattr(cli, 'socket'):
+                    if cli.socket and cli.socket.in_waiting:
+                        data = cli.socket.read(cli.socket.in_waiting)
+                        if data:
+                            pm_dict = {
+                                "state": cli._pm_state, "accum": cli._pm_accum,
+                                "lines": cli._pm_lines, "start": cli._pm_start,
+                                "buf": cli._pm_buf,
+                            }
+                            result = _pm_feed(pm_dict, data)
+                            cli._pm_state = pm_dict["state"]
+                            cli._pm_accum = pm_dict["accum"]
+                            cli._pm_lines = pm_dict["lines"]
+                            cli._pm_start = pm_dict["start"]
+                            cli._pm_buf = pm_dict["buf"]
+                            if result:
+                                cli._pm_ready = result
+                # 读取已完成的 PM 帧
                 if hasattr(cli, '_pm_ready') and cli._pm_ready:
                     result = cli._pm_ready
                     cli._pm_ready = None
+                    self._auto_last_frame = result
                     if hasattr(self, '_pm_ui') and self._pm_ui:
                         for line in result.get("rows", []):
                             self._pm_ui.feed_line(line)
                 # 零散行不喂 UI，避免混入 MODBUS 二进制
                 if hasattr(cli, '_pm_lines') and cli._pm_lines:
                     cli._pm_lines.clear()
-            # ====== 以下原有 MODBUS 读取逻辑不变 ======
+            # ====== MODBUS 回读（自动模式下跳过，只发功率控制）======
             if not self.monitoring or not self.client:
                 return
-            pwr = 0
-            ekf = None
-            if self._mon_std.get():
-                data = self.client.read_telemetry()
-                if data:
-                    self._latest_std = data
-                    pwr = data.get("power_w", 0)
-                    work_sta = data.get("sys_sta", 0)
-                    heat_color = RED if (work_sta & 0x10) else DIM
-                    self.root.after(0, lambda c=heat_color: self.heat_led.itemconfig(
-                        self._heat_circle, fill=c))
-            else:
-                pwr = self.client._heartbeat_power_w * 25
-                heat_on = bool(self.client._heartbeat_work_sta & 0x10)
-                self.root.after(0, lambda: self.heat_led.itemconfig(
-                    self._heat_circle, fill=RED if heat_on else DIM))
+            if not getattr(self, '_auto_active', False):
+                pwr = 0
+                ekf = None
+                if self._mon_std.get():
+                    data = self.client.read_telemetry()
+                    if data:
+                        self._latest_std = data
+                        pwr = data.get("power_w", 0)
+                        work_sta = data.get("sys_sta", 0)
+                        heat_color = RED if (work_sta & 0x10) else DIM
+                        self.root.after(0, lambda c=heat_color: self.heat_led.itemconfig(
+                            self._heat_circle, fill=c))
+                else:
+                    pwr = self.client._heartbeat_power_w * 25
+                    heat_on = bool(self.client._heartbeat_work_sta & 0x10)
+                    self.root.after(0, lambda: self.heat_led.itemconfig(
+                        self._heat_circle, fill=RED if heat_on else DIM))
 
-            if self._mon_ekf.get():
-                ekf = self.client.read_ekf_telemetry()
-                if ekf:
-                    pwr_raw = self.client.read_registers(0x1006, 1)
-                    if pwr_raw is not None:
-                        ekf["power_actual"] = pwr_raw[0]
-                    self._latest_ekf = ekf
+                if self._mon_ekf.get():
+                    ekf = self.client.read_ekf_telemetry()
+                    if ekf:
+                        pwr_raw = self.client.read_registers(0x1006, 1)
+                        if pwr_raw is not None:
+                            ekf["power_actual"] = pwr_raw[0]
+                        self._latest_ekf = ekf
 
-            # Telemetry 0x7000 — 约 100ms 读取一次 (每3次轮询 ≈ 120ms)
-            self._telem_poll_skip += 1
-            if self._telem_poll_skip >= 3:
-                self._telem_poll_skip = 0
-                telem = self.client.read_telemetry_pipe()
-                if telem:
-                    self._latest_telem = telem
-                    self.root.after(0, self._update_telem_panel)
+                # Telemetry 0x7000 — 约 100ms 读取一次 (每3次轮询 ≈ 120ms)
+                self._telem_poll_skip += 1
+                if self._mon_telem.get() and self._telem_poll_skip >= 3:
+                    self._telem_poll_skip = 0
+                    telem = self.client.read_telemetry_pipe()
+                    if telem:
+                        self._latest_telem = telem
+                        self.root.after(0, self._update_telem_panel)
 
-            # 数据记录 (内存攒, 停止时批量写 CSV)
-            if self._recording and ekf:
-                self._records.append({
-                    "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-                    "freq_hz": ekf.get("f_sw_hz", 0) * 1.0,
-                    "phase_deg": ekf.get("phi_deg_x10", 0) * 0.1,
-                    "vdc_mean": ekf.get("vdc_mean_v_x10", 0) * 0.1,
-                    "power_actual": ekf.get("power_actual", 0),
-                    "power_target": self.client._heartbeat_power_w * 25,
-                })
+                # 数据记录 (内存攒, 停止时批量写 CSV)
+                if self._recording and ekf:
+                    self._records.append({
+                        "timestamp": datetime.now().isoformat(timespec="milliseconds"),
+                        "freq_hz": ekf.get("f_sw_hz", 0) * 1.0,
+                        "phase_deg": ekf.get("phi_deg_x10", 0) * 0.1,
+                        "vdc_mean": ekf.get("vdc_mean_v_x10", 0) * 0.1,
+                        "power_actual": ekf.get("power_actual", 0),
+                        "power_target": self.client._heartbeat_power_w * 25,
+                    })
 
-            # 喂绘图器
-            if self.plotter and ekf:
-                self.plotter.feed(power_w=pwr,
-                                 freq_hz=ekf.get("freq_hz", 0),
-                                 phase_deg=ekf.get("phase_deg", 0),
-                                 delta_ppg=ekf.get("delta_ppg_signed", 0))
-                self.plotter.update_plot()
+                # 喂绘图器
+                if self.plotter and ekf:
+                    self.plotter.feed(power_w=pwr,
+                                     freq_hz=ekf.get("freq_hz", 0),
+                                     phase_deg=ekf.get("phase_deg", 0),
+                                     delta_ppg=ekf.get("delta_ppg_signed", 0))
+                    self.plotter.update_plot()
 
-            # 切回主线程更新 UI
-            self.root.after(0, self._update_ui_from_worker)
+                # 切回主线程更新 UI
+                self.root.after(0, self._update_ui_from_worker)
         except Exception:
             pass  # 断线时静默容错
+
+        # ====== 自动测试状态机（在 _poll_once 末尾执行）======
+        if getattr(self, '_auto_active', False):
+            self._auto_tick()
 
     def _update_ui_from_worker(self):
         """主线程：更新 UI 控件"""

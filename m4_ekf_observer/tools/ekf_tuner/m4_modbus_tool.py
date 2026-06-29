@@ -212,7 +212,9 @@ def _pm_feed(pm: dict, data: bytes) -> dict | None:
                 pm["lines"].clear()
                 pm["buf"].clear()
                 return result
-            pm["lines"].append(line)
+            # 跳过二进制混入（含不可打印字符且不是制表符分隔的正常数据）
+            if line.isprintable() or "\t" in line:
+                pm["lines"].append(line)
     # 最后一个不完整的片段保留
     pm["buf"] = bytearray(lines[-1]) if lines else bytearray()
 
