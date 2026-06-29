@@ -327,7 +327,7 @@ class PmAwareSerial:
         while len(self._buf) < size:
             self.fill()
             if not self._ser.in_waiting and not getattr(self._ser, 'closed', True):
-                import time
+
                 time.sleep(0.001)
         data = bytes(self._buf[:size])
         self._buf = self._buf[size:]
