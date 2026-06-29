@@ -226,6 +226,8 @@ uint8_t     PrintMessageOut(void)
 //		free(messageBuff[2]);
 //		free(messageBuff[3]);
 //		free(paraBuff);
+		printf("#PM_END\r\n");          // PC 端 PM 模式结束标记
+
 		memPoint=messgeOutBuff;				//清空空间
 
     messageLock=0;
