@@ -304,38 +304,39 @@ class M4ModbusClient:
         if self.client.connect():
             print(f"[OK] 已连接 {self.port} @ {self.baudrate} baud, 从站={self.slave_addr}")
 
-            # ★ hook framer.recv: 数据入口复制一份给 PM
-            framer = self.client.framer
-            if hasattr(framer, 'recv'):
-                _orig_recv = framer.recv
-                framer._pm_state = "IDLE"
-                framer._pm_accum = bytearray()
-                framer._pm_lines = []
-                framer._pm_start = 0.0
-                framer._pm_buf = bytearray()
-                framer._pm_ready = None
+            # ★ hook client.recv: 数据入口复制一份给 PM
+            # 注意：pymodbus 3.13 的 recv 在 client 上，不在 framer 上
+            client = self.client
+            if hasattr(client, 'recv'):
+                _orig_recv = client.recv
+                client._pm_state = "IDLE"
+                client._pm_accum = bytearray()
+                client._pm_lines = []
+                client._pm_start = 0.0
+                client._pm_buf = bytearray()
+                client._pm_ready = None
 
-                def _recv_hook(sock, size):
-                    data = _orig_recv(sock, size)
+                def _recv_hook(size):
+                    data = _orig_recv(size)
                     if data:
                         pm_dict = {
-                            "state": framer._pm_state,
-                            "accum": framer._pm_accum,
-                            "lines": framer._pm_lines,
-                            "start": framer._pm_start,
-                            "buf": framer._pm_buf,
+                            "state": client._pm_state,
+                            "accum": client._pm_accum,
+                            "lines": client._pm_lines,
+                            "start": client._pm_start,
+                            "buf": client._pm_buf,
                         }
                         result = _pm_feed(pm_dict, data)
-                        framer._pm_state = pm_dict["state"]
-                        framer._pm_accum = pm_dict["accum"]
-                        framer._pm_lines = pm_dict["lines"]
-                        framer._pm_start = pm_dict["start"]
-                        framer._pm_buf = pm_dict["buf"]
+                        client._pm_state = pm_dict["state"]
+                        client._pm_accum = pm_dict["accum"]
+                        client._pm_lines = pm_dict["lines"]
+                        client._pm_start = pm_dict["start"]
+                        client._pm_buf = pm_dict["buf"]
                         if result:
-                            framer._pm_ready = result
+                            client._pm_ready = result
                     return data
 
-                framer.recv = _recv_hook
+                client.recv = _recv_hook
 
             return True
         else:

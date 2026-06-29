@@ -1494,20 +1494,18 @@ class M4DebugApp:
     def _poll_once(self):
         """单次 MODBUS 读取 + 提交 UI 更新"""
         try:
-            # ====== drain PM 数据（从 framer.recv 入口复制而来）======
-            if self.client and hasattr(self.client.client, 'framer'):
-                framer = self.client.client.framer
-                # 完整帧
-                if hasattr(framer, '_pm_ready') and framer._pm_ready:
-                    result = framer._pm_ready
-                    framer._pm_ready = None
+            # ====== drain PM 数据（从 client.recv 入口复制而来）======
+            if self.client and hasattr(self.client.client, 'recv'):
+                cli = self.client.client
+                if hasattr(cli, '_pm_ready') and cli._pm_ready:
+                    result = cli._pm_ready
+                    cli._pm_ready = None
                     if hasattr(self, '_pm_ui') and self._pm_ui:
                         for line in result.get("rows", []):
                             self._pm_ui.feed_line(line)
-                # 零散行（还未成帧）
-                if hasattr(framer, '_pm_lines') and framer._pm_lines:
-                    lines = list(framer._pm_lines)
-                    framer._pm_lines.clear()
+                if hasattr(cli, '_pm_lines') and cli._pm_lines:
+                    lines = list(cli._pm_lines)
+                    cli._pm_lines.clear()
                     for line in lines:
                         if hasattr(self, '_pm_ui') and self._pm_ui:
                             self._pm_ui.feed_line(line)
