@@ -324,10 +324,12 @@ class PmAwareSerial:
 
     def read(self, size):
         """pymodbus 读响应 → 从公共缓存取（不够时自动 fill）"""
+        deadline = time.monotonic() + 2.0
         while len(self._buf) < size:
+            if time.monotonic() > deadline:
+                raise TimeoutError("PmAwareSerial.read() timeout")
             self.fill()
             if not self._ser.in_waiting and not getattr(self._ser, 'closed', True):
-
                 time.sleep(0.001)
         data = bytes(self._buf[:size])
         self._buf = self._buf[size:]
@@ -1662,6 +1664,7 @@ class M4DebugApp:
             if self._pm_ser:
                 self._pm_ser.fill()
                 self._pm_ser.scan()
+                self._pm_ser.check_pm_end()           # #PM_END 必须在 drain 前检查
                 pm_lines = self._pm_ser.drain_pm_lines()
                 for line in pm_lines:
                     if hasattr(self, '_pm_ui') and self._pm_ui:
