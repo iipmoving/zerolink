@@ -1503,12 +1503,9 @@ class M4DebugApp:
                     if hasattr(self, '_pm_ui') and self._pm_ui:
                         for line in result.get("rows", []):
                             self._pm_ui.feed_line(line)
+                # 零散行不喂 UI，避免混入 MODBUS 二进制
                 if hasattr(cli, '_pm_lines') and cli._pm_lines:
-                    lines = list(cli._pm_lines)
                     cli._pm_lines.clear()
-                    for line in lines:
-                        if hasattr(self, '_pm_ui') and self._pm_ui:
-                            self._pm_ui.feed_line(line)
             # ====== 以下原有 MODBUS 读取逻辑不变 ======
             if not self.monitoring or not self.client:
                 return
