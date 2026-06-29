@@ -1322,8 +1322,16 @@ class M4DebugApp:
 
         if ok:
             self.client = c
-            # 启动 PrintMessage 后台读取 (转发到 PM 窗口)
-            self._start_pm_reader()
+            # 用 PmAwareSerial 替换 pymodbus 的 socket，截留 #PM 数据
+            if hasattr(c.client, 'socket'):
+                self._pm_ser = PmAwareSerial(
+                    c.client.socket,
+                    slave_id=c.slave_addr,
+                    pm_timeout=5.0
+                )
+                c.client.socket = self._pm_ser
+            else:
+                self._pm_ser = None
             self._set_connected_state(True)
             self._set_status(f"已连接 {c.port} @ {c.baudrate} baud, 从站={c.slave_addr}")
             # 协议初始化: 检查 SYS_STA bit 7, 按需触发初始化
@@ -1346,7 +1354,7 @@ class M4DebugApp:
             self._set_status(f"连接失败: {port}")
 
     def _disconnect(self):
-        self._stop_pm_reader()
+        # PmAwareSerial 随 client 析构，无需手动停止 PM reader
         self._stop_monitor()
         self._stop_recording()
         if self.plotter:
@@ -1419,41 +1427,6 @@ class M4DebugApp:
         self._pm_ui._start_capture()
 
     # ---- PrintMessage 数据转发 ----------------------------------
-
-    def _start_pm_reader(self):
-        """在 pymodbus recv 出口处拦截: 每次 MODBUS 收完响应后捞缓冲区剩余 PM 文本"""
-        if not self.client or not hasattr(self.client.client, 'socket'):
-            return
-        if getattr(self.client.client, '_pm_hooked', False):
-            return
-        ser = self.client.client.socket
-        orig_recv = self.client.client.recv
-
-        def hooked_recv(size):
-            data = orig_recv(size)
-            try:
-                if ser and ser.in_waiting:
-                    for raw in ser.read(ser.in_waiting).split(b"\n"):
-                        line = raw.decode("utf-8", errors="replace").strip("\r").strip()
-                        if line.startswith("#PM"):
-                            if hasattr(self, '_pm_ui') and self._pm_ui:
-                                self._pm_ui.feed_line(line)
-            except Exception:
-                pass
-            return data
-
-        self.client.client.recv = hooked_recv
-        self.client.client._pm_hooked = True
-
-    def _stop_pm_reader(self):
-        if hasattr(self, 'client') and self.client:
-            try:
-                del self.client.client._pm_hooked
-            except AttributeError:
-                pass
-                del self.client.client.recv
-            except AttributeError:
-                pass
 
     # ---- 数据读取 ----------------------------------------------
 
@@ -1683,8 +1656,20 @@ class M4DebugApp:
             time.sleep(sleep)
 
     def _poll_once(self):
-        """单次 MODBUS 读取 + 提交 UI 更新"""
+        """单次 MODBUS 读取 + PM 截留 + 提交 UI 更新"""
         try:
+            # ====== PM 截留：fill + scan 串口公共缓存 ======
+            if self._pm_ser:
+                self._pm_ser.fill()
+                self._pm_ser.scan()
+                pm_lines = self._pm_ser.drain_pm_lines()
+                for line in pm_lines:
+                    if hasattr(self, '_pm_ui') and self._pm_ui:
+                        self._pm_ui.feed_line(line)
+                self._pm_ser.check_pm_end()
+                if self._pm_ser.is_pm_active():
+                    return
+            # ====== 以下原有 MODBUS 读取逻辑不变 ======
             if not self.monitoring or not self.client:
                 return
             pwr = 0
