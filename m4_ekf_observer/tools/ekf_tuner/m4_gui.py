@@ -296,161 +296,6 @@ class RegisterRow(ttk.Frame):
             self.val_var.set(str(disp_val))
 
 
-class PmAwareSerial:
-    """公共 UART 缓存 + PM 行截留
-
-    fill() → scan() → MODBUS 读 / PM 截留
-    替换 client.client.socket, 与 pymodbus 共用串口
-    """
-
-    def __init__(self, real_ser, slave_id=5, pm_timeout=5.0):
-        self._ser = real_ser
-        self._buf = bytearray()
-        self._slave_id = slave_id
-        self._pm_mode = False
-        self._pm_start = 0.0
-        self._pm_timeout = pm_timeout
-        self._pm_lines = []
-
-    # ── 串口底层 ──
-
-    @property
-    def in_waiting(self):
-        return self._ser.in_waiting
-
-    def write(self, data):
-        """pymodbus 发请求 → 直写真实串口"""
-        return self._ser.write(data)
-
-    def read(self, size):
-        """pymodbus 读响应 → 从公共缓存取（不够时自动 fill）"""
-        deadline = time.monotonic() + 2.0
-        while len(self._buf) < size:
-            if time.monotonic() > deadline:
-                raise TimeoutError("PmAwareSerial.read() timeout")
-            self.fill()
-            if not self._ser.in_waiting and not getattr(self._ser, 'closed', True):
-                time.sleep(0.001)
-        data = bytes(self._buf[:size])
-        self._buf = self._buf[size:]
-        return data
-
-    # ── 数据提取 ──
-
-    def fill(self):
-        """从真实串口读裸字节到公共缓存"""
-        if self._ser.in_waiting:
-            self._buf.extend(self._ser.read(self._ser.in_waiting))
-
-    def scan(self):
-        """遍历公共缓存，找 #PM 完整行 → _pm_lines，消费
-        PM 块: 从 #PM 开头到 #PM_END 之间的所有行（含非 # 开头的行）
-        消费 PM 数据，留下 MODBUS 数据
-        """
-        ranges_to_remove = []  # (start, end) indices
-        lines_to_add = []      # lines to add to _pm_lines
-
-        i = 0
-        in_pm_block = False
-        block_start = 0
-        block_end = 0
-
-        while i < len(self._buf):
-            if self._buf[i] == ord('#'):
-                nl = self._buf.find(b'\n', i)
-                if nl > i:
-                    line = self._buf[i:nl+1].decode(
-                        'utf-8', errors='replace').strip()
-                    if bytes(self._buf[i:i+3]) == b'#PM':
-                        # #PM header — close previous block if any
-                        if in_pm_block:
-                            block_end = i
-                            raw_block = self._buf[block_start:block_end]
-                            for l in raw_block.split(b'\n'):
-                                if l:
-                                    lines_to_add.append(
-                                        l.decode('utf-8', errors='replace').strip())
-                            ranges_to_remove.append((block_start, block_end))
-                        in_pm_block = True
-                        block_start = i
-                        block_end = nl + 1
-                        if not self._pm_mode:
-                            self._pm_mode = True
-                            self._pm_start = time.monotonic()
-                        i = nl + 1
-                    elif in_pm_block:
-                        # non-#PM # line within PM block → close block
-                        block_end = i
-                        raw_block = self._buf[block_start:block_end]
-                        for l in raw_block.split(b'\n'):
-                            if l:
-                                lines_to_add.append(
-                                    l.decode('utf-8', errors='replace').strip())
-                        ranges_to_remove.append((block_start, block_end))
-                        in_pm_block = False
-                        i = nl + 1
-                    else:
-                        i = nl + 1
-                else:
-                    break  # incomplete line
-            else:
-                i += 1
-
-        # close any remaining PM block — only extract complete lines (ending with \n)
-        if in_pm_block:
-            # find last \n within the block
-            last_nl = self._buf.rfind(b'\n', block_start)
-            if last_nl >= block_start:
-                raw_block = self._buf[block_start:last_nl+1]
-                for l in raw_block.split(b'\n'):
-                    if l:
-                        lines_to_add.append(
-                            l.decode('utf-8', errors='replace').strip())
-                ranges_to_remove.append((block_start, last_nl+1))
-            else:
-                # no complete line in remaining block, don't consume
-                pass
-
-        # add all collected lines
-        self._pm_lines.extend(lines_to_add)
-
-        # remove PM data from buffer (reverse order)
-        for start, end in reversed(ranges_to_remove):
-            self._buf = self._buf[:start] + self._buf[end:]
-
-    # ── PM 模式管理 ──
-
-    def drain_pm_lines(self):
-        lines = list(self._pm_lines)
-        self._pm_lines.clear()
-        return lines
-
-    def is_pm_active(self):
-        if not self._pm_mode:
-            return False
-        if time.monotonic() - self._pm_start > self._pm_timeout:
-            self._pm_mode = False
-            # 超时退出时清除公共缓存（可能残留部分 PM 数据）
-            self._buf.clear()
-            return False
-        return True
-
-    def check_pm_end(self):
-        """扫描 _pm_lines 找 #PM_END"""
-        for idx, line in enumerate(self._pm_lines):
-            if line.strip() == "#PM_END":
-                self._pm_lines.pop(idx)
-                self._pm_mode = False
-                self._buf.clear()
-                return True
-        return False
-
-    def exit_pm_mode(self):
-        self._pm_mode = False
-        self._pm_lines.clear()
-        self._buf.clear()
-
-
 # ============================================================
 # 主应用
 # ============================================================
@@ -1324,16 +1169,6 @@ class M4DebugApp:
 
         if ok:
             self.client = c
-            # 用 PmAwareSerial 替换 pymodbus 的 socket，截留 #PM 数据
-            if hasattr(c.client, 'socket'):
-                self._pm_ser = PmAwareSerial(
-                    c.client.socket,
-                    slave_id=c.slave_addr,
-                    pm_timeout=5.0
-                )
-                c.client.socket = self._pm_ser
-            else:
-                self._pm_ser = None
             self._set_connected_state(True)
             self._set_status(f"已连接 {c.port} @ {c.baudrate} baud, 从站={c.slave_addr}")
             # 协议初始化: 检查 SYS_STA bit 7, 按需触发初始化
@@ -1356,7 +1191,6 @@ class M4DebugApp:
             self._set_status(f"连接失败: {port}")
 
     def _disconnect(self):
-        # PmAwareSerial 随 client 析构，无需手动停止 PM reader
         self._stop_monitor()
         self._stop_recording()
         if self.plotter:
@@ -1658,20 +1492,25 @@ class M4DebugApp:
             time.sleep(sleep)
 
     def _poll_once(self):
-        """单次 MODBUS 读取 + PM 截留 + 提交 UI 更新"""
+        """单次 MODBUS 读取 + 提交 UI 更新"""
         try:
-            # ====== PM 截留：fill + scan 串口公共缓存 ======
-            if self._pm_ser:
-                self._pm_ser.fill()
-                self._pm_ser.scan()
-                self._pm_ser.check_pm_end()           # #PM_END 必须在 drain 前检查
-                pm_lines = self._pm_ser.drain_pm_lines()
-                for line in pm_lines:
+            # ====== drain PM 数据（从 framer.recv 入口复制而来）======
+            if self.client and hasattr(self.client.client, 'framer'):
+                framer = self.client.client.framer
+                # 完整帧
+                if hasattr(framer, '_pm_ready') and framer._pm_ready:
+                    result = framer._pm_ready
+                    framer._pm_ready = None
                     if hasattr(self, '_pm_ui') and self._pm_ui:
-                        self._pm_ui.feed_line(line)
-                self._pm_ser.check_pm_end()
-                if self._pm_ser.is_pm_active():
-                    return
+                        for line in result.get("rows", []):
+                            self._pm_ui.feed_line(line)
+                # 零散行（还未成帧）
+                if hasattr(framer, '_pm_lines') and framer._pm_lines:
+                    lines = list(framer._pm_lines)
+                    framer._pm_lines.clear()
+                    for line in lines:
+                        if hasattr(self, '_pm_ui') and self._pm_ui:
+                            self._pm_ui.feed_line(line)
             # ====== 以下原有 MODBUS 读取逻辑不变 ======
             if not self.monitoring or not self.client:
                 return
