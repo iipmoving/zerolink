@@ -157,6 +157,84 @@ def make_work_sta_byte(heat_on: bool, fan_on: bool) -> int:
 
 
 # ============================================================
+# PM 数据捕获: framer.recv hook 状态机
+# ============================================================
+
+PM_TIMEOUT = 5.0  # 超时秒数
+PM_TYPES = {b"#PM0": 0, b"#PM1": 1, b"#PM2": 2}
+
+
+def _pm_feed(pm: dict, data: bytes) -> dict | None:
+    """向 PM 状态机喂数据。
+
+    pm: 状态字典 {state, accum, lines, start, buf}
+    data: 原始字节
+    返回: 完整帧 dict 或 None
+    """
+    pm["buf"].extend(data)
+
+    if pm["state"] == "IDLE":
+        # 在 buf 中找 #PM（任意位置）
+        idx = pm["buf"].find(b"#PM")
+        if idx < 0:
+            # buf 太大时截断，防内存泄漏
+            if len(pm["buf"]) > 4096:
+                pm["buf"] = pm["buf"][-4096:]
+            return None
+        nl = pm["buf"].find(b"\n", idx)
+        if nl < 0:
+            return None  # \n 还没到
+        line = pm["buf"][idx:nl].decode("utf-8", errors="replace").strip()
+        pm["lines"].append(line)
+        pm["state"] = "COLLECT"
+        pm["start"] = time.monotonic()
+        pm["buf"] = pm["buf"][nl + 1 :]  # 消费已处理部分
+        # 继续处理 COLLECT（可能后面还有数据）
+        return _pm_feed(pm, b"")
+
+    # COLLECT 状态
+    lines = pm["buf"].split(b"\n")
+    for i, raw in enumerate(lines):
+        if not raw and i == len(lines) - 1:
+            continue  # 最后一段空
+        if i < len(lines) - 1:
+            # 完整行
+            line = raw.decode("utf-8", errors="replace").strip()
+            if line == "#PM_END":
+                result = {
+                    "msg_type": 0 if pm["lines"] and "PM0" in pm["lines"][0]
+                                else 1 if pm["lines"] and "PM1" in pm["lines"][0]
+                                else 2,
+                    "rows": list(pm["lines"]),
+                    "lines": len(pm["lines"]),
+                }
+                pm["state"] = "IDLE"
+                pm["lines"].clear()
+                pm["buf"].clear()
+                return result
+            pm["lines"].append(line)
+    # 最后一个不完整的片段保留
+    pm["buf"] = bytearray(lines[-1]) if lines else bytearray()
+
+    # 超时检查 (start=0 表示未开始计时，跳过)
+    if pm["start"] > 0 and time.monotonic() - pm["start"] > PM_TIMEOUT:
+        if pm["lines"]:
+            result = {
+                "msg_type": 0,
+                "rows": list(pm["lines"]),
+                "lines": len(pm["lines"]),
+            }
+        else:
+            result = None
+        pm["state"] = "IDLE"
+        pm["lines"].clear()
+        pm["buf"].clear()
+        return result
+
+    return None
+
+
+# ============================================================
 # MODBUS 通信类
 # ============================================================
 
@@ -225,6 +303,40 @@ class M4ModbusClient:
 
         if self.client.connect():
             print(f"[OK] 已连接 {self.port} @ {self.baudrate} baud, 从站={self.slave_addr}")
+
+            # ★ hook framer.recv: 数据入口复制一份给 PM
+            framer = self.client.framer
+            if hasattr(framer, 'recv'):
+                _orig_recv = framer.recv
+                framer._pm_state = "IDLE"
+                framer._pm_accum = bytearray()
+                framer._pm_lines = []
+                framer._pm_start = 0.0
+                framer._pm_buf = bytearray()
+                framer._pm_ready = None
+
+                def _recv_hook(sock, size):
+                    data = _orig_recv(sock, size)
+                    if data:
+                        pm_dict = {
+                            "state": framer._pm_state,
+                            "accum": framer._pm_accum,
+                            "lines": framer._pm_lines,
+                            "start": framer._pm_start,
+                            "buf": framer._pm_buf,
+                        }
+                        result = _pm_feed(pm_dict, data)
+                        framer._pm_state = pm_dict["state"]
+                        framer._pm_accum = pm_dict["accum"]
+                        framer._pm_lines = pm_dict["lines"]
+                        framer._pm_start = pm_dict["start"]
+                        framer._pm_buf = pm_dict["buf"]
+                        if result:
+                            framer._pm_ready = result
+                    return data
+
+                framer.recv = _recv_hook
+
             return True
         else:
             print(f"[失败] 无法打开串口 {self.port}")
@@ -278,6 +390,7 @@ class M4ModbusClient:
 
         framer_cls.encode = encode_le
         framer_cls.decode = decode_le
+        framer_cls._crc_patched = True
         framer_cls._crc_patched = True
 
     def disconnect(self):
