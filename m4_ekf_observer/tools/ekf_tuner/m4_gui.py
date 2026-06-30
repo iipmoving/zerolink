@@ -1342,121 +1342,134 @@ class M4DebugApp:
 
     def _auto_cmd_start(self):
         self._auto_active = not getattr(self, '_auto_active', False)
-        if self._auto_active:
-            try:
-                self._auto_total = int(self._auto_spin.get())
-            except ValueError:
-                self._auto_active = False
-                return
-            self._auto_cycle = 0
-            self._auto_state = "COOLDOWN"
-            self._auto_results.clear()
-            for i in self._auto_tree.get_children():
-                self._auto_tree.delete(i)
-            self._auto_start_btn.configure(text="■ 停止")
-            self._auto_save_btn.configure(state=tk.DISABLED)
-            self._auto_last_frame = None
-            if hasattr(self, '_auto_timer'):
-                del self._auto_timer
-            self._auto_stat.configure(text="运行中...", fg=YELLOW)
-            self._set_status(f"自动测试 {self._auto_total} 次")
-        else:
-            self._auto_state = "IDLE"
-            self._auto_start_btn.configure(text="▶ 开始")
-            self._auto_save_btn.configure(state=tk.NORMAL)
-            self._auto_done()
+        if not self._auto_active:
+            self._auto_stop()
+            return
+
+        try:
+            self._auto_total = int(self._auto_spin.get())
+        except ValueError:
+            return
+
+        if not self.client:
+            return
+
+        # 保存原始 0x2000-0x2014
+        self._auto_saved_regs = self.client.read_registers(0x2000, 21)
+        if not self._auto_saved_regs:
+            self._set_status("自动测试: 读取原始寄存器失败")
+            return
+
+        # 设置 0x2000 = 0x5F (A=5 检锅间隔, B=F 只检锅不加热)
+        # 先尝试 FC06 单写，失败则走 FC10 批写
+        ok = self.client.write_register(0x2000, 0x5F)
+        if not ok:
+            # FC06 可能被 MCU 拦截，走 FC10 批写全部 21 寄存器
+            vals = [0x5F] + list(self._auto_saved_regs[1:])
+            ok = self.client.write_registers(0x2000, vals)
+        if not ok:
+            self._set_status("自动测试: 设置 0x2000 失败")
+            return
+
+        # 初始化状态
+        self._auto_cycle = 0
+        self._auto_results = []
+        self._auto_last_frame = None
+        for i in self._auto_tree.get_children():
+            self._auto_tree.delete(i)
+        self._auto_start_btn.configure(text="■ 停止")
+        self._auto_save_btn.configure(state=tk.DISABLED)
+        self._auto_stat.configure(text="等待 PM 数据...", fg=YELLOW)
+
+        # 开加热（心跳自动维持）
+        self.client.set_power(1000)
+        self.client.set_work_sta(True, fan_on=True)
+        self._set_status(f"自动测试 {self._auto_total} 次 — 只检锅模式")
 
     def _auto_tick(self):
-        """在 _poll_once 末尾执行（同一线程，不竞争）"""
+        """在 _poll_once 末尾执行。PM 持续收帧，不收 MODBUS 回读。"""
+        if not self._auto_active:
+            return
+
+        # 读取 PM 帧（UartService 已填充）
+        frame = getattr(self, '_auto_last_frame', None)
+        if not frame:
+            return
+        self._auto_last_frame = None
+
+        rows = frame.get("rows", [])
+        if frame.get("msg_type", -1) != 0:  # 非 PAN
+            return
+
+        self._auto_cycle += 1
+        f = pulse = 0
+        adc = []
+        in_data = False
+        for r in rows:
+            if "pluse" in r:
+                try: pulse = int(r.split("is")[-1].strip().rstrip("."))
+                except: pass
+            if r.startswith("Index"):
+                in_data = True
+                continue
+            if in_data and r.count("\t") >= 1:
+                try: adc.append(int(r.split("\t")[1].strip()))
+                except: pass
+
         from pan_analyzer import PanAnalyzer
         analyzer = PanAnalyzer()
+        cnt = len(adc)
+        f_res = round(analyzer.estimate_freq(adc, 1_000_000), 1) if cnt > 10 else 0
 
-        if self._auto_state == "COOLDOWN":
-            # 等待 2 秒冷却
-            if not hasattr(self, '_auto_timer'):
-                self._auto_timer = time.monotonic()
-                self._auto_stat.configure(text="冷却中...", fg=YELLOW)
-                if self.client:
-                    self.client.set_power(0)
-                    self.client.set_work_sta(False, fan_on=True)
-            if time.monotonic() - self._auto_timer > 3:
-                self._auto_stat.configure(text="发送加热指令...", fg=YELLOW)
-                if self.client:
-                    ok1 = self.client.set_power(1000)
-                    ok2 = self.client.set_work_sta(True, fan_on=True)
-                    if not ok1 or not ok2:
-                        self._auto_stat.configure(text="指令失败，重试", fg=RED)
-                        self._auto_timer = time.monotonic()  # 重试
-                        return
-                self._auto_state = "HEATING"
-                self._auto_timer = time.monotonic()
+        rec = {"cycle": self._auto_cycle, "f_res_hz": f_res,
+               "pulse": pulse, "rows": cnt, "adc": adc}
+        self._auto_results.append(rec)
 
-        elif self._auto_state == "HEATING":
-            # 10 秒超时
-            if time.monotonic() - self._auto_timer > 10:
-                self._auto_stat.configure(text="超时未收到 PM，重新开始", fg=RED)
-                self._auto_state = "COOLDOWN"
-                self._auto_timer = time.monotonic()
-                return
-            frame = getattr(self, '_auto_last_frame', None)
-            if not frame:
-                self._auto_stat.configure(
-                    text=f"等待 PM... {int(time.monotonic()-self._auto_timer)}s",
-                    fg=YELLOW)
-                return
-            self._auto_last_frame = None
-            rows = frame.get("rows", [])
-            if frame.get("msg_type", -1) != 0:  # 非 PAN
-                return
-            self._auto_cycle += 1
-            f = pulse = cnt = 0
-            adc = []
-            in_data = False
-            for r in rows:
-                if "pluse" in r:
-                    try: pulse = int(r.split("is")[-1].strip().rstrip("."))
-                    except: pass
-                if r.startswith("Index"):
-                    in_data = True
-                    continue
-                if in_data and r.count("\t") >= 1:
-                    try: adc.append(int(r.split("\t")[1].strip()))
-                    except: pass
-            cnt = len(adc)
-            if cnt > 10:
-                f = round(analyzer.estimate_freq(adc, 1_000_000), 1)
-            rec = {"cycle": self._auto_cycle, "f_res_hz": f,
-                   "pulse": pulse, "rows": cnt}
-            self._auto_results.append(rec)
-            self._auto_tree.insert("", "end", values=(
-                self._auto_cycle, f"{f:.1f}" if f else "N/A",
-                pulse or "-", cnt or "-", f"{time.monotonic()-self._auto_timer:.1f}s"))
-            self._auto_tree.see(self._auto_tree.get_children()[-1])
-            # 下一轮
-            if self._auto_cycle >= self._auto_total:
-                self._auto_active = False
-                self._auto_start_btn.configure(text="▶ 开始")
-                self._auto_save_btn.configure(state=tk.NORMAL)
-                self._auto_done()
-                return
-            # 停
-            if self.client:
-                self.client.set_power(0)
-                self.client.set_work_sta(False, fan_on=True)
-            self._auto_state = "COOLDOWN"
-            self._auto_timer = time.monotonic()
+        self._auto_tree.insert("", "end", values=(
+            self._auto_cycle, f"{f_res:.1f}" if f_res else "N/A",
+            pulse or "-", cnt or "-", datetime.now().strftime("%H:%M:%S")))
+        self._auto_tree.see(self._auto_tree.get_children()[-1])
+        self._auto_stat.configure(
+            text=f"已收 {self._auto_cycle}/{self._auto_total} 帧", fg=GREEN)
 
-    def _auto_done(self):
+        # 完成
+        if self._auto_cycle >= self._auto_total:
+            self._auto_stop()
+
+    def _auto_stop(self):
+        """停止自动测试：关加热 → 恢复寄存器 → 保存 CSV"""
+        self._auto_active = False
+        self._auto_start_btn.configure(text="▶ 开始")
+        self._auto_save_btn.configure(state=tk.NORMAL)
+
+        # 关加热
+        if self.client:
+            self.client.set_power(0)
+            self.client.set_work_sta(False, fan_on=True)
+
+        # 恢复原始 0x2000-0x2014
+        if self.client and hasattr(self, '_auto_saved_regs') and self._auto_saved_regs:
+            try:
+                self.client.write_register(0x2000, self._auto_saved_regs[0])
+                self.client.write_registers(0x2000, self._auto_saved_regs)
+            except Exception:
+                pass
+
+        # 统计
         freqs = [r["f_res_hz"] for r in self._auto_results if r["f_res_hz"] > 0]
         if freqs:
             avg = sum(freqs) / len(freqs)
             mn, mx = min(freqs), max(freqs)
             self._auto_stat.configure(
-                text=f"f_res: 平均={avg:.1f}  最小={mn:.1f}  最大={mx:.1f}  波动={mx-mn:.1f}Hz",
+                text=f"完成 {len(self._auto_results)} 次  "
+                     f"f_res: 平均={avg:.1f}  最小={mn:.1f}  最大={mx:.1f}  波动={mx-mn:.1f}Hz",
                 fg=GREEN)
         else:
             self._auto_stat.configure(text="无有效数据", fg=YELLOW)
-        self._auto_timer = None
+
+        # 自动保存 CSV
+        self._auto_save_csv()
+        self._auto_save_btn.configure(text="✓ 已保存")
 
     def _auto_save_csv(self):
         if not self._auto_results:
@@ -1465,10 +1478,27 @@ class M4DebugApp:
         path = self._get_save_path(fn)
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["cycle", "f_res_hz", "pulse", "rows"])
+            # 原始寄存器值
+            if hasattr(self, '_auto_saved_regs') and self._auto_saved_regs:
+                w.writerow(["# 原始 0x2000-0x2014"])
+                w.writerow(["addr"] + [f"0x{0x2000+i:04X}" for i in range(21)])
+                w.writerow(["value"] + list(self._auto_saved_regs))
+                w.writerow([])
+            # 结果表头
+            w.writerow(["cycle", "f_res_hz", "pulse", "rows", "adc_para1"])
             for r in self._auto_results:
-                w.writerow([r["cycle"], r["f_res_hz"], r["pulse"], r["rows"]])
-        self._auto_save_btn.configure(text="✓ 已保存")
+                adc_str = " ".join(str(v) for v in r.get("adc", []))
+                w.writerow([r["cycle"], r["f_res_hz"], r["pulse"],
+                           r["rows"], adc_str])
+            # 统计
+            freqs = [r["f_res_hz"] for r in self._auto_results if r["f_res_hz"] > 0]
+            if freqs:
+                w.writerow([])
+                w.writerow(["avg", f"{sum(freqs)/len(freqs):.1f}"])
+                w.writerow(["min", f"{min(freqs):.1f}"])
+                w.writerow(["max", f"{max(freqs):.1f}"])
+                w.writerow(["波动", f"{max(freqs)-min(freqs):.1f}"])
+        print(f"[自动测试] CSV: {path}")
 
     # ---- PrintMessage 数据转发 ----------------------------------
 
