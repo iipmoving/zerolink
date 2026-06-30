@@ -185,6 +185,112 @@ class PMCapture:
             print(f"[未知] {cmd}")
 
 
+# ── 自动循环 ─────────────────────────────────────────
+
+
+def _run_auto_loop():
+    """解析 argv, 自动循环 N 次: 加热 → 采集 PAN → 计算 f_res → 停止 → 统计"""
+    import json
+
+    parser = argparse.ArgumentParser(description="PrintMessage 自动测试循环")
+    parser.add_argument("port", nargs="?", default="")
+    parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument("--slave", type=int, default=5)
+    parser.add_argument("--exec", default="w 0x200E 16 ; w 0x2010 40", help="加热指令")
+    parser.add_argument("--wait-pan", type=float, default=3.0, help="等待 PAN 秒数")
+    parser.add_argument("--cool", type=float, default=2.0, help="冷却等待秒数")
+    parser.add_argument("--loop", type=int, default=5, help="循环次数")
+    parser.add_argument("--csv", default="", help="CSV 结果文件路径")
+    parser.add_argument("--show-freq", action="store_true", default=True,
+                        help=argparse.SUPPRESS)
+    args, _ = parser.parse_known_args()
+
+    port = args.port
+    if not port:
+        try:
+            import serial.tools.list_ports
+            for p in serial.tools.list_ports.comports():
+                if "USB" in p.description or "UART" in p.description:
+                    port = p.device
+                    break
+            if not port:
+                port = serial.tools.list_ports.comports()[0].device
+        except Exception:
+            pass
+
+    if not port:
+        print("请指定串口: python pm_cli.py COM5 --loop 10")
+        sys.exit(1)
+
+    cap = PMCapture(port, args.baud, args.slave)
+    if not cap.connect():
+        sys.exit(1)
+
+    results = []
+    print(f"\n▶ 自动测试: {args.loop} 次循环, 指令: {args.exec}")
+    print(f"{'#':>3}  {'f_res':>8}  {'pulse':>5}  {'rows':>4}  {'time':>8}")
+    print("-" * 45)
+
+    try:
+        for cycle in range(1, args.loop + 1):
+            # 停止 + 冷却
+            cap.execute("s")
+            time.sleep(args.cool)
+            cap.raw_lines.clear()
+            cap.frames.clear()
+            cap.decoder.clear()
+
+            # 加热
+            cap.execute(args.exec)
+            t0 = time.monotonic()
+            result = cap.wait_for_pan(args.wait_pan)
+            elapsed = time.monotonic() - t0
+            cap.execute("s")
+
+            if result:
+                f = result["f_res_hz"]
+                pulse = result["pulse"]
+                rows = result["rows"]
+                print(f"{cycle:3d}  {f:>8.1f}  {pulse:>5}  {rows:>4}  {elapsed:>5.1f}s")
+            else:
+                f = 0
+                pulse = 0
+                rows = 0
+                print(f"{cycle:3d}  {'N/A':>8}  {'-':>5}  {'-':>4}  {elapsed:>5.1f}s")
+
+            results.append({
+                "cycle": cycle, "f_res_hz": f, "pulse": pulse,
+                "rows": rows, "elapsed_s": round(elapsed, 2)})
+
+    except KeyboardInterrupt:
+        print("\n\n▶ 手动中断")
+    finally:
+        cap.execute("s")
+        cap.disconnect()
+
+    # 统计
+    freqs = [r["f_res_hz"] for r in results if r["f_res_hz"] > 0]
+    print("\n" + "=" * 45)
+    print(f"完成 {len(results)} 次循环")
+    if freqs:
+        avg = sum(freqs) / len(freqs)
+        print(f"f_res: 平均={avg:.1f}Hz  最小={min(freqs):.1f}Hz  最大={max(freqs):.1f}Hz  波动={max(freqs)-min(freqs):.1f}Hz")
+    else:
+        print("未采集到有效 f_res 数据")
+
+    # CSV
+    if args.csv:
+        with open(args.csv, "w", encoding="utf-8") as f:
+            f.write("cycle,f_res_hz,pulse,rows,elapsed_s\n")
+            for r in results:
+                f.write(f"{r['cycle']},{r['f_res_hz']},{r['pulse']},{r['rows']},{r['elapsed_s']}\n")
+        print(f"结果保存: {args.csv}")
+
+    # JSON
+    print(json.dumps({"summary": {"avg": sum(freqs)/len(freqs) if freqs else 0,
+                                  "count": len(results)}, "results": results}))
+
+
 # ── CLI ───────────────────────────────────────────────
 
 def main():
@@ -199,6 +305,9 @@ def main():
     parser.add_argument("--show-log", action="store_true", help="显示原始日志")
     parser.add_argument("--json", action="store_true", help="JSON 输出 (供 AI 解析)")
     parser.add_argument("--interactive", action="store_true", help="交互模式 (从 stdin 读指令)")
+    parser.add_argument("--loop", type=int, default=0,
+                        help="自动循环 N 次: exec + wait-pan + 停止 + 统计")
+    parser.add_argument("--cool", type=float, default=2.0, help="循环间冷却等待秒数")
     args = parser.parse_args()
 
     # 自动查找串口
@@ -271,4 +380,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # 自动循环模式（pm_cli.py COM5 --exec "加热指令" --wait-pan 3 --loop 10）
+    if len(sys.argv) > 1 and "--loop" in sys.argv:
+        _run_auto_loop()
+    else:
+        main()

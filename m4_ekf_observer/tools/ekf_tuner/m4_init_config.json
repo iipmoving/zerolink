@@ -1,6 +1,6 @@
 {
   "_comment": "M4 init/ctrl registers — auto-saved by m4_gui.py",
-  "_updated": "2026-06-28T22:53:40.746503",
+  "_updated": "2026-06-29T22:08:25.899101",
   "save_path": "d:\\OBSIDIAN\\MOVING IH\\ZEROLINK\\m4_ekf_observer\\tools\\ekf_tuner",
   "registers": {
     "0x2000": 24,

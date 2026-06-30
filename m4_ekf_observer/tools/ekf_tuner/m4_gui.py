@@ -1181,6 +1181,13 @@ class M4DebugApp:
 
         if ok:
             self.client = c
+            # 用 UartService 替换 socket，统一管理串口数据
+            from uart_service import UartService
+            if hasattr(c.client, 'socket') and c.client.socket:
+                self._uart = UartService(c.client.socket, slave_id=c.slave_addr)
+                c.client.socket = self._uart
+            else:
+                self._uart = None
             self._set_connected_state(True)
             self._set_status(f"已连接 {c.port} @ {c.baudrate} baud, 从站={c.slave_addr}")
             # 协议初始化: 检查 SYS_STA bit 7, 按需触发初始化
@@ -1695,38 +1702,15 @@ class M4DebugApp:
     def _poll_once(self):
         """单次 MODBUS 读取 + 提交 UI 更新"""
         try:
-            # ====== 串口数据读取 + PM 截留 ======
-            if self.client and hasattr(self.client.client, 'recv'):
-                cli = self.client.client
-                # 自动模式下直接读串口，不走 MODBUS
-                if getattr(self, '_auto_active', False) and hasattr(cli, 'socket'):
-                    if cli.socket and cli.socket.in_waiting:
-                        data = cli.socket.read(cli.socket.in_waiting)
-                        if data:
-                            pm_dict = {
-                                "state": cli._pm_state, "accum": cli._pm_accum,
-                                "lines": cli._pm_lines, "start": cli._pm_start,
-                                "buf": cli._pm_buf,
-                            }
-                            result = _pm_feed(pm_dict, data)
-                            cli._pm_state = pm_dict["state"]
-                            cli._pm_accum = pm_dict["accum"]
-                            cli._pm_lines = pm_dict["lines"]
-                            cli._pm_start = pm_dict["start"]
-                            cli._pm_buf = pm_dict["buf"]
-                            if result:
-                                cli._pm_ready = result
-                # 读取已完成的 PM 帧
-                if hasattr(cli, '_pm_ready') and cli._pm_ready:
-                    result = cli._pm_ready
-                    cli._pm_ready = None
-                    self._auto_last_frame = result
-                    if hasattr(self, '_pm_ui') and self._pm_ui:
-                        for line in result.get("rows", []):
-                            self._pm_ui.feed_line(line)
-                # 零散行不喂 UI，避免混入 MODBUS 二进制
-                if hasattr(cli, '_pm_lines') and cli._pm_lines:
-                    cli._pm_lines.clear()
+            # ====== PM 数据读取（从 UartService 提取）======
+            pm_frame = []
+            if self._uart:
+                self._uart.fill()
+                pm_frame = self._uart.drain_pm()
+            if pm_frame and hasattr(self, '_pm_ui') and self._pm_ui:
+                for line in pm_frame:
+                    self._pm_ui.feed_line(line)
+                self._auto_last_frame = {"rows": pm_frame, "msg_type": 0}
             # ====== MODBUS 回读（自动模式下跳过，只发功率控制）======
             if not self.monitoring or not self.client:
                 return
