@@ -1293,7 +1293,6 @@ class M4DebugApp:
         self._auto_active = False
         self._auto_results = []
         self._auto_cycle = 0
-        self._auto_state = "IDLE"
         self._auto_last_frame = None
         self._auto_win = tk.Toplevel(self.root)
         self._auto_win.title("自动测试")
