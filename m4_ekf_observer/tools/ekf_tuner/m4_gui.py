@@ -1736,10 +1736,11 @@ class M4DebugApp:
             if self._uart:
                 self._uart.fill()
                 pm_frame = self._uart.drain_pm()
-            if pm_frame and hasattr(self, '_pm_ui') and self._pm_ui:
-                for line in pm_frame:
-                    self._pm_ui.feed_line(line)
+            if pm_frame:
                 self._auto_last_frame = {"rows": pm_frame, "msg_type": 0}
+                if hasattr(self, '_pm_ui') and self._pm_ui:
+                    for line in pm_frame:
+                        self._pm_ui.feed_line(line)
             # ====== MODBUS 回读（自动模式下跳过，只发功率控制）======
             if not self.monitoring or not self.client:
                 return
