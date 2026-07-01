@@ -23,7 +23,7 @@ LOG_FILE="/d/WORK/AIGIT/auto-sync.log"
 PID_FILE="/d/WORK/AIGIT/auto-sync.pid"
 TEST_SYNC_FILE="$SOURCE/test_sync.txt"
 
-NAS_REMOTE="synology"    # git remote 名称（指向群晖）
+NAS_REMOTE="origin"      # git remote 名称（指向群晖，当前仓库 origin 已指向 Synology）
 GITEE_REMOTE="gitee"     # git remote 名称（指向 Gitee）
 
 # ---------- 函数 ----------
@@ -118,6 +118,8 @@ sync_remote() {
   # --- Gitee ---
   log "[GITEE] 开始同步 Y:\\AI -> Gitee"
   if git remote get-url "$GITEE_REMOTE" &>/dev/null; then
+    # 先拉取防止分歧
+    git pull "$GITEE_REMOTE" main --rebase 2>&1 || true
     if git push "$GITEE_REMOTE" main 2>&1; then
       log "[GITEE] Gitee 已更新"
     else
