@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "v2.3-link-params-project",
+  "title": "v2.3 LINK+PARAMS 项目配置",
+  "description": "codeGen 唯一数据源 — 模块连接关系、数据结构、链路样式全部在此 JSON 中定义。GUI 和 code_gen.py 共同遵守此契约。",
+
+  "type": "object",
+  "required": ["schema_version", "project", "modules", "pipes", "slot_order"],
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "example": "1.0"
+    },
+
+    "project": {
+      "type": "object",
+      "description": "项目设置和输出路径",
+      "required": ["name", "paths"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "项目名称，仅用于显示"
+        },
+        "paths": {
+          "type": "object",
+          "description": "各层代码输出子目录",
+          "required": ["io_dir", "core_dir", "app_dir", "base_class_dir", "proto_dir"],
+          "properties": {
+            "io_dir":    { "type": "string", "description": "io.h 输出子目录", "default": "include" },
+            "core_dir":  { "type": "string", "description": "data_switcher.c 输出子目录", "default": "core" },
+            "app_dir":   { "type": "string", "description": "app 层模块 .c 输出子目录", "default": "app" },
+            "base_class_dir": { "type": "string", "description": "base_class 层输出子目录", "default": "base_class" },
+            "proto_dir": { "type": "string", "description": "proto 层输出子目录", "default": "proto" }
+          }
+        },
+        "std_module_path": {
+          "type": "string",
+          "description": "std_module.h 相对于 output_root 的路径",
+          "default": "core/std_module.h"
+        },
+        "pack": {
+          "type": "integer",
+          "description": "#pragma pack 对齐值",
+          "default": 4
+        },
+        "comment_guard": {
+          "type": "boolean",
+          "description": "L0 阻断：是否用 //#define 注释掉 include guard",
+          "default": true
+        },
+        "output_root": {
+          "type": "string",
+          "description": "生成文件相对于 project.json 的输出根目录"
+        }
+      }
+    },
+
+    "modules": {
+      "type": "array",
+      "description": "模块定义列表 — 每个模块对应一个独立的数据处理单元",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "layer", "source_file", "comment"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "模块名全小写标识符，用于文件名生成",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "example": "app_adc"
+          },
+          "name": {
+            "type": "string",
+            "description": "PascalCase 模块名，对应 MODULE_SKELETON(name) 宏参数",
+            "pattern": "^[A-Z][a-zA-Z0-9]*$",
+            "example": "AppAdc"
+          },
+          "layer": {
+            "type": "string",
+            "description": "代码层级，决定输出目录映射",
+            "enum": ["app", "drv", "base_class", "hal", "proto", "core"]
+          },
+          "source_file": {
+            "type": "string",
+            "description": "源文件路径（相对于 output_root，或项目根下的路径）",
+            "example": "app/adc_sensor.c"
+          },
+          "comment": {
+            "type": "string",
+            "description": "模块职责描述",
+            "minLength": 1
+          }
+        }
+      },
+      "minItems": 1
+    },
+
+    "pipes": {
+      "type": "array",
+      "description": "管道定义列表 — 每条 pipe 代表 Producer→Consumer 的完整数据流定义",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to", "callback_type", "out_link", "in_link", "fields"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "管道唯一标识，pipe_{from}_{to} 全小写",
+            "pattern": "^pipe_[a-z0-9_]+$",
+            "example": "pipe_adc2calc"
+          },
+          "from": {
+            "type": "string",
+            "description": "Producer 模块名（PascalCase，必须存在于 modules[].name）"
+          },
+          "to": {
+            "type": "string",
+            "description": "Consumer 模块名（PascalCase，必须存在于 modules[].name）"
+          },
+          "callback_type": {
+            "type": "string",
+            "description": "数据传递方式",
+            "enum": ["pull", "edge", "field_copy"]
+          },
+          "comment": {
+            "type": "string",
+            "description": "管道描述，说明传输的数据内容和用途",
+            "minLength": 1
+          },
+          "out_link": {
+            "type": "object",
+            "description": "Producer 侧的 LINK 属性",
+            "required": ["style"],
+            "properties": {
+              "style": {
+                "type": "string",
+                "description": "OUTPUT_LINK 的 params 声明方式",
+                "enum": ["array", "pointer", "pointer_array"]
+              },
+              "array_size": {
+                "type": "integer",
+                "description": "array/pointer_array 时有效，表示数组长度；pointer 时填 0",
+                "minimum": 0
+              }
+            }
+          },
+          "in_link": {
+            "type": "object",
+            "description": "Consumer 侧的 LINK 属性（对称性：应与 out_link 一致）",
+            "required": ["style"],
+            "properties": {
+              "style": {
+                "type": "string",
+                "enum": ["array", "pointer", "pointer_array"]
+              },
+              "array_size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "fields": {
+            "type": "array",
+            "description": "管道传输的业务数据字段列表",
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "comment"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "字段名，snake_case",
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "完整 C 类型表达式。数组用 type[n] 语法，如 uint16_t[4]",
+                  "example": "uint16_t, uint16_t[4], uint16_t*, struct Xxx"
+                },
+                "comment": {
+                  "type": "string",
+                  "description": "字段用途说明",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "slot_order": {
+      "type": "array",
+      "description": "模块执行顺序。数组元素为 PascalCase 模块名，必须包含所有 modules[].name 且无遗漏",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+
+    "slot_chains": {
+      "type": "array",
+      "description": "SLOT 调用链条 — 按序组合模块的执行链路，生成 Switcher_Run_{name}()",
+      "items": {
+        "type": "object",
+        "required": ["name", "modules"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "链条名, 生成 Switcher_Run_{name}()",
+            "example": "Slot1"
+          },
+          "comment": {
+            "type": "string",
+            "description": "链条用途说明"
+          },
+          "modules": {
+            "type": "array",
+            "description": "按执行顺序排列的模块名列表 (PascalCase, 须存在于 modules[].name)",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        }
+      }
+    }
+  }
+}

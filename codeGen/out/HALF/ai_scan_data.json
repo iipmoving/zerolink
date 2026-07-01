@@ -1,0 +1,964 @@
+{
+  "files": [
+    {
+      "rel_path": "../../LIB/APP/app_power.c",
+      "group": "AppLibSrc",
+      "brief": "",
+      "includes": [
+        "#include \"../../include_io/app_power_io.h\"",
+        "#include\t\"data_type.h\"",
+        "#include\t\"s_time_base.h\"",
+        "#include\t\"commClass.h\"",
+        "#include \t\"API_TIM.H\"",
+        "#include\t\"API_hrtim.h\"",
+        "#include\t\"API_gpio.h\"",
+        "#include\t\"API_ADC.h\"",
+        "#include\t\"API_DMA.h\"",
+        "#include\t\"API_DAc.h\"",
+        "#include\t\"API_UART.H\"",
+        "#include\t\"API_FMAC.H\"",
+        "#include\t\"app_power.h\"",
+        "#include\t\"s_pid.h\"",
+        "#include \t\"proto_i2c.h\"",
+        "#include\t\"simulative_uart.h\"",
+        "#include\t\"s_data_stack.h\"",
+        "#include    \"printMessage.h\"",
+        "#include\t\"pluse.H\"",
+        "#include\t\"phase.h\"",
+        "#include\t\"simulative_uart.h\"",
+        "#include    \"printMessage.h\"",
+        "#include \"../../../../../app/ekf/modbus_ekf_regs.h\""
+      ],
+      "functions": [
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(AppPower) *in, MODULE_OUTPUT(AppPower) *out, AppPower_PipeFlag",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_IRQ_PPGstepDecTxA",
+          "decl": "void APP_ADC_IRQ_PPGstepDecTxA(Power_AwdDntr_LINK_t* txaDntr, uint16_t* txaBuff);",
+          "has_body": false
+        },
+        {
+          "name": "API_HRTIM1_TEST_CMP1_IRQHandlerCallback",
+          "decl": "void API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)",
+          "has_body": false
+        },
+        {
+          "name": "API_ADC_Current1AWD_IRQHandlerCallBack",
+          "decl": "void API_ADC_Current1AWD_IRQHandlerCallBack(void)",
+          "has_body": false
+        },
+        {
+          "name": "API_ADC_Current2AWD_IRQHandlerCallBack",
+          "decl": "void API_ADC_Current2AWD_IRQHandlerCallBack(void)",
+          "has_body": false
+        },
+        {
+          "name": "PPGgetAdcValueCh1",
+          "decl": "void\tPPGgetAdcValueCh1(void);",
+          "has_body": false
+        },
+        {
+          "name": "PPGgetAdcValueCh2",
+          "decl": "void\tPPGgetAdcValueCh2(void);",
+          "has_body": false
+        },
+        {
+          "name": "PPGgetAdcValueCh3",
+          "decl": "void\tPPGgetAdcValueCh3(void);",
+          "has_body": false
+        },
+        {
+          "name": "PPGgetAdcValueCh4",
+          "decl": "void\tPPGgetAdcValueCh4(void);",
+          "has_body": false
+        },
+        {
+          "name": "PPGinit",
+          "decl": "void\tPPGinit(void);\t\t\t\t\t\t\t//void\t\t\t(*PPGinit)(void);\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t//初始化",
+          "has_body": false
+        },
+        {
+          "name": "PPGdeadTimeCh1",
+          "decl": "void\tPPGdeadTimeCh1(uint8_t downDts,uint8_t upDts);\t\t\t\t\t//void\t\t\t(*PPGdeadTime)(uint8_t downDts,uint",
+          "has_body": false
+        },
+        {
+          "name": "PPGdeadTimeCh2",
+          "decl": "void\tPPGdeadTimeCh2(uint8_t downDts,uint8_t upDts);\t\t\t\t\t//void\t\t\t(*PPGdeadTime)(uint8_t downDts,uint",
+          "has_body": false
+        },
+        {
+          "name": "PPGdeadTimeCh3",
+          "decl": "void\tPPGdeadTimeCh3(uint8_t downDts,uint8_t upDts);\t\t\t\t\t//void\t\t\t(*PPGdeadTime)(uint8_t downDts,uint",
+          "has_body": false
+        },
+        {
+          "name": "PPGdeadTimeCh4",
+          "decl": "void\tPPGdeadTimeCh4(uint8_t downDts,uint8_t upDts);\t\t\t\t\t//void\t\t\t(*PPGdeadTime)(uint8_t downDts,uint",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetValueCh1",
+          "decl": "void\tPPGsetValueCh1(PPGvalueDef input);\t\t\t\t\t//void\t\t\t(*PPGsetValue)(uint32_t pwm);\t\t\t\t\t\t\t\t\t\t\t//立即设置P",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetValueCh2",
+          "decl": "void\tPPGsetValueCh2(PPGvalueDef input);\t\t\t\t\t//void\t\t\t(*PPGsetValue)(uint32_t pwm);\t\t\t\t\t\t\t\t\t\t\t//立即设置P",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetValueCh3",
+          "decl": "void\tPPGsetValueCh3(PPGvalueDef input);\t\t\t\t\t//void\t\t\t(*PPGsetValue)(uint32_t pwm);\t\t\t\t\t\t\t\t\t\t\t//立即设置P",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetValueCh4",
+          "decl": "void\tPPGsetValueCh4(PPGvalueDef input);\t\t\t\t\t//void\t\t\t(*PPGsetValue)(uint32_t pwm);\t\t\t\t\t\t\t\t\t\t\t//立即设置P",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetDutyCh1",
+          "decl": "void\tPPGsetDutyCh1(uint16_t duty);\t\t\t\t\t\t//立即设置PPG大小(只设置 占空比，周期为公共周期POWERCYCLE），不经过渐变",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetDutyCh2",
+          "decl": "void\tPPGsetDutyCh2(uint16_t duty);\t\t\t\t\t\t//立即设置PPG大小(只设置 占空比，周期为公共周期POWERCYCLE），不经过渐变",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetDutyCh3",
+          "decl": "void\tPPGsetDutyCh3(uint16_t duty);\t\t\t\t\t\t//立即设置PPG大小(只设置 占空比，周期为公共周期POWERCYCLE），不经过渐变",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetDutyCh4",
+          "decl": "void\tPPGsetDutyCh4(uint16_t duty);\t\t\t\t\t\t//立即设置PPG大小(只设置 占空比，周期为公共周期POWERCYCLE），不经过渐变",
+          "has_body": false
+        },
+        {
+          "name": "PPGonOffCh1",
+          "decl": "void\tPPGonOffCh1(uint8_t onOff);\t\t\t\t\t\t\t//void\t\t\t(*PPGonOff)(uint8_t onOff);\t\t\tPPG开关",
+          "has_body": false
+        },
+        {
+          "name": "PPGonOffCh2",
+          "decl": "void\tPPGonOffCh2(uint8_t onOff);\t\t\t\t\t\t\t//void\t\t\t(*PPGonOff)(uint8_t onOff);\t\t\tPPG开关",
+          "has_body": false
+        },
+        {
+          "name": "PPGonOffCh3",
+          "decl": "void\tPPGonOffCh3(uint8_t onOff);\t\t\t\t\t\t\t//void\t\t\t(*PPGonOff)(uint8_t onOff);\t\t\tPPG开关",
+          "has_body": false
+        },
+        {
+          "name": "PPGonOffCh4",
+          "decl": "void\tPPGonOffCh4(uint8_t onOff);\t\t\t\t\t\t\t//void\t\t\t(*PPGonOff)(uint8_t onOff);\t\t\tPPG开关",
+          "has_body": false
+        },
+        {
+          "name": "PPGgetAdcValue_ch1",
+          "decl": "void\tPPGgetAdcValue_ch1(void);\t\t\t\t//\tvoid\t\t\t(*_PPGgetAdcValue)(void);\t\t\t\t\t\t//得到对应的ADC值",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountInitCh1",
+          "decl": "void\tAPP_POWER_PanCountInitCh1(void);\t\t\t\t\t//void\t\t\t(*PanCountInit)(void);\t\t\t\t\t\t\t//检锅脉冲计数初始化",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountInitCh2",
+          "decl": "void\tAPP_POWER_PanCountInitCh2(void);\t\t\t\t\t//void\t\t\t(*PanCountInit)(void);\t\t\t\t\t\t\t//检锅脉冲计数初始化",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountInitCh3",
+          "decl": "void\tAPP_POWER_PanCountInitCh3(void);\t\t\t\t\t//void\t\t\t(*PanCountInit)(void);\t\t\t\t\t\t\t//检锅脉冲计数初始化",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountInitCh4",
+          "decl": "void\tAPP_POWER_PanCountInitCh4(void);\t\t\t\t\t//void\t\t\t(*PanCountInit)(void);\t\t\t\t\t\t\t//检锅脉冲计数初始化",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountGetValue",
+          "decl": "uint8_t\tAPP_POWER_PanCountGetValue(void);\t\t\t//uint8_t \t(*PanCountGetValue)(void);\t\t\t\t\t//得到检锅数",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PanCountSetValue",
+          "decl": "void\tAPP_POWER_PanCountSetValue(uint8_t onOff);;\t\t\t//void  \t\t(*PanCountSetValue)(uint8_t onOff);\t\t\t\t",
+          "has_body": false
+        },
+        {
+          "name": "PPGsetHalf",
+          "decl": "void\tPPGsetHalf(uint8_t ch,uint16_t pwm);\t\t\t\t\t//输出占空比50%的PWM",
+          "has_body": false
+        },
+        {
+          "name": "pulse_detector_reset",
+          "decl": "void pulse_detector_reset(RealTimePulseDetector* detector);\t\t//脉冲检测初始化",
+          "has_body": false
+        },
+        {
+          "name": "Pulse_detector_process",
+          "decl": "int Pulse_detector_process(RealTimePulseDetector* detector);\t//脉冲检测",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PotTypeCheck_FRE",
+          "decl": "void\tAPP_POWER_PotTypeCheck_FRE(uint8_t ch);\t\t\t//ch 0:  40K下判断锅具\tch 1: 30k 下判断锅具",
+          "has_body": false
+        },
+        {
+          "name": "get_MAXMIN_PPG",
+          "decl": "void   get_MAXMIN_PPG(void);\t//得到最大最小PPG频率值",
+          "has_body": false
+        },
+        {
+          "name": "APP_POWER_PotTypeCheckConfirm",
+          "decl": "void\tAPP_POWER_PotTypeCheckConfirm(void);\t\t\t\t//通过功率点确认锅具类型",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct /* 同频倍频切换结构体 */",
+        "typedef struct /* 判锅结构体 */",
+        "typedef struct {",
+        "// typedef struct",
+        "//typedef struct {",
+        "//typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "DNTR_BUFF_MAX",
+          "value": "5"
+        },
+        {
+          "name": "DNTR(id)",
+          "value": "(&Power_Dntr[(id)])"
+        },
+        {
+          "name": "IRON_POWER_H",
+          "value": "1000/25"
+        },
+        {
+          "name": "IRON_POWER_L",
+          "value": "600/25"
+        },
+        {
+          "name": "POTNUM",
+          "value": "4\t\t\t\t//炉头数"
+        },
+        {
+          "name": "MasterCh",
+          "value": "0\t\t\t//主炉头序号"
+        },
+        {
+          "name": "SlaveCh",
+          "value": "1\t\t\t\t//从炉头序号"
+        },
+        {
+          "name": "MasterRCh",
+          "value": "2\t\t\t//主炉头序号"
+        },
+        {
+          "name": "SlaveRCh",
+          "value": "3\t\t\t\t//从炉头序号"
+        },
+        {
+          "name": "PowerPotReset",
+          "value": "PowerAll.flag.bit.rest"
+        },
+        {
+          "name": "PowerPotCheckEnd",
+          "value": "PowerAll.flag.bit.potCheckEnd"
+        },
+        {
+          "name": "PowerOvpValueAll",
+          "value": "PowerAll.ovp"
+        },
+        {
+          "name": "PowerChangeStatus",
+          "value": "PowerAll.changeStatus"
+        },
+        {
+          "name": "PowerScrCnt",
+          "value": "PowerAll.scrCnt"
+        },
+        {
+          "name": "PowerPotNum",
+          "value": "PowerAll.PotNum"
+        },
+        {
+          "name": "PowerMinFre",
+          "value": "PowerAll.minFre"
+        },
+        {
+          "name": "PowerCycle",
+          "value": "PowerAll.pCycle"
+        },
+        {
+          "name": "PowerStack",
+          "value": "PowerAll.stack"
+        },
+        {
+          "name": "g_surge_power",
+          "value": "PowerControl->staticReg->SurgePower\t\t//初始判锅功率"
+        },
+        {
+          "name": "s_leave_time",
+          "value": "PowerControl->staticReg->LeaveTime\t//移锅确认次数"
+        }
+      ],
+      "total_lines": 6533
+    },
+    {
+      "rel_path": "../../LIB/APP/adc_sensor.c",
+      "group": "AppLibSrc",
+      "brief": "",
+      "includes": [
+        "#include \"../../include_io/app_adc_io.h\"",
+        "#include \"APP_ADC.H\"                   /* enums, DIV_* macros                    */",
+        "#include \"power_calculator.h\"          /* PowerCalculatorInputDef, PowerResult    */",
+        "#include \"API_adc.h\"                   /* TxA_ADC_AdcBUFF_NUM, ADC_SELECT_ENUM   */",
+        "#include \"API_FMAC.H\"                  /* API_FMAC_MEMDEF, FmacLeve              */",
+        "#include \"API_hrtim.h\"                 /* PotNum, FRE_PER_ADC, API_PPG_GetPeroid */",
+        "#include \"API_gpio.h\"",
+        "#include \"API_TIM.h\"",
+        "#include \"api_dma.h\"",
+        "#include \"adc_processing.h\"",
+        "#include \"printMessage.h\"",
+        "#include \"wave_capture.h\"",
+        "#include \"API_adc.h\"",
+        "#include \"API_TIM.h\"",
+        "#include \"api_dma.h\"",
+        "#include \"API_OPAMP.H\"",
+        "#include \"API_hrtim.h\"",
+        "#include \"API_gpio.h\"",
+        "#include \"API_I2C.H\"",
+        "#include \"API_UART.H\"",
+        "#include \"API_FMAC.H\"",
+        "#include \"printMessage.h\"",
+        "#include \"wave_capture.h\""
+      ],
+      "functions": [
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t fl",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void     Init(void);",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void     ProcessInput(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaAvgSum",
+          "decl": "static void     APP_ADC_TxaAvgSum(uint8_t ch);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_AVG_Fun",
+          "decl": "static void     APP_ADC_AVG_Fun(void);",
+          "has_body": false
+        },
+        {
+          "name": "getIcVc20msOccur",
+          "decl": "static uint8_t  getIcVc20msOccur(void);",
+          "has_body": false
+        },
+        {
+          "name": "clrIcVc20msOccur",
+          "decl": "static void     clrIcVc20msOccur(void);",
+          "has_body": false
+        },
+        {
+          "name": "getADCaverage20ms",
+          "decl": "static uint32_t getADCaverage20ms(uint8_t ch);",
+          "has_body": false
+        },
+        {
+          "name": "AdcValueFun",
+          "decl": "uint8_t         AdcValueFun(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaBuffChange",
+          "decl": "static void     APP_ADC_TxaBuffChange(uint8_t ch, TxaHrtimPointDef* point);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_GetTxaPeiodPoint",
+          "decl": "static void     APP_ADC_GetTxaPeiodPoint(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_SELECT_GROUP",
+          "decl": "static void     APP_ADC_SELECT_GROUP(uint8_t ch);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_GET_TxaAvg",
+          "decl": "static void     APP_ADC_GET_TxaAvg(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_GET_TEMPE",
+          "decl": "static void     APP_ADC_GET_TEMPE(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_ZERO_IrqFun",
+          "decl": "void            APP_ADC_ZERO_IrqFun(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ZERO_Adc100usCallBack",
+          "decl": "void            APP_ZERO_Adc100usCallBack(void);",
+          "has_body": false
+        },
+        {
+          "name": "API_T12_EOC_IRQHandlerCallBack",
+          "decl": "void            API_T12_EOC_IRQHandlerCallBack(void);",
+          "has_body": false
+        },
+        {
+          "name": "API_HRTIM1_TEST_UPD_IRQHandlerCallback",
+          "decl": "void            API_HRTIM1_TEST_UPD_IRQHandlerCallback(uint8_t sourse);",
+          "has_body": false
+        },
+        {
+          "name": "API_DMA_TxA_IRQHandlerCallBack",
+          "decl": "void            API_DMA_TxA_IRQHandlerCallBack(uint8_t num);",
+          "has_body": false
+        },
+        {
+          "name": "API_ADC_PENDV_IRQHandler",
+          "decl": "void            API_ADC_PENDV_IRQHandler(void);",
+          "has_body": false
+        },
+        {
+          "name": "API_FMAC_AppAdcOverCallBack",
+          "decl": "void            API_FMAC_AppAdcOverCallBack(API_FMAC_MEMDEF* FmacMem);",
+          "has_body": false
+        },
+        {
+          "name": "API_DMA_M2M_OverCallback",
+          "decl": "void            API_DMA_M2M_OverCallback(void);",
+          "has_body": false
+        },
+        {
+          "name": "API_ADC_DMA_RecoverFun",
+          "decl": "static void     API_ADC_DMA_RecoverFun(ADC_SELECT_ENUM ch);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_FmacSetTxa",
+          "decl": "static void     APP_ADC_FmacSetTxa(uint16_t size);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_MesageBuff",
+          "decl": "static uint8_t  APP_ADC_MesageBuff(void);",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaMessageOut",
+          "decl": "static void     APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input);",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "AppAdc_getCaculatorValue",
+          "decl": "void\t\tAppAdc_getCaculatorValue(MODULE_INPUT(AppAdc) *in)",
+          "has_body": false
+        },
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(AppAdc) *in, MODULE_OUTPUT(AppAdc) *out, AppAdc_PipeFlags_t fl",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaAvgSum",
+          "decl": "void\tAPP_ADC_TxaAvgSum(uint8_t ch)\t//每20ms统计一次功率值",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaAvgSum",
+          "decl": "static void APP_ADC_TxaAvgSum(uint8_t ch)",
+          "has_body": false
+        },
+        {
+          "name": "AppAdc_setPowerOutValue",
+          "decl": "void\t\tAppAdc_setPowerOutValue(void)",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_AVG_Fun",
+          "decl": "static void APP_ADC_AVG_Fun(void)",
+          "has_body": false
+        },
+        {
+          "name": "getIcVc20msOccur",
+          "decl": "static uint8_t getIcVc20msOccur(void)",
+          "has_body": false
+        },
+        {
+          "name": "clrIcVc20msOccur",
+          "decl": "static void clrIcVc20msOccur(void)",
+          "has_body": false
+        },
+        {
+          "name": "getADCaverage20ms",
+          "decl": "static uint32_t getADCaverage20ms(uint8_t ch)",
+          "has_body": false
+        },
+        {
+          "name": "AdcValueFun",
+          "decl": "uint8_t AdcValueFun(void)",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_TxaBuffChange",
+          "decl": "static void APP_ADC_TxaBuffChange(uint8_t ch, TxaHrtimPointDef* point)",
+          "has_body": false
+        },
+        {
+          "name": "APP_ADC_GetTxaPeiodPoint",
+          "decl": "static void APP_ADC_GetTxaPeiodPoint(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct __attribute__((aligned(1))) {",
+        "typedef struct __attribute__((aligned(1))) {",
+        "typedef struct {",
+        "typedef struct {",
+        "typedef struct __attribute__((aligned(32))) {",
+        "typedef struct __attribute__((aligned(32))) {",
+        "typedef struct __attribute__((aligned(1))) {",
+        "typedef struct __attribute__((aligned(32))) {",
+        "typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "PotChWork",
+          "value": "PotCh1"
+        },
+        {
+          "name": "fmacLeveNum",
+          "value": "FmacLeve"
+        },
+        {
+          "name": "FMAC_OFFSET",
+          "value": "(FmacLeve/2+2)"
+        },
+        {
+          "name": "ADC_POTMAX",
+          "value": "4"
+        },
+        {
+          "name": "AdcInputValue",
+          "value": "AdcFunRam.inputValue"
+        },
+        {
+          "name": "AdcAverage20ms",
+          "value": "AdcFunRam.adcAverage"
+        },
+        {
+          "name": "Adc20msCount",
+          "value": "AdcFunRam.adc20msCount"
+        },
+        {
+          "name": "IcVc20msOccur",
+          "value": "AdcFunRam.flag20ms"
+        },
+        {
+          "name": "AdcSelect",
+          "value": "AdcFunRam.adcSelect"
+        }
+      ],
+      "total_lines": 1691
+    },
+    {
+      "rel_path": "../../BaseClass/src/calculator.c",
+      "group": "baseClass",
+      "brief": "",
+      "includes": [
+        "#include \"../../include_io/calculator_io.h\"",
+        "#include <string.h>",
+        "#include <math.h>"
+      ],
+      "functions": [
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_Pi",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "FindZeroCrossing",
+          "decl": "static uint16_t FindZeroCrossing(const uint16_t* current, uint16_t start, uint16_t end);",
+          "has_body": false
+        },
+        {
+          "name": "ProcessAllHead",
+          "decl": "static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out);",
+          "has_body": false
+        },
+        {
+          "name": "CalculatePower",
+          "decl": "static void CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uint16_t* voltage_data,",
+          "has_body": false
+        },
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(Calculator) *in, MODULE_OUTPUT(Calculator) *out, Calculator_Pi",
+          "has_body": false
+        },
+        {
+          "name": "ProcessAllHead",
+          "decl": "static void ProcessAllHead(MODULE_INPUT(Calculator)* head_in, MODULE_OUTPUT(Calculator)* head_out)",
+          "has_body": false
+        },
+        {
+          "name": "CalculatePower",
+          "decl": "static void  CalculatePower(uint16_t* resonant_current,uint16_t* hrtim_values,uint16_t* voltage_data",
+          "has_body": false
+        },
+        {
+          "name": "CalculatePhaseAngle",
+          "decl": "static void CalculatePhaseAngle(Calculator_OutHead_t* head_out, uint16_t* hrtim_values,",
+          "has_body": false
+        },
+        {
+          "name": "FillHRTIMStatus",
+          "decl": "static void FillHRTIMStatus(Calculator_OutHead_t* head_out, Calculator_InputParams_t* input)",
+          "has_body": false
+        },
+        {
+          "name": "FindZeroCrossing",
+          "decl": "static uint16_t FindZeroCrossing(const uint16_t* current, uint16_t start, uint16_t end)",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {",
+        "typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "CALC_POTMAX",
+          "value": "4"
+        },
+        {
+          "name": "V_SCALE",
+          "value": "0.10606f    // V/count  (Vref/4096 / 分压比)"
+        },
+        {
+          "name": "I_SCALE",
+          "value": "0.02523f    // A/count  (Vref/4096 / I分压比)"
+        },
+        {
+          "name": "VDC_SCALE",
+          "value": "0.10606f    // V/count  (同 V 分压网络)"
+        },
+        {
+          "name": "HRTIM_CLK_HZ",
+          "value": "144000000   // HRTIM 时钟 144MHz"
+        },
+        {
+          "name": "FRE_PER_ADC",
+          "value": "384         // 频率每ADC"
+        },
+        {
+          "name": "PHASE_DEG_BASE",
+          "value": "1800        // 180.0 度定标"
+        }
+      ],
+      "total_lines": 469
+    },
+    {
+      "rel_path": "../../BaseClass/src/elec_params.c",
+      "group": "baseClass",
+      "brief": "",
+      "includes": [
+        "#include \"../../include_io/elec_params_io.h\"",
+        "#include <math.h>",
+        "#include <string.h>",
+        "#include\t\"API_gpio.h\""
+      ],
+      "functions": [
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_Pi",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "sort_f",
+          "decl": "static void sort_f(float* buf, uint8_t n) {",
+          "has_body": true
+        },
+        {
+          "name": "median_f",
+          "decl": "static float median_f(float* buf, uint8_t n) {",
+          "has_body": true
+        },
+        {
+          "name": "ElecParams_Calc",
+          "decl": "static uint8_t ElecParams_Calc(MODULE_OUTPUT_PARAMS(ElecParams, EKF_LKF) *result,",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void) {",
+          "has_body": true
+        },
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(ElecParams) *in, MODULE_OUTPUT(ElecParams) *out, ElecParams_Pi",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "//typedef struct {",
+        "typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "M_PI",
+          "value": "3.14159265358979323846f"
+        },
+        {
+          "name": "HRTIM_CLK_HZ",
+          "value": "768000000.0f"
+        },
+        {
+          "name": "PERIO_CNT",
+          "value": "20"
+        },
+        {
+          "name": "ELEC_POTMAX",
+          "value": "4"
+        },
+        {
+          "name": "IH_C_FARAD",
+          "value": "0.9e-6f     // 谐振电容 0.9 μF"
+        },
+        {
+          "name": "IH_I_SCALE",
+          "value": "0.02523f    // I_adc → A"
+        },
+        {
+          "name": "IH_VDC_SCALE",
+          "value": "0.10606f    // Vdc_adc → V"
+        },
+        {
+          "name": "IH_PHI_SCALE",
+          "value": "0.1f        // phi 单位 0.1° → °"
+        },
+        {
+          "name": "IH_I_PEAK_MIN_RATIO",
+          "value": "0.3f        // I_peak < 中位数×0.3 丢弃"
+        },
+        {
+          "name": "IH_L_MIN_uH",
+          "value": "10.0f        // 有效 L 下限"
+        },
+        {
+          "name": "IH_FRES_MIN_kHz",
+          "value": "5.0f         // 有效 f_"
+        },
+        {
+          "name": "IH_HV_WIN_CNT_MIN",
+          "value": "4\t\t\t\t\t\t//相位角取值范围（20个点分成2个10ms 里面的高点， 4和5）"
+        }
+      ],
+      "total_lines": 487
+    },
+    {
+      "rel_path": "../../BaseClass/src/ekf_lkf.c",
+      "group": "baseClass",
+      "brief": "",
+      "includes": [
+        "#include \"../../include_io/ekf_lkf_io.h\"",
+        "#include <math.h>",
+        "#include <string.h>"
+      ],
+      "functions": [
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out, EKF_LKF_PipeFlags_t",
+          "has_body": false
+        },
+        {
+          "name": "ProcessInput",
+          "decl": "static void ProcessInput(void)",
+          "has_body": false
+        },
+        {
+          "name": "obs_from_elec",
+          "decl": "static void obs_from_elec(const MODULE_INPUT_PARAMS(ElecParams, EKF_LKF) *p, float *z)",
+          "has_body": false
+        },
+        {
+          "name": "ekf_init",
+          "decl": "static void ekf_init(EKF_InternalState *s, const MODULE_INPUT_PARAMS(ElecParams, EKF_LKF) *p, const ",
+          "has_body": false
+        },
+        {
+          "name": "ekf_predict",
+          "decl": "static void ekf_predict(EKF_InternalState *s)",
+          "has_body": false
+        },
+        {
+          "name": "ekf_update",
+          "decl": "static void ekf_update(EKF_InternalState *s, const float *z,",
+          "has_body": false
+        },
+        {
+          "name": "Init",
+          "decl": "static void Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "ekf_outPut",
+          "decl": "void\t\t\t\tekf_outPut(MODULE_INPUT(EKF_LKF) *in,MODULE_OUTPUT(EKF_LKF) *out)",
+          "has_body": false
+        },
+        {
+          "name": "user_Process",
+          "decl": "static void user_Process(MODULE_INPUT(EKF_LKF) *in, MODULE_OUTPUT(EKF_LKF) *out, EKF_LKF_PipeFlags_t",
+          "has_body": false
+        }
+      ],
+      "structs": [
+        "typedef struct {"
+      ],
+      "defines": [
+        {
+          "name": "EKF_POTMAX",
+          "value": "4"
+        },
+        {
+          "name": "N_STATES",
+          "value": "3   /* [R, L, f_res] */"
+        },
+        {
+          "name": "N_MEAS",
+          "value": "5   /* [I_peak, Vdc, phi, f_sw, P_W] */"
+        },
+        {
+          "name": "FLOAT_TO_INT(val)",
+          "value": "((int32_t)((val) * 100.0f + 0.5f))"
+        }
+      ],
+      "total_lines": 368
+    },
+    {
+      "rel_path": "../../core/data_switcher.c",
+      "group": "core",
+      "brief": "Data Switcher — PULL 路由调度器 (v2.3 LINK+PARAMS)",
+      "includes": [
+        "#include \"std_module.h\"",
+        "#include \"data_switcher.h\"",
+        "#include \"../include_io/app_adc_io.h\"",
+        "#include \"../include_io/app_power_io.h\"",
+        "#include \"../include_io/calculator_io.h\"",
+        "#include \"../include_io/elec_params_io.h\"",
+        "#include \"../include_io/ekf_lkf_io.h\""
+      ],
+      "functions": [
+        {
+          "name": "Switcher_Init",
+          "decl": "void Switcher_Init(void)",
+          "has_body": false
+        },
+        {
+          "name": "Switcher_Slot_AppAdc",
+          "decl": "void Switcher_Slot_AppAdc(void) { s_slot[SLOT_AppAdc].pDoWork(); }",
+          "has_body": true
+        },
+        {
+          "name": "Switcher_Slot_AppPower",
+          "decl": "void Switcher_Slot_AppPower(void) { s_slot[SLOT_AppPower].pDoWork(); }",
+          "has_body": true
+        },
+        {
+          "name": "Switcher_Slot_Calculator",
+          "decl": "void Switcher_Slot_Calculator(void) { s_slot[SLOT_Calculator].pDoWork(); }",
+          "has_body": true
+        },
+        {
+          "name": "Switcher_Slot_ElecParams",
+          "decl": "void Switcher_Slot_ElecParams(void) { s_slot[SLOT_ElecParams].pDoWork(); }",
+          "has_body": true
+        },
+        {
+          "name": "Switcher_Slot_EKF_LKF",
+          "decl": "void Switcher_Slot_EKF_LKF(void) { s_slot[SLOT_EKF_LKF].pDoWork(); }",
+          "has_body": true
+        },
+        {
+          "name": "Switcher_Run_All",
+          "decl": "void Switcher_Run_All(void)",
+          "has_body": false
+        },
+        {
+          "name": "Switcher_Run_Slot1",
+          "decl": "void Switcher_Run_Slot1(void)",
+          "has_body": false
+        },
+        {
+          "name": "Switcher_Run_TK",
+          "decl": "void Switcher_Run_TK(void)",
+          "has_body": false
+        }
+      ],
+      "structs": [],
+      "defines": [],
+      "total_lines": 145
+    }
+  ]
+}

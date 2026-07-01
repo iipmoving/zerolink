@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # auto-sync.sh — 自动同步守护脚本
-# 同步 Y:\AI\ZEROLINK → D:\WORK\AIGIT\ZEROLINK + 群晖 + Gitee
+# 同步 Y:\AI\ZEROLINK → D:\WORK\AIGIT\ZEROLINK + GitHub + Gitee
 # =============================================================================
 # 用法:
 #   ./tools/auto-sync.sh                # 启动守护进程（前台）
@@ -23,7 +23,7 @@ LOG_FILE="/d/WORK/AIGIT/auto-sync.log"
 PID_FILE="/d/WORK/AIGIT/auto-sync.pid"
 TEST_SYNC_FILE="$SOURCE/test_sync.txt"
 
-NAS_REMOTE="origin"      # git remote 名称（指向群晖，当前仓库 origin 已指向 Synology）
+GITHUB_REMOTE="origin"   # git remote 名称（指向 GitHub）
 GITEE_REMOTE="gitee"     # git remote 名称（指向 Gitee）
 
 # ---------- 函数 ----------
@@ -103,16 +103,16 @@ sync_local_backup() {
 sync_remote() {
   cd "$SOURCE"
 
-  # --- 群晖 ---
-  log "[SYNOLOGY] 开始同步 Y:\\AI -> 群晖"
-  if git remote get-url "$NAS_REMOTE" &>/dev/null; then
-    if git push "$NAS_REMOTE" main 2>&1; then
-      log "[SYNOLOGY] 群晖已更新"
+  # --- GitHub ---
+  log "[GITHUB] 开始同步 Y:\\AI -> GitHub"
+  if git remote get-url "$GITHUB_REMOTE" &>/dev/null; then
+    if git push "$GITHUB_REMOTE" main 2>&1; then
+      log "[GITHUB] GitHub 已更新"
     else
-      log "[SYNOLOGY] 群晖推送失败"
+      log "[GITHUB] GitHub 推送失败"
     fi
   else
-    log "[SYNOLOGY] remote '$NAS_REMOTE' 未配置"
+    log "[GITHUB] remote '$GITHUB_REMOTE' 未配置"
   fi
 
   # --- Gitee ---
@@ -173,7 +173,7 @@ echo "$(sh -c 'echo $PPID')" > "$PID_FILE"
 
 log "=============================================="
 log "Y:\\AI\\ZEROLINK  ->  D:\\WORK\\AIGIT\\ZEROLINK  每 $LOCAL_INTERVAL 秒"
-log "Y:\\AI\\ZEROLINK  ->  群晖                   每 $REMOTE_INTERVAL 秒"
+log "Y:\\AI\\ZEROLINK  ->  GitHub                  每 $REMOTE_INTERVAL 秒"
 log "Y:\\AI\\ZEROLINK  ->  Gitee                  每 $REMOTE_INTERVAL 秒"
 log "时间间隔可编辑 $(basename "$0") 修改 LOCAL_INTERVAL / REMOTE_INTERVAL"
 log "[OK] 守护进程 PID=$$"
