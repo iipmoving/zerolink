@@ -1,0 +1,374 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "../include_io/proto_modbus_io.h"
+
+static void Init(void);
+MODULE_SKELETON(ProtoModbus);
+
+/* 管道就绪标志: 每 BIT 代表一个管道的 ST_NEW 状态 */
+typedef union {
+    uint8_t all;
+    struct {
+        uint8_t appcommmgr   : 1;  /* AppCommMgr 数据就绪 */
+    } bits;
+} ProtoModbus_PipeFlags_t;
+
+/* ---- 数据实体（模块私有）---- */
+static MODULE_INPUT(ProtoModbus)*   s_inPara;    // 输入参数实体在ADC， 这里只调用不修改
+static MODULE_OUTPUT(ProtoModbus)  s_outPara;   // 输出参数缓冲区
+
+/* ---- 消费者 last_seq — seq 有效性比对 (空闲SLOT幂等) ---- */
+static uint8_t s_last_seq_AppCommMgr = 0xFF;  /* AppCommMgr→ProtoModbus */
+
+/* ---- 内部 OUTPUT_LINK + PARAMS 实例 ---- */
+static MODULE_OUTPUT_PARAMS(ProtoModbus, AppCommMgr)  s_ProtoModbusToAppCommMgrParams;
+static MODULE_OUTPUT_LINK(ProtoModbus, AppCommMgr)  s_ProtoModbusToAppCommMgrLink;
+
+
+/* 用户业务入口: flags.bits 指示哪些管道有新数据 (seq 比对通过)
+ * 输出段请对产出数据的 LINK 执行 seq++: out->AppCommMgr_params->seq++; */
+static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags)
+{
+    (void)in; (void)out; (void)flags;
+}
+
+static void ProcessInput(void)
+{
+    MODULE_INPUT(ProtoModbus) *in  = (MODULE_INPUT(ProtoModbus)*)g_input.para;
+    MODULE_OUTPUT(ProtoModbus) *out = (MODULE_OUTPUT(ProtoModbus)*)g_output.para;
+
+    /* === 输入段: seq 有效性比对 === */
+    ProtoModbus_PipeFlags_t flags = {0};
+    {
+        uint8_t cur_seq = in->AppCommMgr_params->seq;
+        if (cur_seq != s_last_seq_AppCommMgr) {
+            flags.bits.appcommmgr = 1;
+            s_last_seq_AppCommMgr = cur_seq;
+        }
+    }
+
+    /* === 计算段: 用户业务 === */
+    user_Process(in, out, flags);
+}
+
+MODULE_EXPORT(ProtoModbus);
+
+// ===== [END AI GENERATED] =====
+#include <stddef.h>
+
+static void Init(void)
+{
+    memset(&s_outPara, 0, sizeof(s_outPara));
+    s_ProtoModbusToAppCommMgrLink.params = &s_ProtoModbusToAppCommMgrParams;
+    s_outPara.AppCommMgr_params          = &s_ProtoModbusToAppCommMgrLink;
+    g_input.para  = &s_inPara;
+    g_output.para = &s_outPara;
+}
+
+/* ========== MODBUS 功能码 & 错误码 ========== */
+#define MODBUS_FUNC_READ         0x03u
+#define MODBUS_FUNC_WRITE_SINGLE 0x06u
+#define MODBUS_FUNC_WRITE_MULTI  0x10u
+#define MODBUS_EXC_FLAG          0x80u
+
+#define PROTO_MODBUS_OK       ((int8_t)0)
+#define PROTO_MODBUS_ERR_CRC  ((int8_t)-1)
+#define PROTO_MODBUS_ERR_EXC  ((int8_t)-2)
+#define PROTO_MODBUS_ERR_LEN  ((int8_t)-3)
+
+/* ========== CRC-16 高位字节查表 ========== */
+static const uint8_t crc_hi_table[256] = {
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+    0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+    0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
+    0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
+    0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
+    0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
+    0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
+    0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+    0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+    0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+    0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40,
+    0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1,
+    0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40
+};
+
+/* ========== CRC-16 低位字节查表 ========== */
+static const uint8_t crc_lo_table[256] = {
+    0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06,
+    0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04, 0xCC, 0x0C, 0x0D, 0xCD,
+    0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09,
+    0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A,
+    0x1E, 0xDE, 0xDF, 0x1F, 0xDD, 0x1D, 0x1C, 0xDC, 0x14, 0xD4,
+    0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3,
+    0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3,
+    0xF2, 0x32, 0x36, 0xF6, 0xF7, 0x37, 0xF5, 0x35, 0x34, 0xF4,
+    0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A,
+    0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29,
+    0xEB, 0x2B, 0x2A, 0xEA, 0xEE, 0x2E, 0x2F, 0xEF, 0x2D, 0xED,
+    0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26,
+    0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60,
+    0x61, 0xA1, 0x63, 0xA3, 0xA2, 0x62, 0x66, 0xA6, 0xA7, 0x67,
+    0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F,
+    0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68,
+    0x78, 0xB8, 0xB9, 0x79, 0xBB, 0x7B, 0x7A, 0xBA, 0xBE, 0x7E,
+    0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5,
+    0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71,
+    0x70, 0xB0, 0x50, 0x90, 0x91, 0x51, 0x93, 0x53, 0x52, 0x92,
+    0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C,
+    0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B,
+    0x99, 0x59, 0x58, 0x98, 0x88, 0x48, 0x49, 0x89, 0x4B, 0x8B,
+    0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
+    0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42,
+    0x43, 0x83, 0x41, 0x81, 0x80, 0x40
+};
+
+/* ========== CRC-16 计算 (MODBUS) ========== */
+static uint16_t Proto_Modbus_CRC16(const uint8_t *data, uint16_t len)
+{
+    uint8_t  crc_hi = 0xFFu;
+    uint8_t  crc_lo = 0xFFu;
+    uint16_t index;
+
+    while (len > 0u) {
+        len--;
+        index = (uint16_t)(crc_hi ^ (*data++));
+        crc_hi = crc_lo ^ crc_hi_table[index];
+        crc_lo = crc_lo_table[index];
+    }
+    return (uint16_t)(((uint16_t)crc_hi << 8u) | (uint16_t)crc_lo);
+}
+
+/* ========== 内部辅助: 填入CRC并返回帧长 ========== */
+static uint16_t append_crc(uint8_t *buf, uint16_t pos)
+{
+    uint16_t crc;
+    uint8_t  crc_lo, crc_hi;
+
+    crc    = Proto_Modbus_CRC16(buf, pos);
+    crc_lo = (uint8_t)(crc & 0xFFu);
+    crc_hi = (uint8_t)((crc >> 8u) & 0xFFu);
+    buf[pos]     = crc_lo;
+    buf[pos + 1u] = crc_hi;
+    return pos + 2u;
+}
+
+/* ========== 构建 0x03 读寄存器帧 ========== */
+static uint16_t Proto_Modbus_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
+                                uint16_t reg_count, uint8_t *tx_buf)
+{
+    tx_buf[0u] = slave_addr;
+    tx_buf[1u] = MODBUS_FUNC_READ;
+    tx_buf[2u] = (uint8_t)((reg_addr >> 8u) & 0xFFu);
+    tx_buf[3u] = (uint8_t)(reg_addr & 0xFFu);
+    tx_buf[4u] = (uint8_t)((reg_count >> 8u) & 0xFFu);
+    tx_buf[5u] = (uint8_t)(reg_count & 0xFFu);
+    return append_crc(tx_buf, 6u);
+}
+
+/* ========== 构建 0x06 写单个寄存器帧 ========== */
+static uint16_t Proto_Modbus_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
+                                       uint16_t data, uint8_t *tx_buf)
+{
+    tx_buf[0u] = slave_addr;
+    tx_buf[1u] = MODBUS_FUNC_WRITE_SINGLE;
+    tx_buf[2u] = (uint8_t)((reg_addr >> 8u) & 0xFFu);
+    tx_buf[3u] = (uint8_t)(reg_addr & 0xFFu);
+    tx_buf[4u] = (uint8_t)((data >> 8u) & 0xFFu);
+    tx_buf[5u] = (uint8_t)(data & 0xFFu);
+    return append_crc(tx_buf, 6u);
+}
+
+/* ========== 构建 0x10 写多个寄存器帧 ========== */
+static uint16_t Proto_Modbus_BuildWriteMulti(uint8_t slave_addr, uint16_t reg_addr,
+                                      uint16_t reg_count, const uint8_t *data,
+                                      uint8_t *tx_buf)
+{
+    uint16_t i;
+    uint16_t byte_count;
+    uint16_t pos;
+
+    byte_count = reg_count * 2u;
+    tx_buf[0u] = slave_addr;
+    tx_buf[1u] = MODBUS_FUNC_WRITE_MULTI;
+    tx_buf[2u] = (uint8_t)((reg_addr >> 8u) & 0xFFu);
+    tx_buf[3u] = (uint8_t)(reg_addr & 0xFFu);
+    tx_buf[4u] = (uint8_t)((reg_count >> 8u) & 0xFFu);
+    tx_buf[5u] = (uint8_t)(reg_count & 0xFFu);
+    tx_buf[6u] = (uint8_t)(byte_count & 0xFFu);
+
+    pos = 7u;
+    for (i = 0u; i < byte_count; i++) {
+        tx_buf[pos + i] = data[i];
+    }
+    return append_crc(tx_buf, pos + byte_count);
+}
+
+/* ========== 解析 MODBUS 响应帧 ========== */
+static int8_t Proto_Modbus_Parse(const uint8_t *rx_buf, uint16_t rx_len,
+                          uint8_t *out_slave, uint8_t *out_func,
+                          uint16_t *out_data, uint16_t *out_count)
+{
+    uint16_t calc_crc;
+    uint16_t rx_crc;
+    uint16_t i;
+    uint8_t  byte_count;
+    uint16_t data_count;
+
+    /* 最小帧: slave+func+CRC = 4字节 (异常帧) */
+    if (rx_len < 4u) {
+        return PROTO_MODBUS_ERR_LEN;
+    }
+
+    /* CRC 校验 */
+    calc_crc = Proto_Modbus_CRC16(rx_buf, rx_len - 2u);
+    rx_crc   = (uint16_t)rx_buf[rx_len - 2u]
+             | ((uint16_t)rx_buf[rx_len - 1u] << 8u);
+    if (calc_crc != rx_crc) {
+        return PROTO_MODBUS_ERR_CRC;
+    }
+
+    *out_slave = rx_buf[0u];
+    *out_func  = rx_buf[1u];
+    *out_count = 0u;
+
+    /* 异常响应: func bit7=1 */
+    if ((*out_func & MODBUS_EXC_FLAG) != 0u) {
+        return PROTO_MODBUS_ERR_EXC;
+    }
+
+    /* 根据功能码解析 */
+    switch (*out_func) {
+    case MODBUS_FUNC_READ:
+        /* [slave][0x03][byte_count][data_hi][data_lo]...[CRC] */
+        if (rx_len < 5u) {
+            return PROTO_MODBUS_ERR_LEN;
+        }
+        byte_count = rx_buf[2u];
+        if (rx_len != (uint16_t)(3u + byte_count + 2u)) {
+            return PROTO_MODBUS_ERR_LEN;
+        }
+        data_count = byte_count / 2u;
+        for (i = 0u; i < data_count; i++) {
+            out_data[i] = (uint16_t)(((uint16_t)rx_buf[3u + i * 2u] << 8u)
+                         | (uint16_t)rx_buf[4u + i * 2u]);
+        }
+        *out_count = data_count;
+        break;
+
+    case MODBUS_FUNC_WRITE_SINGLE:
+        /* [slave][0x06][reg_hi][reg_lo][data_hi][data_lo][CRC] */
+        if (rx_len < 8u) {
+            return PROTO_MODBUS_ERR_LEN;
+        }
+        out_data[0u] = (uint16_t)(((uint16_t)rx_buf[2u] << 8u)
+                       | (uint16_t)rx_buf[3u]);   /* 回显: 寄存器地址 */
+        out_data[1u] = (uint16_t)(((uint16_t)rx_buf[4u] << 8u)
+                       | (uint16_t)rx_buf[5u]);   /* 回显: 写入数据   */
+        *out_count = 2u;
+        break;
+
+    case MODBUS_FUNC_WRITE_MULTI:
+        /* [slave][0x10][reg_hi][reg_lo][count_hi][count_lo][CRC] */
+        if (rx_len < 8u) {
+            return PROTO_MODBUS_ERR_LEN;
+        }
+        out_data[0u] = (uint16_t)(((uint16_t)rx_buf[2u] << 8u)
+                       | (uint16_t)rx_buf[3u]);   /* 回显: 起始地址   */
+        out_data[1u] = (uint16_t)(((uint16_t)rx_buf[4u] << 8u)
+                       | (uint16_t)rx_buf[5u]);   /* 回显: 寄存器数   */
+        *out_count = 2u;
+        break;
+
+    default:
+        /* 未知功能码，不处理 */
+        break;
+    }
+
+    return PROTO_MODBUS_OK;
+}
+
+/* ========== 协议抽象接口: 强符号, 供 app_comm_mgr __weak 链接 ========== */
+uint16_t Proto_BuildRead(uint8_t slave_addr, uint16_t reg_addr,
+                         uint16_t reg_count, uint8_t *tx_buf)
+{
+    return Proto_Modbus_BuildRead(slave_addr, reg_addr, reg_count, tx_buf);
+}
+
+int8_t Proto_Parse(const uint8_t *rx_buf, uint16_t rx_len,
+                   uint8_t *out_slave, uint8_t *out_func,
+                   uint16_t *out_data, uint16_t *out_count)
+{
+    return Proto_Modbus_Parse(rx_buf, rx_len,
+                              out_slave, out_func,
+                              out_data, out_count);
+}
+
+uint16_t Proto_BuildWriteSingle(uint8_t slave_addr, uint16_t reg_addr,
+                                uint16_t data, uint8_t *tx_buf)
+{
+    return Proto_Modbus_BuildWriteSingle(slave_addr, reg_addr, data, tx_buf);
+}
+
+/* ========== 用户业务: 管道驱动的 MODBUS 编解码 ========== */
+#if 0  /* DEDUP: user_Process */
+#if 0  /* DEDUP: user_Process */
+static void user_Process(MODULE_INPUT(ProtoModbus) *in, MODULE_OUTPUT(ProtoModbus) *out, ProtoModbus_PipeFlags_t flags)
+{
+    MODULE_INPUT_LINK(AppCommMgr, ProtoModbus) *req;
+    MODULE_OUTPUT_PARAMS(ProtoModbus, AppCommMgr) *rsp;
+
+    if (!flags.bits.appcommmgr) return;
+    if (!in || !in->AppCommMgr_params) return;
+
+    req = in->AppCommMgr_params;
+    if (!req->params) return;
+
+    rsp = out->AppCommMgr_params->params;
+    if (!rsp) return;
+
+    switch (req->params->cmd) {
+    case 1u:
+        rsp->tx_len = Proto_Modbus_BuildRead(
+            req->params->slave, req->params->read_reg,
+            req->params->read_count, rsp->tx_data);
+        rsp->result  = 0;
+        rsp->slave   = req->params->slave;
+        rsp->func    = MODBUS_FUNC_READ;
+        break;
+    case 2u:
+        rsp->tx_len = Proto_Modbus_BuildWriteSingle(
+            req->params->slave, req->params->write_reg,
+            req->params->write_val, rsp->tx_data);
+        rsp->result  = 0;
+        rsp->slave   = req->params->slave;
+        rsp->func    = MODBUS_FUNC_WRITE_SINGLE;
+        break;
+    case 3u:
+        rsp->result = Proto_Modbus_Parse(
+            req->params->rx_data, req->params->rx_len,
+            &rsp->slave, &rsp->func,
+            rsp->data, &rsp->data_count);
+        break;
+    default:
+        break;
+    }
+
+    out->AppCommMgr_params->status |= ST_NEW;
+    out->AppCommMgr_params->seq++;
+    g_output.info.status |= ST_OUT;
+}
+#endif  /* DEDUP: user_Process */
+#endif  /* DEDUP: user_Process */

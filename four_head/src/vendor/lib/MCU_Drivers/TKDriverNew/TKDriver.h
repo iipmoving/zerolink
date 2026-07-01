@@ -1,0 +1,267 @@
+﻿#ifndef _SCTK_BASEKEYDEAL_H_
+#define _SCTK_BASEKEYDEAL_H_
+
+#ifndef TK_USE_BTM
+#define TK_USE_BTM
+#endif
+
+//<<<Use SPTML>>>
+//-------------------------滑轮滑条设置---------------------------------------
+//用于作为按键的TK通道，每一位代表一个通道
+#define T1_key 1 //T1_key 
+#define T2_key 0 //T2_key 
+#define Slider_key 0 //Slider_key 
+#define TK_LowPowerMode 0 //TK_LowPowerMode 
+#define Proximity_Sensing 0 //Proximity_Sensing 
+
+#define USING_TKSlideModule_Number_Set 1  //滑轮滑条组数
+
+#define TypeFlag0 wheel //TypeFlag0 
+#define UsingTKChannelNumber0 0 //UsingTKChannelNumber0 
+#define SideLevel0 0 //SideLevel0 
+#define TKChannel0 0 //TKChannel0 
+#define LIBData0 0 //LIBData0 
+
+#define TypeFlag1 wheel //TypeFlag1 
+#define UsingTKChannelNumber1 0 //UsingTKChannelNumber1 
+#define SideLevel1 0 //SideLevel1 
+#define TKChannel1 0 //TKChannel1 
+#define LIBData1 0 //LIBData1 
+
+#define TypeFlag2 wheel //TypeFlag2 
+#define UsingTKChannelNumber2 0 //UsingTKChannelNumber2 
+#define SideLevel2 0 //SideLevel2 
+#define TKChannel2 0 //TKChannel2 
+#define LIBData2 0 //LIBData2 
+
+#define TypeFlag3 wheel //TypeFlag3 
+#define UsingTKChannelNumber3 0 //UsingTKChannelNumber3 
+#define SideLevel3 0 //SideLevel3 
+#define TKChannel3 0 //TKChannel3 
+#define LIBData3 0 //LIBData3 
+
+//--------------------------低功耗设置--------------------------------------
+#define WakeUpKeyNum_Set 0//WakeUpKeyNum_Set 
+#define WakeUpKeyChannel_Set 0//WakeUpKeyChannel_Set 
+#define WakeUpKeyChannel2_Set 0//WakeUpKeyChannel2_Set 
+#define TK_SeepTimervSetting_Set BTM_TIMEBASE_500MS//TK_SeepTimervSetting_Set 
+#define TK_WakeUpConfirmTouchCnt_Set 15//TK_WakeUpConfirmTouchCnt_Set 
+
+//<<<end of SPTML>>>
+
+
+
+//宏定义部分
+
+#define		_BSENSORCYCLEDONE				TK_TouchKeyStatus|=0x80			//设置一周扫描完成标志
+#define 	_BSENSORCYCLECLR				TK_TouchKeyStatus&=0x7f			//清除一周扫描完成标志
+#define		_BSETSENSORCYCLEDONE			TK_TouchKeyStatus|=0x40		    //设置半周扫描完成标志
+#define		_BCLRSENSORCYCLECLR				TK_TouchKeyStatus&=0xbf		    //清除半周扫描完成标志
+#define		_BCHECKCYCLEDONE				(TK_TouchKeyStatus&0x80)		//判断是否为0/1
+
+typedef	enum
+{
+	Circle = 0,		//滑轮
+	Bar = 1,		//滑条
+	wheel = 0,
+    slider =1
+}TKSlideModuleType;
+
+typedef struct
+{
+	TKSlideModuleType	TypeFlag;				//(需修改)		滑动块类型,bar:为滑条，Circle:为滑轮
+	unsigned 	char  	TKChannel[16];	 		//(需修改)		按照滑动顺序，依次将使用到的滑条按键通道存入数组6->5->4->3滑动值逐渐变大
+	unsigned 	char 	UsingTKChannelNumber;	//(需修改)		当前滑动模块使用的TK通道数量
+	unsigned 	int 	SideLevel;	            //(需修改)		滑动输出的档位最大级数（从1算起）
+
+	
+	int 				SUBData;		        //(可修改)		DDiffer值<SUB_DATA该Differ值无效，会设置为0，屏蔽干扰（修改灵敏度）  该值建议默认 
+	int 				LIBData;		        //Differ值>LIB_DATA表示有键（修改灵敏度）该值建议设置为阈值的四分之一到三分之一
+	
+
+	unsigned 	char 	TKOrderChannel[16];		//(无需修改)		存放内部TK通道排序都的index
+	unsigned 	char 	MAXUpdateCount;			//(无需修改)		扫描多少轮无滑条按键即更新基线，默认10   可修改
+	unsigned 	char    LastOutValue;			//(无需修改)		记录上一次输出的值
+	unsigned 	int 	OutValue;				//(无需修改)		滑动输出值，通过该值获取输出结果
+	unsigned 	int  	UpdateBaseLineNumber;	//(无需修改)		基线更新计数
+	unsigned	int		CouplingValue;			//(无需修改)		耦合参数范围(100~200)，参数过小会出现出值缺失,例如滑动出值OutValue为1->2->3->5->6->7,参数过大会出现出值重叠,例如滑动出值OutValue为1->2->3->4->3->4->5->6->7
+	unsigned	int		DebugCouplingValue;		//(无需修改)		耦合参数，DeBug值,用于调试，调试时输出该值，滑动滑动模块取输出的最小值，根据最小值调节CouplingValue耦合参数
+	unsigned	int	    TriggerFlagCount;		//(无需修改)		滑动模块触发计数标志
+	
+}TKSlideModuleDeal;
+
+
+typedef struct
+{
+	unsigned short int	Rawdata;   //原始数据
+	unsigned short int	Baseline;  //基线
+	unsigned short int	FilterData;  //原始数据滤波缓存区
+	
+}TK_BasicDataUpdatePar_StructDef;
+
+typedef struct
+{
+	unsigned char	BaseLineAdjusttmp;   //IA缓存数组
+	unsigned char   RestAreaCnt;
+	unsigned char   TouchCnt;
+	unsigned char   NoTouchCnt;
+	unsigned char   LowFingerDataCnt;
+	unsigned char   FloatAreaCnt;
+	short int   DifferAccum;
+	
+}TK_ParameterSaveBuffer_StructDef;
+
+//*************************************************************************************
+//外部const变量声明部分
+extern const unsigned 	char	CFG_OVERLOW_MAX_COUNT;
+extern const unsigned 	char	CFG_RESET_BASELINE_CNT;	
+extern const unsigned 	char	CFG_CYCLE_CNT;
+
+extern const unsigned 	char     	TK_InitBaseLineUpRange ;
+extern const unsigned 	char     	TK_InitBaseLineLowRange;
+extern const unsigned 	char     	TK_CurrentBaseLineUpRange;
+extern const unsigned 	char     	TK_CurrentBaseLineLowRange;
+//*************************************************************************************
+//外部变量声明部分
+extern unsigned     char 	TK_TouchKeyStatus;  //按键扫描完成标志位
+extern unsigned long long 	KeyFlag,KeyMark;
+extern unsigned long long 	CombineKeyFlag,CombineKeyMark;
+extern unsigned    char 	IsInNosicValue;  			//确定一轮中数据是否都在NOSIC 之内
+extern unsigned    char		MultipleDealIndex; 		//多基线更新复位计数
+extern unsigned    char		FlowFingerRoundIndex; 
+extern unsigned  short int  FlowFingerRoundCnt; 		//考虑数据浮在NOSIC 与FINGER 之间
+extern unsigned    char		bNeedUpdate;
+     		
+extern unsigned     char	bMultiple;
+extern unsigned    	char	ConfirmTouchCnt;
+extern unsigned    	char 	MultipleDealTpye;
+extern unsigned    	char    SingleCurrentChannelMax;
+extern unsigned    	char    CombineCurrentChannelMax;
+extern char					SetNoiseThreshold;
+
+extern unsigned    	char 	BigNosicCount; 				//大数据干扰计数
+extern unsigned    	char 	StrongNosicCount; 		    //强干扰计数
+extern unsigned    	char 	MultipleKeyNosicCount; 		//多键干扰计数
+extern unsigned    	char 	WeakNosicCount; 				//弱干扰计数
+extern unsigned    	char	MultipleKeyInhibitionCount; 	//多键抑制计数
+extern unsigned    	char  	RemoveTopCount; 			    //消顶计数
+
+extern unsigned short int  			TK_ScanTime;
+extern volatile unsigned   char   	CurrentIndex;			//sensor当前通道 
+extern unsigned short int     		ScanTime;				//用于换算TKTM
+extern volatile unsigned   char  	TK_ShiftScanTime;
+//*************************************************************************************
+//外部公用函数声明部分
+extern void 				CLR_TK_WDT(void);
+extern void 				TKCLK_Init(void);
+extern void 				TK_TRIG(void);
+extern void 				TK_CLR_TKIF(void);
+extern unsigned short int 	TK_CNTGet(void);
+extern void 				TK_MOD_SET(unsigned char i);
+extern void 				TK_ENTKS_SET(unsigned char i);
+extern void 				TK_TKIS_SET(unsigned char i);
+extern void 				TK_TKIS_CombineSET(unsigned long long SET);
+extern void 				TK_VREF_SET(unsigned char i);
+extern void 				TK_CTIME_SET(unsigned char i);
+extern void 				TK_PRS_SET(unsigned char i);
+extern void 				TK_PRSC_SET(unsigned char i);
+extern void 				TK_ICHAC_SET(unsigned char i);
+extern void 				TK_ICHGC_SET(unsigned char i);
+extern void 				TK_ICHA_SET(unsigned char i);
+extern void 				TK_ICHG_SET(unsigned char i);
+extern void 				TK_TKTM_SET(unsigned int i);
+extern void 				TK_TKINT_SET(unsigned char i);
+
+extern unsigned short int 	TK_GetCurrFingerValue(unsigned char i);
+extern unsigned char 		TK_GetIsNeedUpdateBaseline(void);
+extern void 				TK_SetNeedUpdateBaseline(void);
+
+//extern void 				TK_MultipleDealT1(unsigned char CycleCnt);
+//extern void 				TK_MultipleDealT2(unsigned char CycleCnt);
+extern void 				TK_MultipleDeal(unsigned char CycleCnt,unsigned char TK_Scanflag);
+
+extern unsigned char  		TK_GetCfgMsg(unsigned char i,unsigned char j);
+extern unsigned char 		TK_GetBaseLineAdjustValue(unsigned char i);
+extern unsigned char 		TK_GetScanTimeValue(unsigned char i);
+extern void 				TK_TouchKeyCFGInit(void);
+extern unsigned char 		TK_GetInitAutoUpdateTime(void);
+
+extern unsigned char 		TK_GetCsFunction(void);
+extern unsigned char 		TK_IsDoubleKeyOrSlideKey(void);
+extern unsigned char 		TK_GetTKYzCnt(void);
+extern short int   			TK_GetTKYzThreshold(unsigned char i);
+
+extern unsigned short int   TK_GetBaselineUpdateThreshold(void);
+extern unsigned char 		TK_GetUpConfirmCnt(void);
+extern void 				TK_InitializeSensorFlag(void);
+extern void 				TK_InitializeBaselines(void);
+extern void 				TK_FilterIIRInit(void);
+
+extern void 				FilterDataDeal_T1(unsigned char i);
+extern void 				FilterDataDeal_T1(unsigned char i);
+extern void 				TK_FilterDataDeal(unsigned char  i);
+
+extern void 				TK_FilterCommCodeT1(void);
+extern void 				TK_FilterCommCodeT2(void);
+extern void 				TK_FilterCommCode(void);
+
+extern unsigned short int   TK_GetCombineCurrFingerValue(unsigned char i);
+extern unsigned char 		TK_GetCombineScanTimeValue(unsigned char i);
+extern unsigned char 		TK_GetCombineBaseLineAdjustValue(unsigned char i);
+extern unsigned char  		TK_GetCombineCfgMsg(unsigned char i,unsigned char j);
+extern short int 			TK_GetCombineTKYzThreshold(unsigned char i);
+
+//extern void 				TouchKeyT1_Service(void); 
+//extern void 				TouchKeyT2_Service(void); 
+extern void 				TouchKey_Service(unsigned char TK_Scanflag);
+extern void 				TouchKeyCombine_Service(unsigned char TK_Scanflag);
+
+extern void 				TK_FilterAvergeDeal(void);
+extern void 				TK_CombineFilterDataDeal(unsigned char i);
+extern void 				TK_FilterAvergeDeal_Normal(void);
+extern void 				TK_FilterAvergeDeal_Combine(void);
+
+extern void  				TK_SingleChannel_ICHAAdjust(unsigned char Channel,unsigned char TK_BaseLineLowRange,unsigned char TK_BaseLineUpRange);
+extern void  				TK_CombineChannel_ICHAAdjust(unsigned char Channel,unsigned char TK_BaseLineLowRange,unsigned char TK_BaseLineUpRange);
+extern void 				CLR_TOUCH(void);
+extern void 				SET_TOUCH(void);
+
+extern unsigned char CurrentChannel[];
+extern TK_ParameterSaveBuffer_StructDef SingleParameterBufferSet[] ;//TouchCnt-
+extern TK_BasicDataUpdatePar_StructDef SingleChannelsBaseLineUpdatePar[] ;//Rawdata-base-filter
+
+extern unsigned long long	CombineCurrentChannel[];//记录多少组并联通道组 	
+extern TK_ParameterSaveBuffer_StructDef CombineParameterBufferSet[] ;
+extern TK_BasicDataUpdatePar_StructDef CombineChannelsBaseLineUpdatePar[] ;
+
+extern TKSlideModuleDeal TKSlideModuleDealArray[];
+extern void TouchKey_BaseLineUpdata(unsigned char i);
+
+
+extern void FilterDataDeal_T1(unsigned char i);
+extern void FilterDataDeal_T2(unsigned char i);
+
+
+extern void KeyT1_Analysis(unsigned char i);
+extern void KeyT2_Analysis(void);
+extern void TK_CombineAnalysis(unsigned char i);
+extern void TKSlideModuleSensorRenovate(TKSlideModuleDeal *TKSlide);
+
+
+extern void TouchKey_IntoLowPowerMode(void);
+extern unsigned char GetLowPowerScanFlag(void);//低功耗处理函数
+extern void LowPower_Touchkey_Scan(void);
+extern void TouchKey_QuitLowPowerMode(void);
+
+extern void TK_DynamicDebug_Init(unsigned long int TK_UART_ClockFrequency);
+
+//*************************************************************************************
+//外部函数声明部分-供客户调用
+extern void 			TK_Init(void);
+extern void 			TK_Restart(void);
+extern unsigned long long 	TK_TouchKeyScan(void);
+
+
+
+#endif
+

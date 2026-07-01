@@ -1,0 +1,953 @@
+{
+  "schema_version": "2.3",
+  "project": {
+    "name": "four_head",
+    "paths": {
+      "io_dir": "include_io",
+      "core_dir": "core",
+      "app_dir": "app",
+      "base_class_dir": "base_class",
+      "proto_dir": "proto"
+    },
+    "std_module_path": "core/std_module.h",
+    "pack": 4,
+    "comment_guard": true,
+    "output_root": "D:\\OBSIDIAN\\MOVING IH\\ZEROLINK\\four_head\\src"
+  },
+  "modules": [
+    {
+      "id": "drv_key",
+      "name": "DrvKey",
+      "layer": "drv",
+      "source_file": "drv/drv_key.c",
+      "comment": "按键扫描与事件分发 — 输出按键事件到 Hmi/Cooking/SegAlign，纯生产者无输入",
+      "types": []
+    },
+    {
+      "id": "app_comm_mgr",
+      "name": "AppCommMgr",
+      "layer": "app",
+      "source_file": "app/app_comm_mgr.c",
+      "comment": "Modbus 通信轮询调度器 — 分发寄存器数据到 Power/Cooking/Protect",
+      "types": []
+    },
+    {
+      "id": "app_cooking",
+      "name": "AppCooking",
+      "layer": "app",
+      "source_file": "app/app_cooking.c",
+      "comment": "烹饪流程控制 — 从 Key/CommMgr 输入，输出烹饪状态到 Power",
+      "types": []
+    },
+    {
+      "id": "app_hmi",
+      "name": "AppHmi",
+      "layer": "app",
+      "source_file": "app/app_hmi.c",
+      "comment": "人机交互逻辑 — 从 Key/Power 输入，输出显示到 Display 和蜂鸣到 Buzzer",
+      "types": []
+    },
+    {
+      "id": "app_power",
+      "name": "AppPower",
+      "layer": "app",
+      "source_file": "app/app_power.c",
+      "comment": "功率控制 PID — 聚合 CommMgr/Protect/Cooking 输入，输出功率命令到 CommMgr 和状态到 Hmi",
+      "types": []
+    },
+    {
+      "id": "app_protect",
+      "name": "AppProtect",
+      "layer": "app",
+      "source_file": "app/app_protect.c",
+      "comment": "故障保护逻辑 — 从 CommMgr 获取寄存器，输出故障状态到 Power",
+      "types": []
+    },
+    {
+      "id": "app_seg_align",
+      "name": "AppSegAlign",
+      "layer": "app",
+      "source_file": "app/app_seg_align.c",
+      "comment": "段码对齐处理 — 从 Key 输入，输出段码控制到 DrvDisplay",
+      "types": []
+    },
+    {
+      "id": "drv_buzzer",
+      "name": "DrvBuzzer",
+      "layer": "drv",
+      "source_file": "drv/drv_buzzer.c",
+      "comment": "蜂鸣器驱动 — 从 Hmi 接收蜂鸣命令 (@OUTPUT_CALLBACK 即时路由)",
+      "types": []
+    },
+    {
+      "id": "drv_comm_mgr",
+      "name": "DrvCommMgr",
+      "layer": "drv",
+      "source_file": "drv/drv_comm_mgr.c",
+      "comment": "通信驱动管理 — 从 AppCommMgr 接收发送帧，驱动 UART 收发",
+      "types": []
+    },
+    {
+      "id": "drv_display",
+      "name": "DrvDisplay",
+      "layer": "drv",
+      "source_file": "drv/drv_display.c",
+      "comment": "显示驱动 — 从 Hmi 接收显示数据，驱动段码/LED",
+      "types": []
+    },
+    {
+      "id": "proto_modbus",
+      "name": "ProtoModbus",
+      "layer": "proto",
+      "source_file": "proto/proto_modbus.c",
+      "comment": "MODBUS RTU 协议编解码 — 从 AppCommMgr 接收请求，返回编码帧/解析结果 (2tick)",
+      "types": []
+    }
+  ],
+  "pipes": [
+    {
+      "id": "pipe_drv_key_app_hmi",
+      "from": "DrvKey",
+      "to": "AppHmi",
+      "callback_type": "pull",
+      "comment": "按键事件 → HMI 状态机",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t 枚举"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_PRESS/LONG/RELEASE/REPEAT/TAP"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引 (头键=0-3, 其他=0xFF)"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_drv_key_app_cooking",
+      "from": "DrvKey",
+      "to": "AppCooking",
+      "callback_type": "pull",
+      "comment": "按键事件 → Cooking 状态机",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t 枚举"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_drv_key_app_seg_align",
+      "from": "DrvKey",
+      "to": "AppSegAlign",
+      "callback_type": "pull",
+      "comment": "按键事件 → SegAlign 调校模式",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "key_code",
+          "type": "uint8_t",
+          "comment": "按键码 KeyCode_t"
+        },
+        {
+          "name": "key_state",
+          "type": "uint8_t",
+          "comment": "按键状态 KEY_STATE_*"
+        },
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "关联炉头索引"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_comm_mgr_app_power",
+      "from": "AppCommMgr",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Power",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_comm_mgr_app_cooking",
+      "from": "AppCommMgr",
+      "to": "AppCooking",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Cooking",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_comm_mgr_app_protect",
+      "from": "AppCommMgr",
+      "to": "AppProtect",
+      "callback_type": "pull",
+      "comment": "Modbus 寄存器数据 → Protect",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "online",
+          "type": "uint8_t",
+          "comment": "是否在线"
+        },
+        {
+          "name": "regs[22]",
+          "type": "uint16_t",
+          "comment": "寄存器值 0x1000-0x1015"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_cooking_app_power",
+      "from": "AppCooking",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "烹饪状态 → Power",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引"
+        },
+        {
+          "name": "cooking_state",
+          "type": "uint8_t",
+          "comment": "烹饪状态 COOKING_STATE_*"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        },
+        {
+          "name": "cooking_time",
+          "type": "uint32_t",
+          "comment": "烹饪时间 ms"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引"
+        },
+        {
+          "name": "cooking_state",
+          "type": "uint8_t",
+          "comment": "烹饪状态 COOKING_STATE_*"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        },
+        {
+          "name": "cooking_time",
+          "type": "uint32_t",
+          "comment": "烹饪时间 ms"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_hmi_drv_display",
+      "from": "AppHmi",
+      "to": "DrvDisplay",
+      "callback_type": "pull",
+      "comment": "显示数据 → DrvDisplay (段码/LED)",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "hot_head_idx",
+          "type": "int8_t",
+          "comment": "热点炉头索引 (-1=无)"
+        },
+        {
+          "name": "seg_chars[8]",
+          "type": "uint8_t",
+          "comment": "8位段码字符"
+        },
+        {
+          "name": "seg_blink[4]",
+          "type": "uint8_t",
+          "comment": "炉头闪烁控制"
+        },
+        {
+          "name": "seg_mode",
+          "type": "uint8_t",
+          "comment": "显示模式"
+        },
+        {
+          "name": "leds_power",
+          "type": "uint8_t",
+          "comment": "电源 LED"
+        },
+        {
+          "name": "leds_timer",
+          "type": "uint8_t",
+          "comment": "定时 LED"
+        },
+        {
+          "name": "leds_pause",
+          "type": "uint8_t",
+          "comment": "暂停 LED"
+        },
+        {
+          "name": "leds_child_lock",
+          "type": "uint8_t",
+          "comment": "童锁 LED"
+        },
+        {
+          "name": "leds_head_select[4]",
+          "type": "uint8_t",
+          "comment": "炉头选择 LED"
+        },
+        {
+          "name": "leds_power_level[10]",
+          "type": "uint8_t",
+          "comment": "功率档位 LED"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "hot_head_idx",
+          "type": "int8_t",
+          "comment": "热点炉头索引 (-1=无)"
+        },
+        {
+          "name": "seg_chars[8]",
+          "type": "uint8_t",
+          "comment": "8位段码字符"
+        },
+        {
+          "name": "seg_blink[4]",
+          "type": "uint8_t",
+          "comment": "炉头闪烁控制"
+        },
+        {
+          "name": "seg_mode",
+          "type": "uint8_t",
+          "comment": "显示模式"
+        },
+        {
+          "name": "leds_power",
+          "type": "uint8_t",
+          "comment": "电源 LED"
+        },
+        {
+          "name": "leds_timer",
+          "type": "uint8_t",
+          "comment": "定时 LED"
+        },
+        {
+          "name": "leds_pause",
+          "type": "uint8_t",
+          "comment": "暂停 LED"
+        },
+        {
+          "name": "leds_child_lock",
+          "type": "uint8_t",
+          "comment": "童锁 LED"
+        },
+        {
+          "name": "leds_head_select[4]",
+          "type": "uint8_t",
+          "comment": "炉头选择 LED"
+        },
+        {
+          "name": "leds_power_level[10]",
+          "type": "uint8_t",
+          "comment": "功率档位 LED"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_hmi_drv_buzzer",
+      "from": "AppHmi",
+      "to": "DrvBuzzer",
+      "callback_type": "edge",
+      "comment": "@OUTPUT_CALLBACK 蜂鸣命令 → DrvBuzzer (即时路由, 不走 Switcher 周期)",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "sound_type",
+          "type": "uint8_t",
+          "comment": "蜂鸣类型: 1=短按, 2=长按, 3=成功, 4=失败, 5=报警"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "sound_type",
+          "type": "uint8_t",
+          "comment": "蜂鸣类型: 1=短按, 2=长按, 3=成功, 4=失败, 5=报警"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_power_app_hmi",
+      "from": "AppPower",
+      "to": "AppHmi",
+      "callback_type": "pull",
+      "comment": "功率状态 → Hmi",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "power_level",
+          "type": "uint8_t",
+          "comment": "功率档位 0-9"
+        },
+        {
+          "name": "actual_power",
+          "type": "uint16_t",
+          "comment": "实际功率 W"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_power_app_comm_mgr",
+      "from": "AppPower",
+      "to": "AppCommMgr",
+      "callback_type": "pull",
+      "comment": "功率命令 → AppCommMgr, 由 CommMgr 做 MODBUS 帧构建",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_idx",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_idx",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "power_on",
+          "type": "uint8_t",
+          "comment": "功率开关 0/1"
+        },
+        {
+          "name": "target_power",
+          "type": "uint16_t",
+          "comment": "目标功率 W"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_protect_app_power",
+      "from": "AppProtect",
+      "to": "AppPower",
+      "callback_type": "pull",
+      "comment": "故障状态 → Power",
+      "out_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "in_link": {
+        "style": "pointer",
+        "dims": ""
+      },
+      "fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "fault",
+          "type": "uint16_t",
+          "comment": "故障位集合 ProtectFault_t"
+        }
+      ],
+      "in_fields": [
+        {
+          "name": "head_index",
+          "type": "uint8_t",
+          "comment": "炉头索引 0-3"
+        },
+        {
+          "name": "slave_addr",
+          "type": "uint8_t",
+          "comment": "Modbus 站号"
+        },
+        {
+          "name": "fault",
+          "type": "uint16_t",
+          "comment": "故障位集合 ProtectFault_t"
+        }
+      ]
+    },
+    {
+      "id": "pipe_app_comm_mgr_proto_modbus",
+      "from": "AppCommMgr",
+      "to": "ProtoModbus",
+      "callback_type": "pull",
+      "comment": "协议请求 → ProtoModbus (BuildRead/BuildWriteSingle/Parse, 2tick请求-响应)",
+      "out_link": { "style": "pointer", "dims": "" },
+      "in_link": { "style": "pointer", "dims": "" },
+      "fields": [
+        { "name": "cmd", "type": "uint8_t", "comment": "1=BuildRead 2=BuildWriteSingle 3=Parse" },
+        { "name": "slave", "type": "uint8_t", "comment": "Modbus站号" },
+        { "name": "res[2]", "type": "uint8_t", "comment": "对齐保留" },
+        { "name": "read_reg", "type": "uint16_t", "comment": "BuildRead: 起始寄存器" },
+        { "name": "read_count", "type": "uint16_t", "comment": "BuildRead: 寄存器数量(max22)" },
+        { "name": "write_reg", "type": "uint16_t", "comment": "BuildWriteSingle: 寄存器地址" },
+        { "name": "write_val", "type": "uint16_t", "comment": "BuildWriteSingle: 写入值" },
+        { "name": "rx_data[256]", "type": "uint8_t", "comment": "Parse: 接收帧缓冲" },
+        { "name": "rx_len", "type": "uint16_t", "comment": "Parse: 接收帧长度" }
+      ],
+      "in_fields": [
+        { "name": "cmd", "type": "uint8_t", "comment": "1=BuildRead 2=BuildWriteSingle 3=Parse" },
+        { "name": "slave", "type": "uint8_t", "comment": "Modbus站号" },
+        { "name": "res[2]", "type": "uint8_t", "comment": "对齐保留" },
+        { "name": "read_reg", "type": "uint16_t", "comment": "BuildRead: 起始寄存器" },
+        { "name": "read_count", "type": "uint16_t", "comment": "BuildRead: 寄存器数量(max22)" },
+        { "name": "write_reg", "type": "uint16_t", "comment": "BuildWriteSingle: 寄存器地址" },
+        { "name": "write_val", "type": "uint16_t", "comment": "BuildWriteSingle: 写入值" },
+        { "name": "rx_data[256]", "type": "uint8_t", "comment": "Parse: 接收帧缓冲" },
+        { "name": "rx_len", "type": "uint16_t", "comment": "Parse: 接收帧长度" }
+      ]
+    },
+    {
+      "id": "pipe_proto_modbus_app_comm_mgr",
+      "from": "ProtoModbus",
+      "to": "AppCommMgr",
+      "callback_type": "pull",
+      "comment": "协议响应 → AppCommMgr (编码帧/解析结果, 2tick响应)",
+      "out_link": { "style": "pointer", "dims": "" },
+      "in_link": { "style": "pointer", "dims": "" },
+      "fields": [
+        { "name": "result", "type": "int8_t", "comment": "0=OK -1=ERR_CRC -2=ERR_EXC -3=ERR_LEN" },
+        { "name": "slave", "type": "uint8_t", "comment": "解析出的站号(Build:回显)" },
+        { "name": "func", "type": "uint8_t", "comment": "解析出的功能码(Build:0x03/0x06)" },
+        { "name": "pad1", "type": "uint8_t", "comment": "对齐" },
+        { "name": "tx_data[64]", "type": "uint8_t", "comment": "Build: 编码后的帧数据" },
+        { "name": "tx_len", "type": "uint16_t", "comment": "Build: 帧长度(含CRC)" },
+        { "name": "data[22]", "type": "uint16_t", "comment": "Parse: 解析出的寄存器数据" },
+        { "name": "data_count", "type": "uint16_t", "comment": "Parse: 数据数量" }
+      ],
+      "in_fields": [
+        { "name": "result", "type": "int8_t", "comment": "0=OK -1=ERR_CRC -2=ERR_EXC -3=ERR_LEN" },
+        { "name": "slave", "type": "uint8_t", "comment": "解析出的站号(Build:回显)" },
+        { "name": "func", "type": "uint8_t", "comment": "解析出的功能码(Build:0x03/0x06)" },
+        { "name": "pad1", "type": "uint8_t", "comment": "对齐" },
+        { "name": "tx_data[64]", "type": "uint8_t", "comment": "Build: 编码后的帧数据" },
+        { "name": "tx_len", "type": "uint16_t", "comment": "Build: 帧长度(含CRC)" },
+        { "name": "data[22]", "type": "uint16_t", "comment": "Parse: 解析出的寄存器数据" },
+        { "name": "data_count", "type": "uint16_t", "comment": "Parse: 数据数量" }
+      ]
+    },
+    {
+      "id": "pipe_app_comm_mgr_drv_comm_mgr",
+      "from": "AppCommMgr",
+      "to": "DrvCommMgr",
+      "callback_type": "pull",
+      "comment": "TX发送请求 → DrvCommMgr (替代 __weak DrvCommMgr_OnSendReq)",
+      "out_link": { "style": "pointer", "dims": "" },
+      "in_link": { "style": "pointer", "dims": "" },
+      "fields": [
+        { "name": "head_idx", "type": "uint8_t", "comment": "炉头索引0-3" },
+        { "name": "res[1]", "type": "uint8_t", "comment": "对齐" },
+        { "name": "tx_data[64]", "type": "uint8_t", "comment": "发送帧数据" },
+        { "name": "tx_len", "type": "uint16_t", "comment": "发送帧长度" }
+      ],
+      "in_fields": [
+        { "name": "head_idx", "type": "uint8_t", "comment": "炉头索引0-3" },
+        { "name": "res[1]", "type": "uint8_t", "comment": "对齐" },
+        { "name": "tx_data[64]", "type": "uint8_t", "comment": "发送帧数据" },
+        { "name": "tx_len", "type": "uint16_t", "comment": "发送帧长度" }
+      ]
+    },
+    {
+      "id": "pipe_drv_comm_mgr_app_comm_mgr",
+      "from": "DrvCommMgr",
+      "to": "AppCommMgr",
+      "callback_type": "pull",
+      "comment": "TX完成/RX数据事件 → AppCommMgr (替代上行回调 OnTxDone/OnDataUpdate)",
+      "out_link": { "style": "pointer", "dims": "" },
+      "in_link": { "style": "pointer", "dims": "" },
+      "fields": [
+        { "name": "event", "type": "uint8_t", "comment": "1=TX_DONE 2=RX_DATA" },
+        { "name": "head_idx", "type": "uint8_t", "comment": "炉头索引0-3" },
+        { "name": "res[2]", "type": "uint8_t", "comment": "对齐" },
+        { "name": "rx_data[256]", "type": "uint8_t", "comment": "RX_DATA: 接收帧数据" },
+        { "name": "rx_len", "type": "uint16_t", "comment": "RX_DATA: 接收帧长度" }
+      ],
+      "in_fields": [
+        { "name": "event", "type": "uint8_t", "comment": "1=TX_DONE 2=RX_DATA" },
+        { "name": "head_idx", "type": "uint8_t", "comment": "炉头索引0-3" },
+        { "name": "res[2]", "type": "uint8_t", "comment": "对齐" },
+        { "name": "rx_data[256]", "type": "uint8_t", "comment": "RX_DATA: 接收帧数据" },
+        { "name": "rx_len", "type": "uint16_t", "comment": "RX_DATA: 接收帧长度" }
+      ]
+    },
+    {
+      "id": "pipe_app_seg_align_drv_display",
+      "from": "AppSegAlign",
+      "to": "DrvDisplay",
+      "callback_type": "pull",
+      "comment": "段码控制 → DrvDisplay (替代 __weak DrvSegAlign_WriteCom/BlockHmi, route区分: 0=write 1=block)",
+      "out_link": { "style": "pointer", "dims": "" },
+      "in_link": { "style": "pointer", "dims": "" },
+      "fields": [
+        { "name": "com_mask[11]", "type": "uint8_t", "comment": "11个COM位的段码掩码(route=0时有效)" },
+        { "name": "dirty", "type": "uint8_t", "comment": "1=段码有更新需要刷新(route=0)" },
+        { "name": "block", "type": "uint8_t", "comment": "1=阻塞HMI刷新 0=恢复(route=1)" }
+      ],
+      "in_fields": [
+        { "name": "com_mask[11]", "type": "uint8_t", "comment": "11个COM位的段码掩码(route=0时有效)" },
+        { "name": "dirty", "type": "uint8_t", "comment": "1=段码有更新需要刷新(route=0)" },
+        { "name": "block", "type": "uint8_t", "comment": "1=阻塞HMI刷新 0=恢复(route=1)" }
+      ]
+    }
+  ],
+  "slot_order": [
+    "AppCommMgr",
+    "ProtoModbus",
+    "AppPower",
+    "AppProtect",
+    "AppCooking",
+    "AppHmi",
+    "AppSegAlign",
+    "DrvKey",
+    "DrvCommMgr",
+    "DrvBuzzer",
+    "DrvDisplay"
+  ]
+}
