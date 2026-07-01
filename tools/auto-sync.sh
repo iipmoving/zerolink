@@ -23,7 +23,8 @@ LOG_FILE="/d/WORK/AIGIT/auto-sync.log"
 PID_FILE="/d/WORK/AIGIT/auto-sync.pid"
 TEST_SYNC_FILE="$SOURCE/test_sync.txt"
 
-GITHUB_REMOTE="origin"   # git remote 名称（指向 GitHub）
+GITHUB_REMOTE="origin"   # git remote 名称（指向 NAS/群晖）
+NAS_REMOTE="origin"      # 别名：origin 实际指向 NAS（群晖）
 GITEE_REMOTE="gitee"     # git remote 名称（指向 Gitee）
 
 # ---------- 函数 ----------
@@ -75,7 +76,7 @@ sync_local_backup() {
   log "[LOCAL] 同步文件到 D:\\WORK\\AIGIT..."
 
   # 先尝试 git push（如果目标是一个 bare repo 或已配置 remote）
-  if git push "file:///d/WORK/AIGIT/ZEROLINK" main 2>/dev/null; then
+  if git push "file:///d/WORK/AIGIT/ZEROLINK" main:WORKING 2>/dev/null; then
     log "[LOCAL] D:\\WORK\\AIGIT git push 成功"
     return 0
   fi
@@ -103,24 +104,24 @@ sync_local_backup() {
 sync_remote() {
   cd "$SOURCE"
 
-  # --- GitHub ---
-  log "[GITHUB] 开始同步 Y:\\AI -> GitHub"
-  if git remote get-url "$GITHUB_REMOTE" &>/dev/null; then
-    if git push "$GITHUB_REMOTE" main 2>&1; then
-      log "[GITHUB] GitHub 已更新"
+  # --- NAS (群晖) ---
+  log "[NAS] 开始同步 Y:\\AI -> NAS (WORKING)"
+  if git remote get-url "$NAS_REMOTE" &>/dev/null; then
+    if git push "$NAS_REMOTE" main:WORKING 2>&1; then
+      log "[NAS] NAS 已更新"
     else
-      log "[GITHUB] GitHub 推送失败"
+      log "[NAS] NAS 推送失败"
     fi
   else
-    log "[GITHUB] remote '$GITHUB_REMOTE' 未配置"
+    log "[NAS] remote '$NAS_REMOTE' 未配置"
   fi
 
   # --- Gitee ---
-  log "[GITEE] 开始同步 Y:\\AI -> Gitee"
+  log "[GITEE] 开始同步 Y:\\AI -> Gitee (WORKING)"
   if git remote get-url "$GITEE_REMOTE" &>/dev/null; then
     # 先拉取防止分歧
-    git pull "$GITEE_REMOTE" main --rebase 2>&1 || true
-    if git push "$GITEE_REMOTE" main 2>&1; then
+    git pull "$GITEE_REMOTE" main:WORKING --rebase 2>&1 || true
+    if git push "$GITEE_REMOTE" main:WORKING 2>&1; then
       log "[GITEE] Gitee 已更新"
     else
       log "[GITEE] Gitee 推送失败"
@@ -172,9 +173,10 @@ fi
 echo "$(sh -c 'echo $PPID')" > "$PID_FILE"
 
 log "=============================================="
-log "Y:\\AI\\ZEROLINK  ->  D:\\WORK\\AIGIT\\ZEROLINK  每 $LOCAL_INTERVAL 秒"
-log "Y:\\AI\\ZEROLINK  ->  GitHub                  每 $REMOTE_INTERVAL 秒"
-log "Y:\\AI\\ZEROLINK  ->  Gitee                  每 $REMOTE_INTERVAL 秒"
+log "Y:\\AI\\ZEROLINK  ->  D:\\WORK\\AIGIT\\ZEROLINK (WORKING branch)  每 30 分钟"
+log "Y:\\AI\\ZEROLINK  ->  群晖 (WORKING)                每 1 小时"
+log "Y:\\AI\\ZEROLINK  ->  Gitee (WORKING)                每 1 小时"
+log "Y:\\AI\\ZEROLINK  ->  GitHub (WORKING)               每 1 小时"
 log "时间间隔可编辑 $(basename "$0") 修改 LOCAL_INTERVAL / REMOTE_INTERVAL"
 log "[OK] 守护进程 PID=$$"
 
