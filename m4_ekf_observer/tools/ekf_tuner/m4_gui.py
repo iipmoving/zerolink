@@ -486,6 +486,12 @@ class M4DebugApp:
                                   cursor="hand2", state=tk.DISABLED, width=7)
         self.auto_btn.pack(side=tk.RIGHT, padx=(4, 0))
 
+        self.debug_btn = tk.Button(bar, text="🔍 调试", command=self._toggle_debug,
+                                   bg=BORDER, fg=FG, font=("Consolas", 9),
+                                   activebackground=BORDER, relief=tk.FLAT,
+                                   cursor="hand2", state=tk.NORMAL, width=7)
+        self.debug_btn.pack(side=tk.RIGHT, padx=(4, 0))
+
         # 遥测选择 checkboxes
         sep2 = tk.Frame(bar, width=2, bg=BORDER)
         sep2.pack(side=tk.RIGHT, padx=6, fill=tk.Y)
@@ -1305,6 +1311,85 @@ class M4DebugApp:
 
         self._pm_ui = PrintMessageTab(self._pm_window)
         self._pm_ui._start_capture()
+
+    # ---- 调试日志 ------------------------------------------------
+
+    def _toggle_debug(self):
+        """打开/关闭调试日志窗口"""
+        if hasattr(self, '_debug_win') and self._debug_win and self._debug_win.winfo_exists():
+            self._debug_win.destroy()
+            self._debug_win = None
+            if self.client:
+                self.client.log_enable(False)
+            return
+
+        self._debug_win = tk.Toplevel(self.root)
+        self._debug_win.title("串口调试日志")
+        self._debug_win.geometry("700x500")
+        self._debug_win.configure(bg=BG2)
+
+        # 顶部工具栏
+        bar = tk.Frame(self._debug_win, bg=BG2)
+        bar.pack(fill=tk.X, padx=4, pady=4)
+
+        tk.Label(bar, text="串口报文日志", bg=BG2, fg=ACCENT,
+                font=("Consolas", 10, "bold")).pack(side=tk.LEFT)
+
+        def _clear_log():
+            if self.client:
+                self.client.log_enable(False)
+            self._debug_text.delete("1.0", tk.END)
+            if self.client:
+                self.client.log_enable(True)
+
+        tk.Button(bar, text="清空", command=_clear_log,
+                 bg=BORDER, fg=FG, font=("Consolas", 8),
+                 relief=tk.FLAT, cursor="hand2", width=5).pack(side=tk.RIGHT, padx=(4, 0))
+
+        auto_refresh = tk.BooleanVar(value=True)
+        tk.Checkbutton(bar, text="自动刷新", variable=auto_refresh,
+                      bg=BG2, fg=FG, font=("Consolas", 8),
+                      selectcolor=BG, activebackground=BG2,
+                      activeforeground=FG).pack(side=tk.RIGHT, padx=(4, 0))
+
+        # 日志文本区
+        text_frame = tk.Frame(self._debug_win, bg=BG)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        self._debug_text = tk.Text(text_frame, bg=BG, fg=FG,
+                                   font=("Consolas", 9), insertbackground=FG,
+                                   wrap=tk.NONE, state=tk.DISABLED)
+        scroll_y = ttk.Scrollbar(text_frame, orient=tk.VERTICAL,
+                                 command=self._debug_text.yview)
+        scroll_x = ttk.Scrollbar(text_frame, orient=tk.HORIZONTAL,
+                                 command=self._debug_text.xview)
+        self._debug_text.configure(yscrollcommand=scroll_y.set,
+                                    xscrollcommand=scroll_x.set)
+
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self._debug_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # 启用日志
+        if self.client:
+            self.client.log_enable(True)
+
+        # 定时刷新
+        def _poll_log():
+            if not hasattr(self, '_debug_win') or not self._debug_win:
+                return
+            if not self._debug_win.winfo_exists():
+                return
+            if auto_refresh.get() and self.client:
+                log_text = self.client.log_get(500)
+                self._debug_text.configure(state=tk.NORMAL)
+                self._debug_text.delete("1.0", tk.END)
+                self._debug_text.insert("1.0", log_text)
+                self._debug_text.see(tk.END)
+                self._debug_text.configure(state=tk.DISABLED)
+            self._debug_win.after(500, _poll_log)
+
+        _poll_log()
 
     # ---- 自动测试 ------------------------------------------------
 

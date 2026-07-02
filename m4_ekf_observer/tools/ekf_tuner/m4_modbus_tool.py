@@ -283,9 +283,15 @@ class M4ModbusClient:
         # Serial access lock (heartbeat thread vs main thread)
         self._lock = threading.Lock()
 
+        # 串口调试日志
+        self._log_enabled = False
+        self._log = []
+
     @staticmethod
     def _crc16(data: bytes) -> int:
-        """MODBUS CRC-16: poly=0x8005, reflected init=0xFFFF, little-endian"""
+        """MODBUS CRC-16: poly=0x8005, reflected init=0xFFFF.
+        返回已字节交换的值，匹配 M4 设备固件期望的 CRC 字节序。
+        """
         crc = 0xFFFF
         for byte in data:
             crc ^= byte
@@ -294,7 +300,8 @@ class M4ModbusClient:
                     crc = (crc >> 1) ^ 0xA001
                 else:
                     crc >>= 1
-        return crc
+        # 标准 CRC-16/MODBUS 结果需字节交换以匹配设备固件
+        return ((crc & 0xFF) << 8) | (crc >> 8)
 
     def _read_serial(self) -> bool:
         """Read all available bytes from serial (non-blocking), feed to both parsers.
@@ -307,9 +314,35 @@ class M4ModbusClient:
         raw = self.ser.read(self.ser.in_waiting)
         if not raw:
             return False
+        self._log_rx(raw)
         self._mb_buf.extend(raw)
         self._pm_buf.extend(raw)
         return True
+
+    def log_enable(self, enabled: bool = True):
+        self._log_enabled = enabled
+        if not enabled:
+            self._log.clear()
+
+    def log_get(self, max_lines: int = 500) -> str:
+        return "\n".join(self._log[-max_lines:])
+
+    def _log_tx(self, data: bytes):
+        if self._log_enabled:
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:12]
+            hex_str = " ".join(f"{b:02x}" for b in data)
+            self._log.append(f"[{ts}] TX: {hex_str}")
+
+    def _log_rx(self, data: bytes):
+        if self._log_enabled:
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:12]
+            hex_str = " ".join(f"{b:02x}" for b in data)
+            self._log.append(f"[{ts}] RX: {hex_str}")
+
+    def _ser_write(self, data: bytes):
+        """写入串口并记录 TX 日志"""
+        self.ser.write(data)
+        self._log_tx(data)
 
     def _check_crc(self, frame: bytes) -> bool:
         """Validate MODBUS RTU CRC (little-endian)."""
@@ -422,7 +455,7 @@ class M4ModbusClient:
             frame = pdu + struct.pack('<H', self._crc16(pdu))
 
             self._mb_buf.clear()
-            self.ser.write(frame)
+            self._ser_write(frame)
 
             deadline = time.monotonic() + self.timeout
             while time.monotonic() < deadline:
@@ -460,7 +493,7 @@ class M4ModbusClient:
             frame = pdu + struct.pack('<H', self._crc16(pdu))
 
             self._mb_buf.clear()
-            self.ser.write(frame)
+            self._ser_write(frame)
 
             deadline = time.monotonic() + self.timeout
             while time.monotonic() < deadline:
@@ -489,7 +522,7 @@ class M4ModbusClient:
             frame = pdu + struct.pack('<H', self._crc16(pdu))
 
             self._mb_buf.clear()
-            self.ser.write(frame)
+            self._ser_write(frame)
 
             deadline = time.monotonic() + self.timeout
             while time.monotonic() < deadline:

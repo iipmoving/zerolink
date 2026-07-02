@@ -51,7 +51,8 @@ def _crc16(data: bytes) -> int:
                 crc = (crc >> 1) ^ 0xA001
             else:
                 crc >>= 1
-    return crc
+    # 字节交换以匹配 M4ModbusClient._crc16
+    return ((crc & 0xFF) << 8) | (crc >> 8)
 
 
 def _make_fc03_response(registers):
