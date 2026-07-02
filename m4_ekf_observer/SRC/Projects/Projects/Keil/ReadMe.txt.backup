@@ -1,0 +1,83 @@
+1、
+void	API_TIM_TXA_STOP(void)
+{
+
+//		HAL_TIM_PWM_Stop(&htim_TXA,TIM_CHANNEL_1);
+	__HAL_TIM_MOE_DISABLE(&htim_TXA);
+	htim_TXA.Instance->CCER=0;
+	__HAL_TIM_DISABLE(&htim_TXA);
+}
+
+用PWM_START 开启PWM输出后，需要使用对应的HAL_TIM_PWM_Stop(&htim_TXA,TIM_CHANNEL_1); 主要是要	htim_TXA.Instance->CCER=0;才能停止计数器
+
+2、
+Current_ADC_REG_RankInitTypeDef const VcHalf_RankInitTypeDef={
+	Current_ADC_GROUP_NUM,			//注意RANK要对应1234
+	{
+		{
+			Adc1ChannelGroup0,
+			1,						//这个RANK 序号需要对应1234
+			ADC_SAMPLINGTIME_HIGH,	
+		},
+		{
+			Adc1ChannelGroup1,
+			2,
+			ADC_SAMPLINGTIME_HIGH,		
+		},
+		
+//功率调整		
+
+
+void	API_HRTIM1_TEST_UPD_IRQHandlerCallback(uint8_t sourse)		//HRTIM的UPD中断回调，开停ADC T34A EOC中断
+{
+
+	APP_ADC_IRQ_PPGstepChangeCallBack();				//每个HRTIM周期 同步更新DUTY, PEROID
+
+}
+
+
+APP_ADC_IRQ_PPGstepChangeCallBack();		有以下几种状态需要单独处理
+enum
+{
+	POWER_CHANGE_PAUSE=0,
+	POWER_CHANGE_ZERO,			//过零检查同步
+	POWER_CHANGE_DUTY,			//同步调整周期
+	POWER_CHANGE_CYCLE,			//HRTIM赋值
+	POWER_CHANGE_CYCLE_CHANGE,	//中间从倍频切到同频	
+	POWER_CHANGE_CYCLE_RESET	//中间从同频切回到同频	
+};
+
+1、POWER_CHANGE_ZERO,			//过零检查同步
+
+
+
+
+
+void	API_HRTIM1_TEST_CMP1_IRQHandlerCallback(void)		//HRTIM的CMP1中断回调，过流检测
+{
+
+}
+
+		
+void PowerStepDec(AppPowerDef* powerCh)  过流减功率		
+
+uint16_t PowerStepChange(AppPowerDef* powerCh)		 PPG逼近
+
+
+
+TIM TXA与ADC DMA不同步的原因
+void	API_TIM_TXA_RESET(void)
+{  
+//      htim_TXA.Instance->SMCR=0;
+	__HAL_TIM_DISABLE(&htim_TXA);
+//	__HAL_TIM_SET_COUNTER(&htim_TXA,0);	
+
+//    htim_TXA.Instance->SMCR=  API_TIM_TxaSmcrSave;
+//	htim_TXA.Instance->CNT=htim_TXA.Instance->ARR-2;
+//	HAL_TIM_GenerateEvent(&htim_TXA,TIM_EVENTSOURCE_UPDATE);
+	__HAL_TIM_SET_COUNTER(&htim_TXA,2);			//  这里不能用UPDATE 会导至ADC触发，但TIM没有启动
+	 __HAL_TIM_CLEAR_FLAG(&htim_TXA,TIM_TXA_Base.it_flag);	
+	// __HAL_TIM_ENABLE_IT(&htim_TXA,TIM_TXA_Base.it);
+	
+    __HAL_TIM_ENABLE(&htim_TXA);
+}

@@ -1,0 +1,29 @@
+##########################################################################################
+#                        Append Compiler Options For Source Files
+##########################################################################################
+
+# syntax:
+#   <your pattern>: <compiler options>
+# For get pattern syntax, please refer to: https://www.npmjs.com/package/micromatch
+#
+# examples:
+#   'main.cpp':           --cpp11 -Og ...
+#   'src/*.c':            -gnu -O2 ...
+#   'src/lib/**/*.cpp':   --cpp11 -Os ...
+#   '!Application/*.c':   -O0
+#   '**/*.c':             -O2 -gnu ...
+
+version: "2.1"
+options:
+    BasicApp_ROM:
+        files: {}
+        virtualPathFiles:
+            <virtual_root>/DRV/drv_hrtim.c: ""
+            <virtual_root>/APP/SYS/Simulative_Uart.c: ""
+            <virtual_root>/baseClass/queue.c: ""
+            <virtual_root>/baseClass/phase.c: ""
+            <virtual_root>/baseClass/power_calculator_fullbridge.c: ""
+            <virtual_root>/baseClass/drv_hrtim_consumer.c: ""
+            <virtual_root>/ApiLibSrc/API_hrtim_fullbridge.c: ""
+            <virtual_root>/AppLibSrc/APP_ADC.C: ""
+            <virtual_root>/modbus/Modbus_Analysis_Lib.c: ""

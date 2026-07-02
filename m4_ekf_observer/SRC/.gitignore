@@ -1,0 +1,26 @@
+# 编译输出目录
+build/
+Debug/
+Release/
+Output/
+
+# 编译生成的文件
+*.o
+*.d
+*.crf
+*.lnp
+*.plg
+*.htm
+*.sct
+*.map
+
+# Keil MDK相关文件
+*.uvoptx
+*.uvguix.*
+JLinkLog.txt
+JLinkSettings.ini
+
+# 其他临时文件
+*.bak
+*.tmp
+*~

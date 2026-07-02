@@ -1,0 +1,22 @@
+{
+  "layer_dirs": ["app", "base_class", "proto", "core"],
+  "scan_dirs": ["app", "base_class", "proto", "core", "src"],
+  "rules": {
+    "app": {
+      "allowed": ["app/", "core/", "proto/", "include/", "<"],
+      "forbidden": ["base_class/", "src/"]
+    },
+    "base_class": {
+      "allowed": ["base_class/", "core/", "include/", "<"],
+      "forbidden": ["app/", "proto/"]
+    },
+    "proto": {
+      "allowed": ["proto/", "core/", "<"],
+      "forbidden": ["app/", "base_class/"]
+    },
+    "core": {
+      "allowed": ["core/", "include/", "<"],
+      "forbidden": ["app/", "base_class/", "proto/"]
+    }
+  }
+}

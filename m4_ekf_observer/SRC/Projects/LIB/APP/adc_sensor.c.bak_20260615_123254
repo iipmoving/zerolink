@@ -1,0 +1,1439 @@
+// ===== [AI GENERATED] 范式接入+骨架, 可被PY替换 =====
+#include "app_adc_io.h"
+
+MODULE_SKELETON(AppAdc);
+
+static void AppAdc_Process(MODULE_OUTPUT(AppAdc) *out);
+void userInit(void);       /* 用户初始化 (在用户代码区定义) */
+
+//static void Init(void)
+//{
+//    g_input.para  = NULL;  /* 无输入 */
+//    g_output.para = &s_outPara;
+
+//    userInit();
+//}
+
+static void ProcessInput(void)
+{
+    MODULE_OUTPUT(AppAdc) *out = (MODULE_OUTPUT(AppAdc)*)g_output.para;
+
+    /* === 输入段: 数据有效检查 === */
+    // 无输入依赖，直接处理
+
+    /* === 计算段: 用户业务 === */
+    AppAdc_Process(out);
+}
+
+MODULE_EXPORT(AppAdc);
+
+// ===== [END AI GENERATED] =====
+
+/**
+ * @file    adc_sensor.c
+ * @brief   AdcSensor 婴儿模块 — v2.2 PULL 范式 (替代 APP_ADC.C)
+ * @layer   app
+ *
+ * 遵循 std_module.h PULL 范式:
+ *   - 纯生产者, 数据实体自持, 零 extern
+ *   - 20ms ADC 平均计算 → pBlock 直指 inputValue[]
+ *   - DoWork 由 Switcher 统一调度
+ *
+ * 文件结构:
+ *   1. 模块骨架 + 数据实体定义
+ *   2. 纯算法函数 (Pure Algorithm) — 无硬件依赖
+ *   3. 硬件控制函数 (HAL_HALF) — 直接调用 HAL API
+ *   4. 中断回调函数 (ISR Callbacks) — 中断入口与硬件交互
+ *   5. API层函数 (API Layer) — 业务逻辑与状态管理
+ *   6. 模块导出
+ *
+ * 数据流:
+ *   ISR → DMA buffers → 20ms flag → ProcessInput → APP_ADC_AVG_Fun → AdcValueFun → ST_OUT
+ */
+
+#include "std_module.h"               /* Para_Grp_t, MODULE_SKELETON, ST_OUT    */
+#include "../include/app_adc_io.h"     /* AdcBlock_t, APP_Adc_Output_t               */
+#include "APP_ADC.H"                   /* enums, DIV_* macros                    */
+#include "power_calculator.h"          /* PowerCalculatorInputDef, PowerResult    */
+#include "API_adc.h"                   /* TxA_ADC_AdcBUFF_NUM, ADC_SELECT_ENUM   */
+#include "API_FMAC.H"                  /* API_FMAC_MEMDEF, FmacLeve              */
+#include "API_hrtim.h"                 /* PotNum, FRE_PER_ADC, API_PPG_GetPeroid */
+#include "API_gpio.h"
+#include "API_TIM.h"
+#include "api_dma.h"
+#include "adc_processing.h"
+#include "printMessage.h"
+#include "wave_capture.h"
+
+/* ================================================================
+ * 本地宏 + 枚举 — 从原 APP_ADC.C 内部提取
+ * TODO: 后续整理到独立头文件
+ * ================================================================ */
+
+#define PotChWork   PotCh1
+#define fmacLeveNum FmacLeve
+#ifndef FMAC_OFFSET
+#define FMAC_OFFSET (FmacLeve/2+2)
+#endif
+
+/* ---- DMA 采集步骤枚举 ---- */
+enum {
+    TXA_StepStart = 0,
+    TXA_StepDmaRest,
+    TXA_StepDmaStart,
+    TXA_StepDmaEnd,
+    TXA_StepFmacStart,
+    TXA_StepFmacEnd,
+};
+
+/* ---- GPIO 开关电平 ---- */
+enum {
+    SW_ON  = 0,
+    SW_OFF,
+};
+
+/* ================================================================
+ * MODULE_SKELETON — 必须在使用 g_input/g_output 之前
+ * ================================================================ */
+
+
+/* ---- 前置类型 (被前向声明引用) ---- */
+typedef struct {
+    uint16_t  start;
+    uint16_t  end;
+} TxaHrtimPointDef;
+
+/* ================================================================
+ * 前向声明
+ * ============================================================== */
+static void     Init(void);
+static void     ProcessInput(void);
+
+/* -------------------------- 纯算法函数 -------------------------- */
+static void     APP_ADC_TxaAvgSum(uint8_t ch);
+static void     APP_ADC_AVG_Fun(void);
+static uint8_t  getIcVc20msOccur(void);
+static void     clrIcVc20msOccur(void);
+static uint32_t getADCaverage20ms(uint8_t ch);
+uint8_t         AdcValueFun(void);
+static TxaHrtimPointDef APP_ADC_GetTxaStartPoint(uint8_t potCh);
+static void     APP_ADC_TxaBuffChange(uint8_t ch, TxaHrtimPointDef* point);
+static void     APP_ADC_GetTxaPeiodPoint(void);
+
+/* -------------------------- 硬件控制函数 -------------------------- */
+static void     APP_ADC_SELECT_GROUP(uint8_t ch);
+static void     APP_ADC_GET_TxaAvg(void);
+static void     APP_ADC_GET_TEMPE(void);
+
+/* -------------------------- 中断回调函数 -------------------------- */
+void            APP_ADC_ZERO_IrqFun(void);
+void            APP_ZERO_Adc100usCallBack(void);
+void            API_T12_EOC_IRQHandlerCallBack(void);
+void            API_HRTIM1_TEST_UPD_IRQHandlerCallback(uint8_t sourse);
+void            API_DMA_TxA_IRQHandlerCallBack(uint8_t num);
+void            API_ADC_PENDV_IRQHandler(void);
+void            API_FMAC_AppAdcOverCallBack(API_FMAC_MEMDEF* FmacMem);
+void            API_DMA_M2M_OverCallback(void);
+
+/* -------------------------- API层函数 -------------------------- */
+static void     API_ADC_DMA_RecoverFun(ADC_SELECT_ENUM ch);
+static void     APP_ADC_FmacSetTxa(uint16_t size);
+static uint8_t  APP_ADC_MesageBuff(void);
+static void     APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input);
+
+/* ================================================================
+ * 私有类型定义
+ * ============================================================== */
+
+typedef struct __attribute__((aligned(1))) {
+    uint16_t buff[TempeGroupZeroMax];
+} ADC_Tempe_Def;
+
+typedef struct __attribute__((aligned(1))) {
+    uint16_t buff[Current_ADC_GROUP_NUM];
+} ADC_Current_Def;
+
+typedef struct {
+    uint32_t buff[VcIc_ADC_GROUP_NUM];
+} ADC_VcIcChannel_Def;
+
+typedef struct {
+    uint32_t SumT1A;
+    uint32_t SumT2A;
+    uint32_t SumT3A;
+    uint32_t SumT4A;
+} ADC_Buff_SumDef;
+
+
+
+
+
+
+typedef struct __attribute__((aligned(32))) {
+    uint8_t         adc20msCount;
+    uint8_t         flag20ms;
+    uint8_t         adcSelect;
+    uint8_t         res;
+    uint32_t        inputValue[AdcGroupMax];
+    uint32_t        adcAverage[AdcGroupMax];
+} APP_ADC_DEF;
+
+typedef struct __attribute__((aligned(32))) {
+    uint8_t             ch;
+    uint8_t             res;
+    uint8_t             step;
+    uint8_t             flag_byte;
+    uint32_t            count;
+    uint32_t            Voltage;
+    uint16_t            HrtimSyncBuff[4];
+    ADC_Current_Def     CurrentAdc2[2][TxA_ADC_AdcBUFF_NUM];
+    ADC_Current_Def     CurrentAdc3[2][TxA_ADC_AdcBUFF_NUM];
+    ADC_Current_Def     VcAdc1[TxA_ADC_AdcBUFF_NUM];
+    ADC_Buff_SumDef     Sum;
+    ADC_Buff_SumDef     Avg;
+    ADC_Current_Def     CurrentAdc2Save[TxA_ADC_AdcBUFF_NUM];
+    ADC_Current_Def     CurrentAdc3Save[TxA_ADC_AdcBUFF_NUM];
+    uint16_t            HrtimSave[PotNum][TxA_ADC_AdcBUFF_NUM];
+} APP_ADC_AdcTxADMA_BUFF_DEF;
+
+typedef struct __attribute__((aligned(1))) {
+    uint32_t        num;
+    uint16_t        Vc[AdcAvageCount];
+    ADC_Tempe_Def   TempeAdc1;
+    ADC_Tempe_Def   TempeAdc2;
+} APP_ADC_TempeDMA_BUFF_DEF;
+
+typedef struct __attribute__((aligned(32))) {
+    uint8_t                 num;
+    uint8_t                 count;
+    uint16_t                start;
+    ADC_VcIcChannel_Def     VcIc[AdcAvageCount];
+    uint16_t                Txa[4][TxaAvageCount];
+    uint16_t                voltage[4][TxaAvageCount];
+    uint16_t                phase[4][TxaAvageCount];
+    uint16_t                phaseValue[4][TxaAvageCount];
+    uint16_t                iPeak[4][TxaAvageCount];
+    uint16_t                ceilQ[4][TxaAvageCount];
+    uint16_t                esr[4][TxaAvageCount];
+    ADC_Tempe_Def           Tempe;
+    ADC_VcIcChannel_Def     FanAd;
+    ADC_VcIcChannel_Def     res_field;
+} APP_ADC_AVG_BUFF_DEF;
+
+typedef struct {
+    TxaHrtimPointDef  pointSave;
+    uint16_t          zeroValue;
+    uint16_t          zeroPoint;
+    uint16_t*         hrtimBuff;
+    uint16_t          firstValue;
+} SaveDataDef;
+
+/* ================================================================
+ * 数据实体 (本模块持有, 替代原 APP_ADC.C 全局变量)
+ * ============================================================== */
+static APP_ADC_DEF                     AdcFunRam;
+static APP_ADC_AVG_BUFF_DEF            AdcFromApiDma20ms;
+static volatile APP_ADC_AdcTxADMA_BUFF_DEF TxA_ADC_AdcDmaBuff;
+static volatile APP_ADC_TempeDMA_BUFF_DEF  Tempe_ADC_DmaBuff;
+
+PowerCalculatorInputDef inputArray[4];
+IH_ElecInputDef         powerResult20ms[4];
+uint16_t                TxaBuffCh1[TxA_ADC_AdcBUFF_NUM];
+int16_t                 icvalue[AdcAvageCount];
+uint16_t*               TxaAdcBuff[4];
+uint16_t*               TxaHrtimBuff[4];
+uint16_t*               TxaVcBuff[4];
+uint16_t*               TxaFmacBuff[4];
+SaveDataDef             savePoint[4];
+uint16_t                CurrentSave[4][100];
+uint16_t                sumin;
+static uint16_t         arrayPoint[4];
+
+/* ================================================================
+ * 宏 — 兼容旧代码命名
+ * ============================================================== */
+#define AdcInputValue      AdcFunRam.inputValue
+#define AdcAverage20ms     AdcFunRam.adcAverage
+#define Adc20msCount       AdcFunRam.adc20msCount
+#define IcVc20msOccur      AdcFunRam.flag20ms
+#define AdcSelect          AdcFunRam.adcSelect
+
+/* ================================================================
+ * 私有数据
+ * ============================================================== */
+
+
+/* ================================================================
+ * Weak stubs — 供外部模块覆盖
+ * ============================================================== */
+__attribute__((weak)) void APP_ADC_IRQ_PPGstepChangeCallBack(void) {}
+__attribute__((weak)) void APP_ADC_DebugValueCallBack(uint8_t ch, uint8_t value) {}
+__attribute__((weak)) void IhElecParams_Calculate(void *in, void *out) {}
+
+/* ================================================================
+ * Init — 模块初始化
+ * ============================================================== */
+static void Init(void)
+{
+    memset(&AdcFunRam,         0, sizeof(AdcFunRam));
+    memset(&AdcFromApiDma20ms, 0, sizeof(AdcFromApiDma20ms));
+
+
+//    s_out.pBlock    = (ADC_INPUT_DEF*)&AdcFunRam.inputValue;
+    g_input.para    = NULL;
+    g_output.para   = &AdcFunRam.inputValue;				//直接用指针传递， 在中间层转移
+
+    AdcSelect = 0;
+    APP_ADC_SELECT_GROUP(AdcSelect);
+}
+
+/* ================================================================
+ * ProcessInput — 输入处理主函数
+ * ============================================================== */
+static void AppAdc_Process(MODULE_OUTPUT(AppAdc) *out)
+{
+
+    g_output.info.status &= ~ST_OUT;        //每次 都需要清除输出标志位
+    uint8_t new_data = AdcValueFun();
+    if (!new_data)
+        return;
+
+    g_output.info.status |= ST_OUT;         //设置输出标志位
+}
+
+/* ================================================================
+ * ========== 纯算法函数 (Pure Algorithm) ==========
+ * 
+ * 特征：
+ *   - 仅操作内存数据，无硬件API调用
+ *   - 纯数学计算/数据处理逻辑
+ *   - 可独立单元测试，与硬件解耦
+ * ============================================================== */
+
+/* -------------------------- 平均计算 -------------------------- */
+
+/**
+ * @brief TXA谐振电流平均值与功率计算
+ * 
+ * 功能：
+ *   1. 遍历采样数据，累加TXA电流、电压、Q值、相位
+ *   2. 计算功率（电压×电流）
+ *   3. 应用一阶低通滤波
+ *   
+ * @param ch 炉头通道索引 (0-3)
+ */
+static void APP_ADC_TxaAvgSum(uint8_t ch)
+{
+    uint32_t txaValue[5];
+    uint32_t newValue[5] = {0, 0, 0, 0, 0};
+    uint32_t oldValue[5];
+    uint64_t powerSum = 0;
+
+    for (uint8_t num = 1; num < TxaAvageCount - 1; num++) {
+        uint8_t num10 = num % 10;
+
+        txaValue[0] = AdcFromApiDma20ms.Txa[ch][num];
+        newValue[0] += txaValue[0];
+
+        txaValue[2] = AdcFromApiDma20ms.voltage[ch][num];
+        newValue[2] += txaValue[2];
+
+        uint64_t newPower = (uint64_t)txaValue[0] * txaValue[2];
+        powerSum += newPower;
+
+        if (num10 >= 4 && num10 <= 5) {
+            txaValue[3] = AdcFromApiDma20ms.ceilQ[ch][num];
+            newValue[3] += txaValue[3];
+
+            txaValue[4] = AdcFromApiDma20ms.phase[ch][num];
+            newValue[4] += txaValue[4];
+        }
+    }
+
+    txaValue[0] = AdcFromApiDma20ms.Txa[ch][10];
+    txaValue[0] <<= 1;
+    newValue[0] += txaValue[0];
+    newValue[0] /= TxaAvageCount;
+
+    txaValue[2] = AdcFromApiDma20ms.voltage[ch][10];
+    txaValue[2] <<= 1;
+    newValue[2] += txaValue[2];
+    newValue[2] /= TxaAvageCount;
+
+    powerSum += (uint64_t)txaValue[0] * txaValue[2];
+    powerSum /= 20;
+
+    newValue[3] /= 4;
+    newValue[4] /= 4;
+
+    AdcAverage20ms[AdcGroupPower1 + ch] = (uint32_t)(powerSum >> 4);
+
+    if (AdcAverage20ms[AdcGroupT1A + ch] == 0) {
+        oldValue[0] = newValue[0];
+    } else {
+        oldValue[0]  = AdcAverage20ms[AdcGroupT1A + ch] * (DIV_BASE - DIV_VALUE);
+        oldValue[0] += newValue[0] * DIV_VALUE;
+        oldValue[0] /= DIV_BASE;
+    }
+    AdcAverage20ms[AdcGroupT1A + ch] = oldValue[0];
+
+    if (AdcAverage20ms[AdcGroupPhaseDown1 + ch] == 0) {
+        oldValue[2] = newValue[2];
+    } else {
+        oldValue[2]  = AdcAverage20ms[AdcGroupPhaseDown1 + ch] * (DIV_BASE_POWER - DIV_VALUE_POWER);
+        oldValue[2] += newValue[2] * DIV_VALUE_POWER;
+        oldValue[2] /= DIV_BASE_POWER;
+    }
+    AdcAverage20ms[AdcGroupPhaseDown1 + ch] = oldValue[2];
+
+    if (AdcAverage20ms[AdcGroupCeilQ1 + ch] == 0) {
+        oldValue[3] = newValue[3];
+    } else {
+        oldValue[3]  = AdcAverage20ms[AdcGroupCeilQ1 + ch] * (DIV_BASE_Q - DIV_VALUE_Q);
+        oldValue[3] += newValue[3] * DIV_VALUE_Q;
+        oldValue[3] /= DIV_BASE_Q;
+    }
+    AdcAverage20ms[AdcGroupCeilQ1 + ch] = oldValue[3];
+
+    if (AdcAverage20ms[AdcGroupPhase1 + ch] == 0) {
+        oldValue[4] = newValue[4];
+    } else {
+        oldValue[4]  = AdcAverage20ms[AdcGroupPhase1 + ch] * (DIV_BASE_Q - DIV_VALUE_Q);
+        oldValue[4] += newValue[4] * DIV_VALUE_Q;
+        oldValue[4] /= DIV_BASE_Q;
+    }
+    AdcAverage20ms[AdcGroupPhase1 + ch] = oldValue[4];
+}
+
+/**
+ * @brief 20ms ADC数据平均汇总主函数
+ * 
+ * 功能：
+ *   1. 检查是否有新数据
+ *   2. 计算电压平均值
+ *   3. 调用TXA平均计算（4个炉头）
+ *   4. 拷贝温度传感器数据
+ *   5. 设置20ms完成标志
+ */
+static void APP_ADC_AVG_Fun(void)
+{
+    if (AdcFromApiDma20ms.num == 0)
+        return;
+
+    AdcFromApiDma20ms.num = 0;
+
+    for (uint8_t i = 0; i < AdcAvageCount; i++) {
+        AdcAverage20ms[AdcGroupVoltage] += Tempe_ADC_DmaBuff.Vc[i];
+    }
+    AdcAverage20ms[AdcGroupVoltage] /= AdcAvageCount;
+
+    APP_ADC_TxaAvgSum(0);
+    APP_ADC_TxaAvgSum(1);
+    APP_ADC_TxaAvgSum(2);
+    APP_ADC_TxaAvgSum(3);
+
+    AdcAverage20ms[AdcGroupIgbt1] = AdcFromApiDma20ms.Tempe.buff[Igbt1ADC2_GroupZero];
+    AdcAverage20ms[AdcGroupIgbt2] = AdcFromApiDma20ms.Tempe.buff[Igbt2ADC2_GroupZero];
+    AdcAverage20ms[AdcGroupIgbt3] = AdcFromApiDma20ms.Tempe.buff[Igbt3ADC2_GroupZero];
+    AdcAverage20ms[AdcGroupIgbt4] = AdcFromApiDma20ms.Tempe.buff[Igbt4ADC2_GroupZero];
+
+    AdcAverage20ms[AdcGroupBottom1] = AdcFromApiDma20ms.Tempe.buff[Bottom1ADC1_GroupZero];
+    AdcAverage20ms[AdcGroupBottom2] = AdcFromApiDma20ms.Tempe.buff[Bottom2ADC1_GroupZero];
+    AdcAverage20ms[AdcGroupBottom3] = AdcFromApiDma20ms.Tempe.buff[Bottom3ADC1_GroupZero];
+    AdcAverage20ms[AdcGroupBottom4] = AdcFromApiDma20ms.Tempe.buff[Bottom4ADC1_GroupZero];
+
+    if (Adc20msCount >= AdcAvageCount)
+        IcVc20msOccur = 1;
+}
+
+/* -------------------------- 数据访问接口 -------------------------- */
+
+/**
+ * @brief 获取20ms数据完成标志
+ * @return 1=有新数据, 0=无新数据
+ */
+static uint8_t getIcVc20msOccur(void)
+{
+    return IcVc20msOccur;
+}
+
+/**
+ * @brief 清除20ms数据完成标志
+ */
+static void clrIcVc20msOccur(void)
+{
+    IcVc20msOccur = 0;
+}
+
+/**
+ * @brief 获取指定通道的20ms平均值
+ * @param ch 通道索引 (AdcGroupVoltage, AdcGroupT1A, ...)
+ * @return 平均值
+ */
+static uint32_t getADCaverage20ms(uint8_t ch)
+{
+    return AdcAverage20ms[ch];
+}
+
+/* -------------------------- 数据格式化 -------------------------- */
+
+/**
+ * @brief ADC数据格式化输出
+ * 
+ * 功能：
+ *   1. 检查20ms标志
+ *   2. 读取平均值并进行电压缩放
+ *   3. 填充到输出数组
+ *   4. 热敏电阻值求反处理
+ *   
+ * @return 1=有新数据输出, 0=无新数据
+ */
+uint8_t AdcValueFun(void)
+{
+    uint16_t temp;
+    uint16_t value;
+    uint8_t  xReturn = 0;
+
+    if (!getIcVc20msOccur())
+        return 0;
+
+    clrIcVc20msOccur();
+
+    value = (uint16_t)getADCaverage20ms(AdcGroupVoltage);
+    temp  = value;
+    temp >>= 2;
+    value += temp;
+    AdcInputValue[AdcGroupVoltage] = value;
+
+    AdcInputValue[AdcGroupT1A] = getADCaverage20ms(AdcGroupT1A);
+    AdcInputValue[AdcGroupT2A] = getADCaverage20ms(AdcGroupT2A);
+    AdcInputValue[AdcGroupT3A] = getADCaverage20ms(AdcGroupT3A);
+    AdcInputValue[AdcGroupT4A] = getADCaverage20ms(AdcGroupT4A);
+
+    AdcInputValue[AdcGroupPower1] = getADCaverage20ms(AdcGroupPower1);
+    AdcInputValue[AdcGroupPower2] = getADCaverage20ms(AdcGroupPower2);
+    AdcInputValue[AdcGroupPower3] = getADCaverage20ms(AdcGroupPower3);
+    AdcInputValue[AdcGroupPower4] = getADCaverage20ms(AdcGroupPower4);
+
+    AdcInputValue[AdcGroupCeilQ1] = getADCaverage20ms(AdcGroupCeilQ1);
+    AdcInputValue[AdcGroupCeilQ2] = getADCaverage20ms(AdcGroupCeilQ2);
+    AdcInputValue[AdcGroupCeilQ3] = getADCaverage20ms(AdcGroupCeilQ3);
+    AdcInputValue[AdcGroupCeilQ4] = getADCaverage20ms(AdcGroupCeilQ4);
+
+    AdcInputValue[AdcGroupPhase1] = getADCaverage20ms(AdcGroupPhase1);
+    AdcInputValue[AdcGroupPhase2] = getADCaverage20ms(AdcGroupPhase2);
+    AdcInputValue[AdcGroupPhase3] = getADCaverage20ms(AdcGroupPhase3);
+    AdcInputValue[AdcGroupPhase4] = getADCaverage20ms(AdcGroupPhase4);
+
+    AdcInputValue[AdcGroupPhaseDown1] = getADCaverage20ms(AdcGroupPhaseDown1);
+    AdcInputValue[AdcGroupPhaseDown2] = getADCaverage20ms(AdcGroupPhaseDown2);
+    AdcInputValue[AdcGroupPhaseDown3] = getADCaverage20ms(AdcGroupPhaseDown3);
+    AdcInputValue[AdcGroupPhaseDown4] = getADCaverage20ms(AdcGroupPhaseDown4);
+
+    for (uint8_t i = AdcGroupBottom1; i < AdcGroupFan; i++) {
+        value = (uint16_t)(~getADCaverage20ms(i));
+        value &= 0xFFF;
+        AdcInputValue[i] = value;
+    }
+
+    xReturn = 1;
+    return xReturn;
+}
+
+/* -------------------------- 周期检测算法 -------------------------- */
+
+/**
+ * @brief 计算TXA信号的周期起始点（过零点检测）
+ * 
+ * 算法流程：
+ *   1. 从HRTIM缓冲区读取数据
+ *   2. 根据PPG周期和ADC采样间隔计算初始位置
+ *   3. 通过阈值比较找到过零点
+ *   4. 计算有效数据的起始和结束偏移
+ *   
+ * @param potCh 炉头通道索引 (0-3)
+ * @return 包含start和end的周期点结构
+ */
+static TxaHrtimPointDef APP_ADC_GetTxaStartPoint(uint8_t potCh)
+{
+    uint16_t startPoint, endPoint, temp;
+    TxaHrtimPointDef xRet = {0};
+
+    uint16_t* buffHrtim = (uint16_t*)&TxA_ADC_AdcDmaBuff.HrtimSave[potCh][0];
+
+    savePoint[potCh].hrtimBuff = buffHrtim;
+    savePoint[potCh].firstValue = buffHrtim[0];
+
+    startPoint = buffHrtim[FMAC_OFFSET + HRTIM_OFFSET];
+    endPoint = API_PPG_GetPeroid(potCh);
+    temp = FRE_PER_ADC;
+
+    if (startPoint < endPoint) {
+        temp = endPoint - startPoint;
+        temp /= FRE_PER_ADC;
+    }
+
+    if (temp > Pan_ADC_DMA_BUFF_NUM) {
+        return xRet;
+    }
+
+    while (buffHrtim[temp] > FRE_PER_ADC) {
+        temp++;
+    }
+    savePoint[potCh].zeroPoint = temp;
+    savePoint[potCh].zeroValue = buffHrtim[temp];
+
+    uint16_t lastPointHrtim = endPoint - FRE_PER_ADC * 2;
+
+    if (buffHrtim[temp - 1] < lastPointHrtim) {
+        return xRet;
+    }
+
+    endPoint /= FRE_PER_ADC;
+
+    if (temp < FMAC_OFFSET + HRTIM_OFFSET) {
+        startPoint = 0;
+    } else {
+        temp -= HRTIM_OFFSET;
+        startPoint = temp - FMAC_OFFSET;
+    }
+
+    endPoint += temp;
+    endPoint += FMAC_OFFSET;
+
+    xRet.end = endPoint;
+    xRet.start = startPoint;
+    return xRet;
+}
+
+/**
+ * @brief 根据周期点提取有效数据段到缓冲区
+ * 
+ * @param ch 炉头通道索引 (0-3)
+ * @param point 周期点定义（start, end）
+ */
+static void APP_ADC_TxaBuffChange(uint8_t ch, TxaHrtimPointDef* point)
+{
+    uint16_t num = 0;
+    uint16_t start = point->start;
+    uint16_t end = point->end;
+    ADC_Current_Def* currentAdr;
+
+    if (ch < 2) {
+        currentAdr = (ADC_Current_Def*)&TxA_ADC_AdcDmaBuff.CurrentAdc2Save[0];
+    } else {
+        currentAdr = (ADC_Current_Def*)&TxA_ADC_AdcDmaBuff.CurrentAdc3Save[0];
+    }
+
+    uint8_t index = ch & 0x1;
+
+    for (uint16_t i = start; i < end; i++) {
+#ifdef DEBUG_POWER_OUT_CONST
+        TxaAdcBuff[ch][num] = Power_Calculator_GetTxaBuffAddress(0)[num];
+        TxaVcBuff[ch][num] = Power_Calculator_GetVoltageBuffAddress(0)[num];
+#else
+        TxaAdcBuff[ch][num] = currentAdr[i].buff[index];
+        TxaVcBuff[ch][num] = TxA_ADC_AdcDmaBuff.VcAdc1[i].buff[1];
+#endif
+        num++;
+    }
+}
+
+/**
+ * @brief 获取所有炉头的周期点参数
+ * 
+ * 功能：
+ *   1. 遍历4个炉头调用GetTxaStartPoint
+ *   2. 验证周期点有效性
+ *   3. 同步HRTIM数据（用于多炉头同步）
+ *   4. 获取PPG死区时间参数
+ */
+static void APP_ADC_GetTxaPeiodPoint(void)
+{
+    for (uint8_t ch = 0; ch < PotNum; ch++) {
+        inputArray[ch].perAdc = FRE_PER_ADC;
+        TxaHrtimPointDef* txaHrtimPoint = (TxaHrtimPointDef*)&inputArray[ch].start;
+
+        *txaHrtimPoint = APP_ADC_GetTxaStartPoint(ch);
+
+        if (txaHrtimPoint->end == 0 || txaHrtimPoint->end > 180 * 4) {
+            txaHrtimPoint->end = 0;
+            arrayPoint[ch] = 0;
+        } else {
+            if (ch == 0 && AdcFromApiDma20ms.count == 2) {
+                uint16_t num = txaHrtimPoint->start + 5;
+                TxA_ADC_AdcDmaBuff.HrtimSyncBuff[0] = TxA_ADC_AdcDmaBuff.HrtimSave[0][num];
+                TxA_ADC_AdcDmaBuff.HrtimSyncBuff[1] = TxA_ADC_AdcDmaBuff.HrtimSave[1][num];
+                TxA_ADC_AdcDmaBuff.HrtimSyncBuff[2] = TxA_ADC_AdcDmaBuff.HrtimSave[2][num];
+                TxA_ADC_AdcDmaBuff.HrtimSyncBuff[3] = TxA_ADC_AdcDmaBuff.HrtimSave[3][num];
+            }
+
+            arrayPoint[ch] = txaHrtimPoint->start;
+        }
+
+        PPGpointDef* ppgValue;
+        ppgValue = (PPGpointDef*)&inputArray[ch].highOn;
+        *ppgValue = API_PPG_getValueDeadTime(ch);
+
+        if (ppgValue->highOff == 0) {
+            txaHrtimPoint->end = 0;
+        }
+#ifdef DEBUG_POWER_OUT_CONST
+        inputArray[ch] = *Power_Calculator_GetInputArrayAddress(testCh);
+#endif
+    }
+}
+
+/* ================================================================
+ * ========== 硬件控制函数 (HAL_HALF) ==========
+ * 
+ * 特征：
+ *   - 直接调用 HAL API (API_ADC_*, API_TIM_*, API_GPIO_*, API_DMA_*)
+ *   - 操作硬件寄存器/外设
+ *   - 未来将迁移到 HAL_P 层
+ * ============================================================== */
+
+#include "API_adc.h"
+#include "API_TIM.h"
+#include "api_dma.h"
+#include "API_OPAMP.H"
+#include "API_hrtim.h"
+#include "API_gpio.h"
+#include "API_I2C.H"
+#include "API_UART.H"
+#include "API_FMAC.H"
+#include "printMessage.h"
+#include "wave_capture.h"
+
+void APP_POWER_SetTxaAwdValue(void);
+int16_t* APP_POWER_GetPanDmaBuffAddress(void);
+
+/* -------------------------- Weak-pair 强实现 -------------------------- */
+
+/**
+ * @brief 获取指定炉头的功率TXA平均值
+ * @param ch 炉头通道索引 (0-3)
+ * @return TXA平均值
+ */
+// uint32_t Adc_GetPowerTxa(uint8_t ch)
+// {
+//     uint32_t* value = (uint32_t*)(&TxA_ADC_AdcDmaBuff.Avg);
+//     return value[ch];
+// }
+
+/**
+ * @brief 重置指定炉头的TXA平均值滤波
+ * @param ch 炉头通道索引 (0-3)
+ */
+void Adc_TxaAvgReset(uint8_t ch)
+{
+    AdcAverage20ms[AdcGroupT1A + ch] = 0;
+}
+
+/**
+ * @brief 清除指定炉头的CEILQ平均值滤波
+ * @param ch 炉头通道索引 (0-3)
+ */
+void Adc_ClearCeilQAvg(uint8_t ch)
+{
+    AdcAverage20ms[AdcGroupCeilQ1 + ch] = 0;
+}
+
+/**
+ * @brief 获取IC值数组地址（用于输出）
+ * @return IC值数组指针
+ */
+int16_t* getIcValueAdress(void)
+{
+    return icvalue;
+}
+
+/**
+ * @brief 获取ADC2电流缓冲区指针
+ * @return ADC2缓冲区指针
+ */
+uint16_t* Adc_GetCurrentAdc2Ptr(void)
+{
+    return (uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc2;
+}
+
+/**
+ * @brief 获取ADC3电流缓冲区指针
+ * @return ADC3缓冲区指针
+ */
+uint16_t* Adc_GetCurrentAdc3Ptr(void)
+{
+    return (uint16_t*)TxA_ADC_AdcDmaBuff.CurrentAdc3;
+}
+
+/**
+ * @brief 获取HRTIM同步缓冲区地址
+ * @return HRTIM同步缓冲区指针
+ */
+uint16_t* Adc_GetHrtimSyncBuffAdr(void)
+{
+    return (uint16_t*)&TxA_ADC_AdcDmaBuff.HrtimSyncBuff[0];
+}
+
+/**
+ * @brief 检查TXA DMA是否正在启动
+ * @return 1=正在启动, 0=未启动
+ */
+uint8_t Adc_IsTxaDmaStart(void)
+{
+    if (TxA_ADC_AdcDmaBuff.step == TXA_StepStart)
+        return 1;
+    return 0;
+}
+
+/* -------------------------- 硬件控制核心函数 -------------------------- */
+
+/**
+ * @brief 获取TXA电流平均值（仅内存操作，无硬件访问）
+ * 
+ * 功能：将累加和除以计数得到平均值，并重置累加器
+ */
+static void APP_ADC_GET_TxaAvg(void)
+{
+    TxA_ADC_AdcDmaBuff.Avg.SumT1A = TxA_ADC_AdcDmaBuff.Sum.SumT1A / TxA_ADC_AdcDmaBuff.count;
+    TxA_ADC_AdcDmaBuff.Avg.SumT2A = TxA_ADC_AdcDmaBuff.Sum.SumT2A / TxA_ADC_AdcDmaBuff.count;
+    TxA_ADC_AdcDmaBuff.Avg.SumT3A = TxA_ADC_AdcDmaBuff.Sum.SumT3A / TxA_ADC_AdcDmaBuff.count;
+    TxA_ADC_AdcDmaBuff.Avg.SumT4A = TxA_ADC_AdcDmaBuff.Sum.SumT4A / TxA_ADC_AdcDmaBuff.count;
+    TxA_ADC_AdcDmaBuff.count       = 0;
+    TxA_ADC_AdcDmaBuff.Sum.SumT1A  = 0;
+    TxA_ADC_AdcDmaBuff.Sum.SumT2A  = 0;
+    TxA_ADC_AdcDmaBuff.Sum.SumT3A  = 0;
+    TxA_ADC_AdcDmaBuff.Sum.SumT4A  = 0;
+}
+
+/**
+ * @brief 读取温度传感器ADC数据
+ * 
+ * 功能：从ADC硬件寄存器读取IGBT和底部温度传感器数据
+ */
+static void APP_ADC_GET_TEMPE(void)
+{
+    AdcFromApiDma20ms.Tempe.buff[Igbt1ADC2_GroupZero] = API_ADC_GetDRx(ChAdc2_Current, Igbt1ADC2_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Igbt2ADC2_GroupZero] = API_ADC_GetDRx(ChAdc2_Current, Igbt2ADC2_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Igbt3ADC2_GroupZero] = API_ADC_GetDRx(ChAdc2_Current, Igbt3ADC2_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Igbt4ADC2_GroupZero] = API_ADC_GetDRx(ChAdc2_Current, Igbt4ADC2_GroupCh);
+
+    AdcFromApiDma20ms.Tempe.buff[Bottom1ADC1_GroupZero] = API_ADC_GetDRx(ChAdc1_Vc, Bottom1ADC1_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Bottom2ADC1_GroupZero] = API_ADC_GetDRx(ChAdc1_Vc, Bottom2ADC1_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Bottom3ADC1_GroupZero] = API_ADC_GetDRx(ChAdc1_Vc, Bottom3ADC1_GroupCh);
+    AdcFromApiDma20ms.Tempe.buff[Bottom4ADC1_GroupZero] = API_ADC_GetDRx(ChAdc1_Vc, Bottom4ADC1_GroupCh);
+}
+
+/**
+ * @brief 切换ADC规则通道和OPAMP配置
+ * 
+ * @param ch 通道选择：ADC_Select_VcIc 或 ADC_Select_Tempe
+ */
+static void APP_ADC_SELECT_GROUP(uint8_t ch)
+{
+    API_TIM_TXA_STOP();
+    API_OPAMP1_Select(ch);
+    API_ADC_SELECT(ch);
+    API_TIM_TXA_RESET();
+    APP_POWER_SetTxaAwdValue();
+}
+
+/**
+ * @brief 恢复HRTIM相关的DMA通道
+ * 
+ * 功能：停止ADC和定时器，重置所有相关DMA通道，然后重新启动
+ */
+void APP_ADC_DMA_RecoverHrtim(void)
+{
+    API_ADC_StopAllAdc();
+    API_TIM_TXA_STOP();
+
+    API_DMA_REST(ChDmaCurrentAdc2, Current_ADC_AdcDMA_BUFF_NUM);
+    API_DMA_REST(ChDmaCurrentAdc3, Current_ADC_AdcDMA_BUFF_NUM);
+    API_DMA_REST(ChDmaHrtimPotCh1, TxA_ADC_AdcBUFF_NUM);
+    API_DMA_REST(ChDmaHrtimPotCh2, TxA_ADC_AdcBUFF_NUM);
+    API_DMA_REST(ChDmaHrtimPotCh3, TxA_ADC_AdcBUFF_NUM);
+    API_DMA_REST(ChDmaHrtimPotCh4, TxA_ADC_AdcBUFF_NUM);
+    API_DMA_REST(ChDmaVcAdc1,    TxA_ADC_AdcBUFF_NUM * 2);
+
+    API_ADC_StartAllAdc();
+    API_TIM_TXA_RESET();
+}
+
+/**
+ * @brief 恢复检锅DMA通道
+ * 
+ * @param ch 炉头通道索引
+ */
+void APP_ADC_DMA_RecoverPan(uint8_t ch)
+{
+    volatile API_DMA_RecoverDef recover;
+
+    recover.SrcAddress = API_ADC_GetAddressDRx(ChAdc1_Vc, PanADC1_ADC1Group);
+    recover.DstAddress = (uint32_t)APP_POWER_GetPanDmaBuffAddress();
+    recover.DataLength = Pan_ADC_DMA_BUFF_NUM;
+
+    API_DMA_RECOVER(ChDmaPan, (API_DMA_RecoverDef*)(&recover));
+}
+
+/**
+ * @brief 切换锅检测开关GPIO
+ * 
+ * @param ch 目标锅位 (0-3)，>=10时关闭所有
+ */
+void APP_ADC_PanSwChange(uint32_t ch)
+{
+    uint32_t pinCh = PANSW1_pin + ch;
+
+    API_GPIO_WritePin(PANSW1_pin, SW_OFF);
+    API_GPIO_WritePin(PANSW2_pin, SW_OFF);
+    API_GPIO_WritePin(PANSW3_pin, SW_OFF);
+    API_GPIO_WritePin(PANSW4_pin, SW_OFF);
+
+    API_GPIO_Mode(PANSW1_pin, MODER_Output);
+    API_GPIO_Mode(PANSW2_pin, MODER_Output);
+    API_GPIO_Mode(PANSW3_pin, MODER_Output);
+    API_GPIO_Mode(PANSW4_pin, MODER_Output);
+
+#ifdef DEBUG_POWER_OUT
+    API_GPIO_Mode(PANSW4_pin, MODER_Output);
+    API_GPIO_WritePin(PANSW4_pin, 0);
+#endif
+
+    if (ch < 10) {
+        API_GPIO_WritePin(pinCh, SW_ON);
+    }
+}
+
+/* ================================================================
+ * ========== 中断回调函数 (ISR Callbacks) ==========
+ * 
+ * 特征：
+ *   - 作为中断服务函数的回调入口
+ *   - 执行时间敏感，应快速执行
+ *   - 可能混合硬件操作和简单数据处理
+ * ============================================================== */
+
+/**
+ * @brief 过零中断处理函数
+ * 
+ * 功能：
+ *   1. 重置20ms计数器
+ *   2. 切换到VcIc采样模式
+ *   3. 设置TXA阈值
+ */
+void APP_ADC_ZERO_IrqFun(void)
+{
+    AdcFromApiDma20ms.count = 0;
+    Adc20msCount = 0;
+
+    AdcSelect = ADC_Select_VcIc;
+    APP_ADC_SELECT_GROUP(AdcSelect);
+    APP_POWER_SetTxaAwdValue();
+}
+
+/**
+ * @brief 100us定时器回调（主ADC采样周期）
+ * 
+ * 功能：
+ *   1. 检查I2C缓冲区
+ *   2. 读取电压ADC值
+ *   3. 每20ms触发一次平均计算和温度采样
+ */
+void APP_ZERO_Adc100usCallBack(void)
+{
+    API_I2C_CheckBuffMax();
+
+    if (Adc20msCount < AdcAvageCount) {
+        Tempe_ADC_DmaBuff.Vc[Adc20msCount] = API_ADC_GetDRx(ChAdc1_Vc, VoltageADC1_Group);
+        Adc20msCount++;
+    }
+
+    if (Adc20msCount == AdcAvageCount) {
+        TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
+        AdcFromApiDma20ms.num = 1;
+        Adc20msCount++;
+
+        APP_ADC_GET_TxaAvg();
+
+        AdcSelect = ADC_Select_Tempe;
+        APP_ADC_SELECT_GROUP(AdcSelect);
+        API_ADC_T12A_ENABLE_IT_EOC();
+        API_TIM_100US_RESET();
+
+        APP_ADC_AVG_Fun();
+    }
+}
+
+/**
+ * @brief ADC1/ADC2转换完成中断回调
+ * 
+ * 功能：
+ *   1. 禁用EOC中断
+ *   2. 读取温度传感器数据
+ *   3. 启用HRTIM比较中断
+ */
+void API_T12_EOC_IRQHandlerCallBack(void)
+{
+    API_ADC_T12A_DISABLE_IT_EOC();
+    APP_ADC_GET_TEMPE();
+    API_HRTIM_BASE_ENABLE_IT_CMP();
+}
+
+/**
+ * @brief HRTIM UPD中断回调（PPG步进变化）
+ * 
+ * @param sourse 中断来源
+ */
+void API_HRTIM1_TEST_UPD_IRQHandlerCallback(uint8_t sourse)
+{
+    APP_ADC_IRQ_PPGstepChangeCallBack();
+}
+
+/**
+ * @brief TXA DMA传输完成中断回调
+ * 
+ * 功能：
+ *   1. 使用M2M DMA保存ADC2/ADC3数据
+ *   2. 手动备份部分数据
+ *   3. 更新状态机步骤
+ */
+void API_DMA_TxA_IRQHandlerCallBack(uint8_t num)
+{
+    if (TxA_ADC_AdcDmaBuff.step == TXA_StepDmaStart) {
+        volatile API_DMA_RecoverDef recover;
+
+        API_GPIO_WritePin(DebugA_pin, 1);
+
+        recover.DataLength = Current_ADC_AdcDMA_BUFF_NUM / 4;
+
+        recover.SrcAddress = (uint32_t)&TxA_ADC_AdcDmaBuff.CurrentAdc2[0];
+        recover.DstAddress = (uint32_t)&TxA_ADC_AdcDmaBuff.CurrentAdc2Save;
+        API_DMA_RECOVER(ChDmaM2M, (API_DMA_RecoverDef*)(&recover));
+
+        for (uint16_t i = 0; i < TxA_ADC_AdcBUFF_NUM; i++) {
+            TxaBuffCh1[i] = TxA_ADC_AdcDmaBuff.CurrentAdc2[0][i].buff[0];
+        }
+
+        recover.SrcAddress = (uint32_t)&TxA_ADC_AdcDmaBuff.CurrentAdc3[0];
+        recover.DstAddress = (uint32_t)&TxA_ADC_AdcDmaBuff.CurrentAdc3Save;
+        API_DMA_RECOVER(ChDmaM2M, (API_DMA_RecoverDef*)(&recover));
+
+        API_GPIO_WritePin(DebugA_pin, 0);
+        TxA_ADC_AdcDmaBuff.step = TXA_StepDmaEnd;
+    }
+}
+
+/**
+ * @brief PendSV中断处理（上下文切换）
+ */
+void API_ADC_PENDV_IRQHandler(void)
+{
+    portPendvClear();
+}
+
+/**
+ * @brief FMAC计算完成回调
+ * 
+ * @param FmacMem FMAC内存定义结构
+ */
+void API_FMAC_AppAdcOverCallBack(API_FMAC_MEMDEF* FmacMem)
+{
+    TxA_ADC_AdcDmaBuff.step = TXA_StepFmacEnd;
+}
+
+/**
+ * @brief M2M DMA传输完成回调（预留）
+ */
+void API_DMA_M2M_OverCallback(void)
+{
+}
+
+/* ================================================================
+ * ========== API层函数 (API Layer) ==========
+ * 
+ * 特征：
+ *   - 业务逻辑和状态管理
+ *   - 协调硬件操作和算法调用
+ *   - 提供对外接口
+ * ============================================================== */
+
+/**
+ * @brief 根据ADC选择恢复对应DMA通道
+ * 
+ * @param ch ADC选择：ADC_Select_Tempe 或 ADC_Select_VcIc
+ */
+static void API_ADC_DMA_RecoverFun(ADC_SELECT_ENUM ch)
+{
+    volatile API_DMA_RecoverDef recover;
+
+    if (ch == ADC_Select_Tempe) {
+        recover.DataLength = 0;
+        API_DMA_RECOVER(ChDmaVcAdc1, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaCurrentAdc2, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaCurrentAdc3, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaHrtimPotCh1, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaHrtimPotCh2, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaHrtimPotCh3, (API_DMA_RecoverDef*)(&recover));
+        API_DMA_RECOVER(ChDmaHrtimPotCh4, (API_DMA_RecoverDef*)(&recover));
+    } else {
+        recover.DataLength = Current_ADC_AdcDMA_BUFF_NUM;
+#if DMA_HRTIM
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh1);
+#else
+        recover.SrcAddress = API_ADC_GetAddressDR(ChAdc2_Current);
+#endif
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.CurrentAdc2;
+        API_DMA_RECOVER(ChDmaCurrentAdc2, (API_DMA_RecoverDef*)(&recover));
+
+#if DMA_HRTIM
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh1);
+#else
+        recover.SrcAddress = API_ADC_GetAddressDR(ChAdc3_Current);
+#endif
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.CurrentAdc3;
+        API_DMA_RECOVER(ChDmaCurrentAdc3, (API_DMA_RecoverDef*)(&recover));
+
+        recover.DataLength = TxA_ADC_AdcBUFF_NUM;
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh1);
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.HrtimSave[PotCh1];
+        API_DMA_RECOVER(ChDmaHrtimPotCh1, (API_DMA_RecoverDef*)(&recover));
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh2);
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.HrtimSave[PotCh2];
+        API_DMA_RECOVER(ChDmaHrtimPotCh2, (API_DMA_RecoverDef*)(&recover));
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh3);
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.HrtimSave[PotCh3];
+        API_DMA_RECOVER(ChDmaHrtimPotCh3, (API_DMA_RecoverDef*)(&recover));
+        recover.SrcAddress = API_HRTIM_GetAddressTxaCnt(PotCh4);
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.HrtimSave[PotCh4];
+        API_DMA_RECOVER(ChDmaHrtimPotCh4, (API_DMA_RecoverDef*)(&recover));
+
+        recover.DataLength = TxA_ADC_AdcBUFF_NUM * 2;
+        recover.SrcAddress = API_ADC_GetAddressDRx(ChAdc1_Vc, VoltageADC1_Group);
+        recover.DstAddress = (uint32_t)TxA_ADC_AdcDmaBuff.VcAdc1;
+        API_DMA_RECOVER(ChDmaVcAdc1, (API_DMA_RecoverDef*)(&recover));
+    }
+}
+
+/**
+ * @brief 保存ADC实例状态（低功耗/上下文切换）
+ * 
+ * @param ch ADC选择模式
+ */
+void API_ADC_Instance_SaveCallBack(ADC_SELECT_ENUM ch)
+{
+    volatile ADC_M2M_RecoverDef  adcM2m;
+    volatile API_DMA_RecoverDef  recover;
+    API_ADC_DMA_RecoverFun(ch);
+
+    for (uint8_t i = 0; i < ChAdc_Max; i++) {
+        adcM2m = API_ADC_GetAddressInstance(i);
+        recover.SrcAddress = (uint32_t)adcM2m.InstanceAddress;
+        recover.DstAddress = (uint32_t)adcM2m.SaveAddress[ch];
+        recover.DataLength = adcM2m.DataLength;
+        API_DMA_RECOVER(ChDmaM2M, (API_DMA_RecoverDef*)(&recover));
+    }
+}
+
+/**
+ * @brief 恢复ADC实例状态（低功耗唤醒/上下文切换恢复）
+ * 
+ * @param ch ADC选择模式
+ */
+void API_ADC_Instance_RecoverCallBack(ADC_SELECT_ENUM ch)
+{
+    volatile ADC_M2M_RecoverDef  adcM2m;
+    volatile API_DMA_RecoverDef  recover;
+
+    for (uint8_t i = 0; i < ChAdc_Max; i++) {
+        adcM2m = API_ADC_GetAddressInstance(i);
+        recover.SrcAddress = (uint32_t)adcM2m.SaveAddress[ch];
+        recover.DstAddress = (uint32_t)adcM2m.InstanceAddress;
+        recover.DataLength = adcM2m.DataLength;
+        API_DMA_RECOVER(ChDmaM2M, (API_DMA_RecoverDef*)(&recover));
+    }
+    API_ADC_DMA_RecoverFun(ch);
+}
+
+/**
+ * @brief 定时器触发的DMA启动函数
+ * 
+ * 功能：状态机驱动的DMA恢复流程
+ */
+void API_ADC_DMA_TimStart(void)
+{
+    if (TxA_ADC_AdcDmaBuff.step == TXA_StepStart) {
+        TxA_ADC_AdcDmaBuff.step = TXA_StepDmaRest;
+
+        if (TxA_ADC_AdcDmaBuff.step == TXA_StepDmaRest) {
+            TxA_ADC_AdcDmaBuff.step = TXA_StepDmaStart;
+            API_GPIO_WritePin(DebugA_pin, 1);
+            APP_ADC_DMA_RecoverHrtim();
+            API_GPIO_WritePin(DebugA_pin, 0);
+        }
+    }
+}
+
+/**
+ * @brief 配置FMAC进行TXA滤波
+ * 
+ * @param size 输入数据大小
+ */
+static void APP_ADC_FmacSetTxa(uint16_t size)
+{
+    API_FMAC_MEMDEF* fmacMem = API_FMAC_GetMemAddress();
+
+    if (fmacMem->type == FmacStop) {
+        fmacMem->type = FmacTxa;
+        fmacMem->X1 = (int16_t *)TxaAdcBuff[0];
+        fmacMem->Y = (int16_t *)TxaFmacBuff[0];
+        fmacMem->outSize = size;
+        API_FMAC_Rest();
+    }
+}
+
+/**
+ * @brief 准备消息缓冲区（为波形捕获准备数据）
+ * 
+ * 功能：
+ *   1. 分配公共缓冲区
+ *   2. 提取各炉头的有效数据段
+ *   3. 配置FMAC（如果启用）
+ *   
+ * @return 1=成功, 0=失败
+ */
+static uint8_t APP_ADC_MesageBuff(void)
+{
+    PublicBuffFreeAll();
+
+    uint16_t buffSize[PotNum];
+
+    for (uint8_t i = 0; i < PotNum; i++) {
+        TxaVcBuff[i] = 0;
+        buffSize[i] = 0;
+        if (inputArray[i].end > inputArray[i].start) {
+            buffSize[i] = inputArray[i].end - inputArray[i].start;
+        }
+        TxaVcBuff[i] = PubicBuffCalloc(buffSize[i] * sizeof(uint16_t));
+    }
+
+    for (uint8_t i = 0; i < PotNum; i++) {
+        TxaHrtimPointDef* txaHrtimPoint = (TxaHrtimPointDef*)&inputArray[i].start;
+        TxaHrtimBuff[i] = 0;
+        {
+            uint16_t size = buffSize[i] + fmacLeveNum;
+            uint16_t hrtimStart = txaHrtimPoint->start;
+            hrtimStart += HRTIM_OFFSET;
+            TxaAdcBuff[i] = PubicBuffCalloc(size * sizeof(uint16_t));
+
+#ifdef DEBUG_POWER_OUT_CONST
+            TxaHrtimBuff[i] = (uint16_t*)Power_Calculator_GetHrtimBuffAddress(0);
+#else
+            TxaHrtimBuff[i] = (uint16_t*)&TxA_ADC_AdcDmaBuff.HrtimSave[i][hrtimStart];
+#endif
+
+            uint16_t startP = TxaHrtimBuff[i][FMAC_OFFSET + 2];
+            if (startP > 2000) {
+                txaHrtimPoint->end = 0;
+            }
+
+            {
+                APP_ADC_TxaBuffChange(i, txaHrtimPoint);
+                txaHrtimPoint->start = 0;
+                txaHrtimPoint->end = buffSize[i];
+            }
+        }
+    }
+
+#ifdef TxaFmac
+    uint16_t sizeAll = 0;
+
+    for (uint8_t i = 0; i < PotNum; i++) {
+        TxaFmacBuff[i] = 0;
+        uint16_t size = buffSize[i] + fmacLeveNum;
+        sizeAll += size;
+        TxaFmacBuff[i] = PubicBuffCalloc(size * sizeof(uint16_t));
+    }
+
+    if (sizeAll) {
+        TxA_ADC_AdcDmaBuff.step = TXA_StepFmacStart;
+        APP_ADC_FmacSetTxa(sizeAll);
+    }
+#else
+    TxA_ADC_AdcDmaBuff.step = TXA_StepFmacEnd;
+#endif
+
+    return 1;
+}
+
+/**
+ * @brief 发送TXA消息到波形捕获模块
+ * 
+ * @param input 功率计算器输入数组
+ */
+static void APP_ADC_TxaMessageOut(PowerCalculatorInputDef* input)
+{
+    MessageDef message;
+    PowerCalculatorInputDef* inputCh = input + PotChWork;
+
+    {
+        uint8_t count = AdcFromApiDma20ms.count - 1;
+
+        uint16_t start = inputCh->start;
+        uint16_t end = inputCh->end;
+        uint16_t size = (end - start);
+        message.array[0].size = size;
+        message.array[1].size = size;
+        message.array[2].size = size;
+        message.array[3].size = 0;
+
+        message.array[0].buff = TxaHrtimBuff[PotChWork];
+        message.array[1].buff = TxaVcBuff[PotChWork];
+        message.array[2].buff = TxaFmacBuff[PotChWork] + fmacLeveNum / 2;
+
+        size = 0;
+        message.array[4].size = size;
+        message.array[5].size = size;
+        message.array[6].size = size;
+        message.array[7].size = size;
+
+        uint16_t para[5];
+        para[0] = inputCh->highOn;
+        para[1] = inputCh->highOff;
+        para[2] = inputCh->lowOn;
+        para[3] = inputCh->lowOff;
+        para[4] = count;
+
+        message.paraArray.buff = para;
+        message.paraArray.size = 5;
+        message.num = TXA_MESSAGE;
+
+        WaveCapture_PushMessage((void*)&message);
+    }
+}
+
+/**
+ * @brief TIM DMA结束处理函数（触发数据处理流程）
+ */
+void APP_ADC_TimDmaEnd(void)
+{
+    uint16_t count = AdcFromApiDma20ms.count;
+
+    if (TxA_ADC_AdcDmaBuff.step == TXA_StepDmaEnd) {
+        TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
+        AdcFromApiDma20ms.count++;
+
+        if (AdcFromApiDma20ms.count <= 20 ) {
+            API_GPIO_WritePin(DebugA_pin, 1);
+
+					if(AdcFromApiDma20ms.count<=1)
+						{
+							TxA_ADC_AdcDmaBuff.step = TXA_StepFmacEnd;		//0时不进行DMA FAMC计算
+						}
+						else
+						{	
+							APP_ADC_GetTxaPeiodPoint();
+
+							if (APP_ADC_MesageBuff()) {
+							}
+						}
+						
+            API_GPIO_WritePin(DebugA_pin, 0);
+        }
+    }
+}
+
+/**
+ * @brief 功率计算主函数
+ * 
+ * 功能：
+ *   1. 等待FMAC完成（如果启用）
+ *   2. 调用功率计算器计算各炉头参数
+ *   3. 存储计算结果
+ *   4. 发送调试消息（如果启用）
+ */
+void APP_ADC_CalculatePower(void)
+{
+    if (TxA_ADC_AdcDmaBuff.step == TXA_StepFmacEnd) {
+        TxA_ADC_AdcDmaBuff.step = TXA_StepStart;
+        uint8_t count = AdcFromApiDma20ms.count - 1;
+			
+				if(count==0)
+				{						//直接计算20ms统计
+				
+				
+				}
+				else
+				{
+						
+				
+				}	
+				
+			
+#if 0		
+        for (uint8_t potCh = 0; potCh < PotNum; potCh++) {
+            if (inputArray[potCh].end > 0 && inputArray[potCh].highOff > 0) {
+
+#ifdef TxaFmac
+                uint16_t* currentAdr = (uint16_t*)TxaFmacBuff[potCh];
+                currentAdr += fmacLeveNum / 2;
+#else
+                uint16_t* currentAdr = (uint16_t*)TxaAdcBuff[potCh];
+#endif
+                uint16_t* hrtimAdr = (uint16_t*)TxaHrtimBuff[potCh];
+                uint16_t* voltageAdr = (uint16_t*)TxaVcBuff[potCh];
+
+							
+				
+					
+                PowerResult result;
+                result = CalculatePower(currentAdr, hrtimAdr, voltageAdr, &inputArray[potCh]);
+
+                if (result.zero_cross_high) {
+                    memcpy(&powerResult20ms[potCh].cycle[count], &result, sizeof(IH_CycleDataDef));
+
+                    uint8_t value = result.zero_cross_high;
+                    APP_ADC_DebugValueCallBack(potCh, value);
+
+                    AdcFromApiDma20ms.Txa[potCh][count] = result.active_current;
+                    AdcFromApiDma20ms.voltage[potCh][count] = result.voltage;
+                    AdcFromApiDma20ms.phase[potCh][count] = result.phase_angleUp;
+                    AdcFromApiDma20ms.iPeak[potCh][count] = result.peak_current;
+                    AdcFromApiDma20ms.ceilQ[potCh][count] = inputArray[potCh].highOff;
+                    AdcFromApiDma20ms.esr[potCh][count] = result.esr;
+                    AdcFromApiDma20ms.phaseValue[potCh][count] = result.zero_cross_high / (FRE_PER_ADC / 4);
+
+                    if (potCh == PotChWork) {
+                        if (WaveCapture_IsReady() == 0) {
+                            APP_ADC_TxaMessageOut(inputArray);
+                        }
+                    }
+                }
+
+                powerResult20ms[potCh].count = AdcFromApiDma20ms.count;
+							
+            }
+        }
+#endif					
+				
+    }
+
+    if (PrintMessageOut()) {
+    }
+}
+
+/**
+ * @brief 20ms电参数计算（调用外部算法库）
+ * 
+ * 功能：遍历4个炉头，调用IhElecParams_Calculate计算电参数
+ */
+void APP_ADC_ComputeElecParams(void)
+{
+    static uint8_t elec_buf[4][64];
+    for (uint8_t i = 0; i < PotNum; i++) {
+        IhElecParams_Calculate(&powerResult20ms[i], elec_buf[i]);
+    }
+}
+
+
+

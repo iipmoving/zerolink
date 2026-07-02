@@ -1,0 +1,14 @@
+- [M4 项目概述](project_m4-overview.md) — RX32G410 半桥 EKF 观测器，增量开发模式，不构建零依赖架构
+- [M4 架构分析与解耦方向](m4-architecture-analysis.md) — API已隔离，APP→BaseClass耦合待逐步解耦（不紧急）
+- [★ EKF 验证方法论完整总结](m4-ekf-verification-methodology.md) — 谐振模型→三方法f0估计→锅具判别→PC→C移植链路
+- [★ EKF 阶段结项报告](..\docs\EKF-PHASE-CLOSURE-2026-05-30.md) — 离线验证完成，f0估计三方法+锅具判别，待C端移植
+- [★ 半桥IH MATLAB模型](m4-matlab-halfbridge-model.md) — 硬件链参数→物理量换算→f0/Q/L三参数→Vbus无关性验证→关联索引
+- [★ WaveCapture 实施计划](..\docs\WAVECAPTURE-PLAN.md) — printMessage→MODBUS波形回读, 6K缓存, 1S/帧, 最终目标重写power_calculator
+- [★ RESTART.md — 重启入口](..\RESTART.md) — 新AI会话第一入口, 30秒速览→架构→状态→任务→规则→记忆索引
+- [M4 修改边界](project_m4-modification-boundaries.md) — No-Go 区域 vs 安全区域，寄存器扩展规则，修改后检查清单
+- [EKF 遥测补丁状态](project_m4-ekf-patch-status.md) — modbus_ekf_regs 已创建，待集成到主固件，5 处修改待执行
+- [M4 已知固件问题](project_m4-known-issues.md) — Phase_Position=0、频率未上报、ADC 8-bit 校准
+- [M4 PC 工具链](reference_m4-pc-tools.md) — MODBUS 通讯工具、EKF 整定 GUI、自动化测试脚本位置
+- [HRTIM MASTER 同步简化](project_m4-hrtim-master-sync-simplify.md) — 清理 IO 触发同步残余，5 个任务待执行，工作名 `hrtim-master-sync`
+- [4半桥→2移相全桥迁移](project_m4-half-to-full-bridge-migration.md) — 双炉头同频MASTER同步，移相分别调功，工作名 `migrate-full-bridge`
+- [f0估计与锅具识别](project_m4-f0-estimation-methods.md) — dI/df斜率法+相位模型+联合修正，铁锅20-21k/钢锅23-24k
